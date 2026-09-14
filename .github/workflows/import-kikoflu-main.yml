@@ -1,4 +1,4 @@
-# Triggered after enabling Actions read/write permissions.
+# Import KikoFlu main while preserving this migration workflow.
 name: Import KikoFlu main
 
 on:
@@ -26,10 +26,12 @@ jobs:
         run: |
           git clone --depth 1 --branch main https://github.com/Noirero/KikoFlu.git /tmp/kikoflu
 
-      - name: Replace target contents with KikoFlu main snapshot
+      - name: Sync KikoFlu main except workflows
         run: |
-          find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
-          rsync -a --exclude='.git' /tmp/kikoflu/ ./
+          rsync -a --delete \
+            --exclude='.git' \
+            --exclude='.github/workflows/' \
+            /tmp/kikoflu/ ./
 
       - name: Commit imported snapshot
         run: |
@@ -37,7 +39,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
           if git diff --cached --quiet; then
-            echo 'Target already matches KikoFlu main.'
+            echo 'Target already matches KikoFlu main outside workflows.'
             exit 0
           fi
           git commit -m 'Import KikoFlu main snapshot'
