@@ -1,3 +1,4 @@
+# Triggered after enabling Actions read/write permissions.
 name: Import KikoFlu main
 
 on:
