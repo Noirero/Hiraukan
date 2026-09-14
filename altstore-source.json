@@ -1,0 +1,58 @@
+{
+  "name": "KikoFlu Source",
+  "identifier": "com.meteor.kikoeruflutter.AltStore",
+  "subtitle": "KikoFlu AltStore Source",
+  "description": "AltStore source for KikoFlu - A cross-platform Kikoeru client",
+  "iconURL": "https://raw.githubusercontent.com/pa-jesusf/KikoFlu/main/assets/icons/app_icon_opaque.png",
+  "headerURL": "https://raw.githubusercontent.com/pa-jesusf/KikoFlu/main/assets/icons/app_icon_opaque.png",
+  "website": "https://github.com/pa-jesusf/KikoFlu",
+  "sourceURL": "https://raw.githubusercontent.com/pa-jesusf/KikoFlu/main/altstore-source.json",
+  "apps": [
+    {
+      "name": "KikoFlu",
+      "bundleIdentifier": "com.meteor.kikoeruflutter",
+      "developerName": "pa-jesusf",
+      "subtitle": "Kikoeru Client",
+      "localizedDescription": "A cross-platform client for browsing and playing Kikoeru server content. Features include background playback, subtitle system, offline download, multi-language support, and more.",
+      "iconURL": "https://raw.githubusercontent.com/pa-jesusf/KikoFlu/main/assets/icons/app_icon_opaque.png",
+      "tintColor": "6750A4",
+      "versions": [
+        {
+          "version": "3.8.2",
+          "date": "2026-08-30",
+          "size": 13375072,
+          "downloadURL": "https://github.com/pa-jesusf/KikoFlu/releases/download/v3.8.2/KikoFlu-ios-unsigned_382.ipa",
+          "localizedDescription": "**新增：**\r\n1. Linux 平台现已支持悬浮字幕，包括透明悬浮窗、受支持桌面环境下的窗口置顶以及点击穿透模式。\r\n2. 桌面平台悬浮字幕新增点击穿透模式。\r\n3. 代理设置新增直连、系统代理和手动代理三种模式。系统代理现为默认选项，默认设置不再需求TUN模式才能进行代理。\r\n4. 字幕文本预览新增全文搜索。\r\n5. 播放列表新增单音频追加模式。\r\n6. 重新设计排序和设置弹窗，统一交互与视觉样式。\r\n7. 大量UI优化\r\n\r\n**修复：**\r\n1. 修复 Windows 恢复上次播放会话时，音源加载失败可能导致初始化一直等待的问题。\r\n2. 修复 macOS 重新启动应用后 Mini Player 和播放会话无法恢复的问题。\r\n3. 修复部分情况下 Android 从最近任务中移除应用后，音频和媒体服务仍会继续运行的问题。\r\n4. 修复部分 LRC 字幕因使用毫秒、逗号分隔符、单数字段或省略小数部分而被识别为不支持格式的问题。\r\n5. 增强音频缓存和预加载的可靠性；不完整或无法读取的缓存文件会被自动丢弃，并回退到远程音频源继续播放。\r\n6. 改进 iOS 和 macOS 缓存音频与 AVFoundation 的兼容性，为缓存文件保留可识别的音频扩展名。\r\n7. 减少信息流和悬浮工具栏的不必要重建，改善 iOS 平台的滚动性能。\r\n8. 修复液态玻璃模式下，搜索历史底部内容被导航区域遮挡的问题。\r\n\r\n**New:**\r\n1. Added floating lyrics on Linux, including transparent windows, always-on-top behavior in supported desktop environments, and click-through mode.\r\n2. Added click-through mode for floating lyrics on desktop platforms.\r\n3. Added Direct, System Proxy, and Manual Proxy modes. System Proxy is now the default, so the default configuration no longer requires TUN mode to use a proxy.\r\n4. Added full-text search to subtitle text previews.\r\n5. Added Single-Audio Append Mode to playlists.\r\n6. Redesigned sorting and settings popups for a more consistent visual style and interaction experience.\r\n7. Various UI improvements.\r\n\r\n**Fixes:**\r\n1. Fixed an issue where a failed audio source could leave playback-session restoration waiting indefinitely on Windows.\r\n2. Fixed Mini Player and playback-session restoration failing after relaunching the app on macOS.\r\n3. Fixed an issue where Android audio playback and the media service could continue running after the app was removed from Recents.\r\n4. Fixed some LRC subtitles being reported as unsupported when timestamps use milliseconds, comma separators, single-digit fields, or omit the fractional part.\r\n5. Improved audio cache and preload reliability. Incomplete or unreadable cache files are now discarded automatically, allowing playback to fall back to the remote audio source.\r\n6. Improved cached-audio compatibility with AVFoundation on iOS and macOS by preserving recognizable audio file extensions.\r\n7. Reduced unnecessary feed and floating-toolbar rebuilds to improve scrolling performance on iOS.\r\n8. Fixed search-history content near the bottom of the page being obscured in Liquid Glass mode."
+        },
+        {
+          "version": "3.8.1",
+          "date": "2026-08-24",
+          "size": 13312453,
+          "downloadURL": "https://github.com/pa-jesusf/KikoFlu/releases/download/v3.8.1/KikoFlu-ios-unsigned_381.ipa",
+          "localizedDescription": "**修复：**\r\n1. 修复字幕筛选会导致页面内容错位的问题\r\n2. 修复 Mini Player 重启恢复不自动读取状态问题\r\n3. 修复部分情况下 iOS 悬浮字幕开启失败问题\r\n\r\n**Fixes:**\r\n1. Fixed an issue where subtitle filtering caused page content to become misaligned.\r\n2. Fixed an issue where the Mini Player did not automatically restore its state upon restart/resume.\r\n3. Fixed an issue where floating subtitles failed to enable on iOS in certain cases."
+        },
+        {
+          "version": "3.8.0",
+          "date": "2026-08-23",
+          "size": 13286950,
+          "downloadURL": "https://github.com/pa-jesusf/KikoFlu/releases/download/v3.8.0/KikoFlu-ios-unsigned_380.ipa",
+          "localizedDescription": "**新增：**\r\n1. 大幅调整页面布局与组件，提升信息流覆盖率\r\n2. 新增液态玻璃导航、全局音频增益、下一首预加载和 HTTP 代理\r\n3. 播放列表支持瀑布流/列表切换并自动保存\r\n4. 新增年龄分级标签、Mini Player 播放状态恢复和翻译歌词自动保存\r\n5. 信息流布局、在线标记筛选和页面视图选择支持持久化\r\n\r\n**修复：**\r\n1. 重构多个页面的虚拟化列表，改善长列表滚动与图片加载性能\r\n2. 修复瀑布流、卡片比例、分页、安全区和多平台布局问题\r\n3. 修复字幕匹配、文件树缓存、字幕数据库删除及下载刷新问题\r\n4. 修复 Android 低噪与导航栏显示问题，并改善 iOS/macOS 外观适配\r\n\r\n**New:**\r\n1. Revamped layouts and components with broader feed coverage\r\n2. Added Liquid Glass navigation, global audio gain, next-track preloading, and HTTP proxy settings\r\n3. Added playlist layout switching, age-rating labels, Mini Player state restoration, and translated-lyrics auto-save\r\n\r\n**Fixes:**\r\n1. Improved virtualized feeds, masonry layout, pagination, scrolling, and image loading\r\n2. Fixed subtitle matching, stale file trees, subtitle database deletion, Android low-level noise, and cross-platform layout issues"
+        },
+        {
+          "version": "3.5.0",
+          "date": "2026-06-19",
+          "size": 13149303,
+          "downloadURL": "https://github.com/pa-jesusf/KikoFlu/releases/download/v3.5.0/KikoFlu-ios-unsigned_350.ipa",
+          "localizedDescription": "**新增：**\r\n1. Android 端改用 media_kit 音频解码，提升 32 位 FLAC 等特殊音频格式兼容性\r\n2. 新增屏幕常亮设置，播放/看字幕时可保持屏幕不熄灭\r\n3. 新增作品卡片显示尺寸与字体大小设置\r\n4. 新增翻译目标语言设置，LLM 翻译支持自定义目标语言\r\n5. “我的”界面支持字幕筛选\r\n6. 本地导入作品元数据识别能力增强\r\n7. 新增音频触感反馈(Beta)（移动端），根据声音特征控制设备振动\r\n8. 播放器字幕界面新增全屏歌词与一键翻译按钮，翻译结果可保存到字幕库\r\n9. 支持自定义 Cookie，以便通过部分自建服务器的权限校验\r\n10. 支持按添加时间排序，优化自建 Kikoeru 服务器的浏览体验\r\n\r\n**修复：**\r\n1. 修复 iOS 底部 Home Indicator 与导航栏重叠问题\r\n2. 修复切换音频后字幕仍停留在上一首的问题\r\n3. 修复已下载作品中手动加入的本地文件无法及时显示的问题\r\n4. 修复下载文件路径、缓存路径和本地播放路径在特殊字符/多平台下的兼容问题\r\n5. 修复离线下载作品缺失元数据时无法进入或无法播放的问"
+        },
+        {
+          "version": "3.1.1",
+          "date": "2026-04-07",
+          "size": 13143146,
+          "downloadURL": "https://github.com/pa-jesusf/KikoFlu/releases/download/v3.1.1/KikoFlu-ios-unsigned_311.ipa",
+          "localizedDescription": "新增：Linux支持、多语言支持、快捷翻译按钮、推荐系统、悬浮字幕触摸开关、已下载搜索排序、日志界面、字幕库索引优化、本地文件扫描、低认同度标签区分显示\n修复：最大并行下载数保护、悬浮字幕多行显示、UI动画修复、字幕解码稳定性、iOS无法保存文件\nNew: Linux support, multi-language support, quick translation button, recommendation system, floating subtitle touch toggle, downloaded items search sorting, log interface, subtitle library indexing optimization, local file scanning, and differentiated display for low-confidence tags.\nFixed: maximum concurrent download limit protection, multi-line display for floating subtitles, UI animation fixes, improved subtitle decoding stability, and an issue where files could not be saved on iOS."
+        }
+      ]
+    }
+  ]
+}
