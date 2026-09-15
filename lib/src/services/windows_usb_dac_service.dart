@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,8 +20,9 @@ class WindowsUsbDacSettings {
 }
 
 /// Persists the Windows WASAPI-exclusive target independently from Hiraukan's
-/// existing passthrough setting. The actual route is consumed by `_configureMpv`
-/// before media_kit initializes on the next app launch.
+/// existing passthrough setting. A tiny sidecar is consumed by the pinned
+/// just_audio_media_kit adapter after Hiraukan writes its normal mpv.conf, so
+/// Unified Sources and the existing desktop playback stack stay untouched.
 class WindowsUsbDacService {
   WindowsUsbDacService._();
   static final instance = WindowsUsbDacService._();
@@ -28,6 +30,7 @@ class WindowsUsbDacService {
   static const enabledKey = 'windows_usb_dac_enabled';
   static const deviceIdKey = 'windows_usb_dac_device_id';
   static const deviceNameKey = 'windows_usb_dac_device_name';
+  static const _sidecarName = 'hiraukan_wasapi.json';
 
   bool get isSupported => Platform.isWindows;
 
@@ -46,9 +49,28 @@ class WindowsUsbDacService {
   List<WindowsAudioDevice> get devices =>
       WindowsAudioDeviceService.instance.getOutputDevices();
 
+  Future<File> _sidecarFile() async {
+    final exeDir = File(Platform.resolvedExecutable).parent;
+    final configDir = Directory('${exeDir.path}${Platform.pathSeparator}portable_config');
+    if (!await configDir.exists()) await configDir.create(recursive: true);
+    return File('${configDir.path}${Platform.pathSeparator}$_sidecarName');
+  }
+
+  Future<void> _writeSidecar() async {
+    if (!isSupported) return;
+    final state = await load();
+    final file = await _sidecarFile();
+    await file.writeAsString(jsonEncode({
+      'enabled': state.enabled,
+      'deviceId': state.deviceId,
+      'deviceName': state.deviceName,
+    }));
+  }
+
   Future<void> setEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(enabledKey, enabled);
+    await _writeSidecar();
   }
 
   Future<void> selectDevice(WindowsAudioDevice? device) async {
@@ -56,10 +78,11 @@ class WindowsUsbDacService {
     if (device == null) {
       await prefs.remove(deviceIdKey);
       await prefs.remove(deviceNameKey);
-      return;
+    } else {
+      await prefs.setString(deviceIdKey, device.id);
+      await prefs.setString(deviceNameKey, device.name);
     }
-    await prefs.setString(deviceIdKey, device.id);
-    await prefs.setString(deviceNameKey, device.name);
+    await _writeSidecar();
   }
 
   Future<WindowsAudioDevice?> selectRecommendedIfNeeded() async {
