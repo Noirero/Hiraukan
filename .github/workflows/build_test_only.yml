@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: android-apk-test-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   android:
     name: Android ARM64 APK
@@ -31,6 +35,7 @@ jobs:
         with:
           flutter-version: '3.44.7'
           channel: 'stable'
+          cache: true
 
       - name: Get Dependencies
         run: flutter pub get
@@ -43,6 +48,7 @@ jobs:
           flutter build apk \
             --release \
             --flavor test \
+            --target-platform android-arm64 \
             --split-per-abi \
             --build-number="$build_number"
           mv build/app/outputs/flutter-apk/app-test-arm64-v8a-release.apk \
