@@ -201,7 +201,7 @@ class KikoFluNotificationService {
           channelDescription: 'Download, conversion and transcription progress',
           onlyAlertOnce: true,
           showProgress: true,
-          progress: progress.clamp(0, safeMax),
+          progress: progress.clamp(0, safeMax).toInt(),
           maxProgress: safeMax,
         ),
       ),
