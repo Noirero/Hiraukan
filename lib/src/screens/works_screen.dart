@@ -1,21 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../providers/works_provider.dart';
-import '../utils/scroll_optimization.dart';
-import '../widgets/sort_dialog.dart';
-import '../widgets/works_grid_view.dart';
-import '../widgets/virtualized_sliver_collection.dart';
-import '../utils/snackbar_util.dart';
-import '../widgets/floating_feed_toolbar.dart';
 import '../../l10n/app_localizations.dart';
-import '../widgets/download_fab.dart';
 import '../models/sort_options.dart';
-import '../utils/subtitle_filter.dart';
+import '../providers/works_provider.dart';
 import '../utils/l10n_extensions.dart';
+import '../utils/scroll_optimization.dart';
+import '../utils/subtitle_filter.dart';
 import '../utils/system_ui_style.dart';
 import '../utils/ui_tokens.dart';
 import '../widgets/async_state_view.dart';
+import '../widgets/download_fab.dart';
+import '../widgets/floating_feed_toolbar.dart';
+import '../widgets/home_source_filter_bar.dart';
+import '../widgets/sort_dialog.dart';
+import '../widgets/virtualized_sliver_collection.dart';
+import '../widgets/works_grid_view.dart';
+import '../utils/snackbar_util.dart';
 
 class WorksScreen extends ConsumerStatefulWidget {
   const WorksScreen({super.key});
@@ -27,22 +28,18 @@ class WorksScreen extends ConsumerStatefulWidget {
 class _WorksScreenState extends ConsumerState<WorksScreen>
     with AutomaticKeepAliveClientMixin {
   final ScrollController _scrollController = ScrollController();
-
+  final Map<String, double> _scrollPositions = <String, double>{};
   int _slideDirection = 0;
-  final Map<DisplayMode, double> _scrollPositions = {
-    for (final mode in DisplayMode.values) mode: 0.0,
-  };
 
   @override
-  bool get wantKeepAlive => true; // 保持状态不被销毁
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
-    // 只在首次加载时获取数据，如果已有数据则不重新加载
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final worksState = ref.read(worksProvider);
-      if (worksState.works.isEmpty) {
+      if (!worksState.hasLoaded && !worksState.isLoading) {
         ref.read(worksProvider.notifier).loadWorks(refresh: true);
       }
     });
@@ -55,21 +52,27 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
   }
 
   void _showSortDialog(BuildContext context) {
-    final displayMode = ref.read(worksProvider).displayMode;
-    final isRecommendMode = displayMode == DisplayMode.popular ||
-        displayMode == DisplayMode.recommended;
+    final state = ref.read(worksProvider);
+    final isRecommendMode = state.displayMode == DisplayMode.popular ||
+        state.displayMode == DisplayMode.recommended;
 
     if (isRecommendMode) {
       SnackBarUtil.showInfo(
         context,
-        displayMode == DisplayMode.popular
+        state.displayMode == DisplayMode.popular
             ? S.of(context).popularNoSort
             : S.of(context).recommendedNoSort,
       );
       return;
     }
+    if (!state.canSortBrowse) {
+      SnackBarUtil.showInfo(
+        context,
+        'Pengurutan tersedia untuk feed ASMR.one. Pilih ASMR.one untuk mengurutkan.',
+      );
+      return;
+    }
 
-    final state = ref.read(worksProvider);
     showDialog(
       context: context,
       builder: (context) => CommonSortDialog(
@@ -117,46 +120,33 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
   }
 
   void _changeDisplayMode(DisplayMode mode) {
-    final currentMode = ref.read(worksProvider).displayMode;
-    if (currentMode == mode) return;
-
-    if (_scrollController.hasClients) {
-      _scrollPositions[currentMode] = _scrollController.offset;
-    }
-
     ref.read(worksProvider.notifier).setDisplayMode(mode);
   }
 
-  void _restoreScrollPosition(DisplayMode mode) {
-    final targetOffset = _scrollPositions[mode] ?? 0;
+  void _restoreScrollPosition(String feedKey) {
+    final targetOffset = _scrollPositions[feedKey] ?? 0;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (!_scrollController.hasClients) return;
+      if (!mounted || !_scrollController.hasClients) return;
       final maxExtent = _scrollController.position.maxScrollExtent;
       final safeMax = maxExtent.isFinite ? maxExtent : targetOffset;
-      final clamped = targetOffset.clamp(0.0, safeMax).toDouble();
-      _scrollController.jumpTo(clamped);
+      _scrollController.jumpTo(targetOffset.clamp(0.0, safeMax).toDouble());
     });
   }
 
   void _handleSwipe(DragEndDetails details) {
-    if (details.primaryVelocity == null) return;
+    final velocity = details.primaryVelocity;
+    if (velocity == null || velocity.abs() < 500) return;
 
-    final velocity = details.primaryVelocity!;
     final worksState = ref.read(worksProvider);
-
-    // Sensitivity threshold
-    if (velocity.abs() < 500) return;
+    if (!worksState.curatedModesAvailable) return;
 
     if (velocity < 0) {
-      // Swipe Left (Next Tab)
       if (worksState.displayMode == DisplayMode.all) {
         _changeDisplayMode(DisplayMode.popular);
       } else if (worksState.displayMode == DisplayMode.popular) {
         _changeDisplayMode(DisplayMode.recommended);
       }
     } else {
-      // Swipe Right (Previous Tab)
       if (worksState.displayMode == DisplayMode.recommended) {
         _changeDisplayMode(DisplayMode.popular);
       } else if (worksState.displayMode == DisplayMode.popular) {
@@ -167,28 +157,31 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // 必须调用以保持状态
+    super.build(context);
     ref.listen<WorksState>(
       worksProvider,
       (previous, next) {
-        if (!mounted) return;
-        if (previous == null) return;
-        if (previous.displayMode == next.displayMode) return;
+        if (!mounted || previous == null) return;
+        if (previous.activeFeedKey == next.activeFeedKey) return;
+
+        if (_scrollController.hasClients) {
+          _scrollPositions[previous.activeFeedKey] = _scrollController.offset;
+        }
 
         final prevIndex = DisplayMode.values.indexOf(previous.displayMode);
         final nextIndex = DisplayMode.values.indexOf(next.displayMode);
-
         setState(() {
-          _slideDirection = nextIndex >= prevIndex ? 1 : -1;
+          _slideDirection = previous.displayMode == next.displayMode
+              ? 0
+              : (nextIndex >= prevIndex ? 1 : -1);
         });
-
-        _restoreScrollPosition(next.displayMode);
+        _restoreScrollPosition(next.activeFeedKey);
       },
     );
+
     final worksState = ref.watch(worksProvider);
     final isRecommendMode = worksState.displayMode == DisplayMode.popular ||
         worksState.displayMode == DisplayMode.recommended;
-
     final horizontalPadding = FloatingToolbarLayout.horizontalPadding(context);
     final topPadding = MediaQuery.paddingOf(context).top;
     final toolbarTop = topPadding + 8;
@@ -226,15 +219,11 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
                     );
                   },
                   child: KeyedSubtree(
-                    key: ValueKey(worksState.displayMode),
+                    key: ValueKey(worksState.activeFeedKey),
                     child: _buildBody(
                       worksState,
-                      EdgeInsets.fromLTRB(
-                        horizontalPadding,
-                        contentTopPadding,
-                        horizontalPadding,
-                        horizontalPadding,
-                      ),
+                      horizontalPadding: horizontalPadding,
+                      contentTopPadding: contentTopPadding,
                     ),
                   ),
                 ),
@@ -270,13 +259,17 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
     BuildContext context,
     WorksState worksState,
   ) {
-    return [
+    final actions = <FloatingFeedModeAction>[
       FloatingFeedModeAction(
         icon: Icons.grid_view,
         label: S.of(context).displayModeAll,
         isSelected: worksState.displayMode == DisplayMode.all,
         onPressed: () => _changeDisplayMode(DisplayMode.all),
       ),
+    ];
+    if (!worksState.curatedModesAvailable) return actions;
+
+    actions.addAll([
       FloatingFeedModeAction(
         icon: Icons.local_fire_department,
         label: S.of(context).displayModePopular,
@@ -289,7 +282,8 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
         isSelected: worksState.displayMode == DisplayMode.recommended,
         onPressed: () => _changeDisplayMode(DisplayMode.recommended),
       ),
-    ];
+    ]);
+    return actions;
   }
 
   List<FloatingFeedToolAction> _buildToolActions(
@@ -299,6 +293,7 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
   }) {
     final subtitleMode =
         SubtitleFilterMode.fromValue(worksState.subtitleFilter);
+    final sortEnabled = !isRecommendMode && worksState.canSortBrowse;
     return [
       FloatingFeedToolAction(
         icon: _getLayoutIcon(worksState.layoutType),
@@ -316,33 +311,64 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
         icon: Icons.sort,
         tooltip: isRecommendMode
             ? S.of(context).recommendedNoSort
-            : S.of(context).sort,
-        onPressed: isRecommendMode ? null : () => _showSortDialog(context),
+            : sortEnabled
+                ? S.of(context).sort
+                : 'Pengurutan hanya untuk feed ASMR.one',
+        onPressed: sortEnabled ? () => _showSortDialog(context) : null,
       ),
     ];
   }
 
-  Widget _buildBody(WorksState worksState, EdgeInsetsGeometry padding) {
-    return _buildLayoutView(worksState, padding);
+  Widget _buildBody(
+    WorksState worksState, {
+    required double horizontalPadding,
+    required double contentTopPadding,
+  }) {
+    return _buildLayoutView(
+      worksState,
+      horizontalPadding: horizontalPadding,
+      contentTopPadding: contentTopPadding,
+    );
   }
 
   Widget _buildLayoutView(
-    WorksState worksState,
-    EdgeInsetsGeometry padding,
-  ) {
+    WorksState worksState, {
+    required double horizontalPadding,
+    required double contentTopPadding,
+  }) {
     final notifier = ref.read(worksProvider.notifier);
     return WorksGridView(
       works: worksState.works,
       layoutType: worksState.layoutType,
       scrollController: _scrollController,
-      padding: padding,
+      padding: EdgeInsets.fromLTRB(
+        horizontalPadding,
+        8,
+        horizontalPadding,
+        horizontalPadding,
+      ),
+      sliversBefore: [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              contentTopPadding,
+              horizontalPadding,
+              4,
+            ),
+            child: const HomeSourceFilterBar(),
+          ),
+        ),
+      ],
+      unifiedSourcesEnabled: worksState.usesUnifiedBrowse,
+      showUnifiedSourceFilterBar: false,
       physics: ScrollOptimization.physics,
       isLoading: worksState.isLoading,
       isRefreshing: worksState.isLoading && worksState.works.isNotEmpty,
       isLoadingMore: worksState.isLoadingMore,
       hasMore: worksState.hasMore,
       error: worksState.error,
-      loadMoreError: null,
+      loadMoreError: worksState.loadMoreError,
       onLoadMore:
           worksState.displayMode == DisplayMode.all ? null : notifier.loadMore,
       onRetry: notifier.refresh,
@@ -406,7 +432,9 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
       ),
       emptyBuilder: (context) => AsyncStateView(
         icon: Icon(
-          Icons.audiotrack,
+          worksState.safetyMode == AsmrSafetyMode.sfw
+              ? Icons.eco_outlined
+              : Icons.audiotrack,
           size: 64,
           color: Theme.of(context).colorScheme.outline,
         ),
@@ -415,10 +443,13 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
           style: Theme.of(context).textTheme.titleLarge,
         ),
         message: Text(
-          S.of(context).checkNetworkOrRetry,
+          worksState.safetyMode == AsmrSafetyMode.sfw
+              ? 'Tidak ada karya dengan metadata SFW yang terverifikasi pada halaman ini.'
+              : S.of(context).checkNetworkOrRetry,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
+          textAlign: TextAlign.center,
         ),
       ),
       endBuilder: (context) => Padding(
