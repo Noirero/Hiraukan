@@ -10,9 +10,12 @@ import 'log_service.dart';
 
 final _log = LogService.instance;
 
-/// Notification bridge derived from KikoFlu.
-/// Local progress notifications work independently. FCM is opt-in and only
-/// initializes when a valid Firebase configuration is present in Hiraukan.
+/// Android notification bridge derived from KikoFlu.
+///
+/// Local task/progress notifications work without Firebase. FCM remains
+/// strictly opt-in and only becomes enabled when this Hiraukan build contains
+/// its own valid Firebase configuration. KikoFlu Firebase credentials are never
+/// reused.
 class KikoFluNotificationService {
   KikoFluNotificationService._();
   static final instance = KikoFluNotificationService._();
@@ -23,17 +26,16 @@ class KikoFluNotificationService {
   bool _firebaseReady = false;
   StreamSubscription<RemoteMessage>? _foregroundSubscription;
 
+  bool get firebaseReady => _firebaseReady;
+
   Future<void> initialize() async {
+    if (!Platform.isAndroid) return;
+
     if (!_localReady) {
       const android = AndroidInitializationSettings('@mipmap/launcher_icon');
-      const darwin = DarwinInitializationSettings();
       try {
         await _local.initialize(
-          const InitializationSettings(
-            android: android,
-            iOS: darwin,
-            macOS: darwin,
-          ),
+          const InitializationSettings(android: android),
         );
         _localReady = true;
       } catch (error) {
@@ -42,23 +44,45 @@ class KikoFluNotificationService {
     }
 
     if (KikoFluFeatureSettings.instance.fcmEnabled) {
-      await initializeFirebaseIfConfigured();
+      final ready = await initializeFirebaseIfConfigured();
+      if (!ready) {
+        await KikoFluFeatureSettings.instance.setFcmEnabled(false);
+      }
+    }
+  }
+
+  Future<bool> requestLocalPermission() async {
+    if (!Platform.isAndroid) return false;
+    await initialize();
+    if (!_localReady) return false;
+    try {
+      return await _local
+              .resolvePlatformSpecificImplementation<
+                  AndroidFlutterLocalNotificationsPlugin>()
+              ?.requestNotificationsPermission() ??
+          true;
+    } catch (error) {
+      _log.warning('Notification permission request failed: $error', tag: 'Notify');
+      return false;
     }
   }
 
   Future<bool> initializeFirebaseIfConfigured() async {
+    if (!Platform.isAndroid) return false;
     if (_firebaseReady && _foregroundSubscription != null) return true;
-    if (!(Platform.isAndroid || Platform.isIOS || Platform.isMacOS)) {
-      return false;
-    }
 
     try {
       if (Firebase.apps.isEmpty) await Firebase.initializeApp();
-      await FirebaseMessaging.instance.requestPermission(
+      final permission = await FirebaseMessaging.instance.requestPermission(
         alert: true,
         badge: true,
         sound: true,
       );
+      if (permission.authorizationStatus == AuthorizationStatus.denied) {
+        _firebaseReady = false;
+        return false;
+      }
+
       _firebaseReady = true;
       _foregroundSubscription ??=
           FirebaseMessaging.onMessage.listen((message) async {
@@ -82,23 +106,29 @@ class KikoFluNotificationService {
     }
   }
 
-  /// Applies the FCM toggle immediately. Turning it off removes the foreground
-  /// listener and best-effort deletes the token, so disabling the feature does
-  /// not keep delivering KikoFlu-derived push behavior in the current session.
+  /// Returns the effective enabled state after applying the request.
   Future<bool> setFcmEnabled(bool enabled) async {
-    if (enabled) return initializeFirebaseIfConfigured();
-
-    await _foregroundSubscription?.cancel();
-    _foregroundSubscription = null;
-    _firebaseReady = false;
-    try {
-      if (Firebase.apps.isNotEmpty) {
-        await FirebaseMessaging.instance.deleteToken();
+    if (!enabled) {
+      await _foregroundSubscription?.cancel();
+      _foregroundSubscription = null;
+      _firebaseReady = false;
+      try {
+        if (Firebase.apps.isNotEmpty) {
+          await FirebaseMessaging.instance.deleteToken();
+        }
+      } catch (error) {
+        _log.warning('FCM token cleanup skipped: $error', tag: 'Notify');
       }
-    } catch (error) {
-      _log.warning('FCM token cleanup skipped: $error', tag: 'Notify');
+      return false;
     }
-    return false;
+
+    final ready = await initializeFirebaseIfConfigured();
+    if (!ready) {
+      await _foregroundSubscription?.cancel();
+      _foregroundSubscription = null;
+      _firebaseReady = false;
+    }
+    return ready;
   }
 
   Future<String?> getFcmToken() async {
@@ -116,7 +146,10 @@ class KikoFluNotificationService {
     required String title,
     required String body,
   }) async {
-    if (!KikoFluFeatureSettings.instance.notificationsEnabled) return;
+    if (!Platform.isAndroid ||
+        !KikoFluFeatureSettings.instance.notificationsEnabled) {
+      return;
+    }
     await initialize();
     if (!_localReady) return;
     await _local.show(
@@ -131,8 +164,6 @@ class KikoFluNotificationService {
           importance: Importance.defaultImportance,
           priority: Priority.defaultPriority,
         ),
-        iOS: DarwinNotificationDetails(),
-        macOS: DarwinNotificationDetails(),
       ),
     );
   }
@@ -144,7 +175,10 @@ class KikoFluNotificationService {
     required int progress,
     required int maxProgress,
   }) async {
-    if (!KikoFluFeatureSettings.instance.notificationsEnabled) return;
+    if (!Platform.isAndroid ||
+        !KikoFluFeatureSettings.instance.notificationsEnabled) {
+      return;
+    }
     await initialize();
     if (!_localReady) return;
     final safeMax = maxProgress <= 0 ? 100 : maxProgress;
