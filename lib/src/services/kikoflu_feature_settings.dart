@@ -22,11 +22,14 @@ class KikoFluFeatureSettings {
       StorageService.getInt('${_prefix}whisper_threads') ?? 4;
 
   bool get notificationsEnabled =>
-      StorageService.getBool('${_prefix}notifications') ?? true;
+      StorageService.getBool('${_prefix}notifications') ?? false;
   bool get fcmEnabled => StorageService.getBool('${_prefix}fcm') ?? false;
 
-  bool get hiResEnabled => StorageService.getBool('${_prefix}hi_res') ?? false;
-  bool get autoHiRes => StorageService.getBool('${_prefix}auto_hi_res') ?? true;
+  // KikoFlu's concrete Hi-Res implementation is Windows WASAPI-specific.
+  // The Android-only integration must never report this setting as enabled
+  // until Hiraukan gains a real Android native output backend.
+  bool get hiResEnabled => false;
+  bool get autoHiRes => false;
 
   Future<void> setAutoConvertWav(bool value) =>
       StorageService.setBool('${_prefix}auto_convert_wav', value);
@@ -46,7 +49,7 @@ class KikoFluFeatureSettings {
       StorageService.setBool('${_prefix}fcm', value);
 
   Future<void> setHiResEnabled(bool value) =>
-      StorageService.setBool('${_prefix}hi_res', value);
+      StorageService.setBool('${_prefix}hi_res', false);
   Future<void> setAutoHiRes(bool value) =>
-      StorageService.setBool('${_prefix}auto_hi_res', value);
+      StorageService.setBool('${_prefix}auto_hi_res', false);
 }
