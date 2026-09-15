@@ -66,7 +66,7 @@ jobs:
 
       - name: Verify package and stable test certificate
         env:
-          EXPECTED_TEST_CERT_SHA256: e7cec9376a9eb7d7050975f780eb66c163a6410bd0b1123f865c699f70b2db58
+          EXPECTED_TEST_CERT_SHA256: 376eef15e8226b413e4e35910465cb857d4d8a0c3fbd49bdef3554b8c283021b
         run: |
           set -euo pipefail
           build_tools_dir="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
