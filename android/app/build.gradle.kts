@@ -14,8 +14,11 @@ if (keystorePropertiesFile.exists()) {
 }
 val releaseKeystoreFile = keystoreProperties.getProperty("storeFile")?.let(rootProject::file)
 val hasReleaseKeystore = releaseKeystoreFile?.exists() == true
+val testKeystoreFile = rootProject.file("hiraukan-test-key.jks")
 
 android {
+    // Keep the Kotlin/Java namespace stable for now so native channel classes do not need to move.
+    // Android install identity is controlled by applicationId below.
     namespace = "com.meteor.kikoeruflutter"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
@@ -31,18 +34,23 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.meteor.kikoeruflutter"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // Hiraukan owns a distinct Android identity instead of reusing KikoFlu's package.
+        applicationId = "com.noirero.hiraukan"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         multiDexEnabled = true
+        manifestPlaceholders["appLabel"] = "Hiraukan"
     }
 
     signingConfigs {
+        create("hiraukanTest") {
+            storeFile = testKeystoreFile
+            storePassword = "hiraukan-test-only-2026"
+            keyAlias = "hiraukan-test"
+            keyPassword = "hiraukan-test-only-2026"
+        }
         create("release") {
             if (hasReleaseKeystore && releaseKeystoreFile != null) {
                 storeFile = releaseKeystoreFile
@@ -53,20 +61,31 @@ android {
         }
     }
 
-    buildTypes {
-        release {
-            signingConfig = if (hasReleaseKeystore) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("test") {
+            dimension = "distribution"
+            applicationIdSuffix = ".test"
+            versionNameSuffix = "-test"
+            manifestPlaceholders["appLabel"] = "Hiraukan Test"
+            signingConfig = signingConfigs.getByName("hiraukanTest")
+        }
+        create("prod") {
+            dimension = "distribution"
+            manifestPlaceholders["appLabel"] = "Hiraukan"
+            if (hasReleaseKeystore) {
+                signingConfig = signingConfigs.getByName("release")
             }
         }
+    }
+
+    buildTypes {
+        release {
+            // Signing is selected by flavor. Test uses the committed test-only key;
+            // prod is signed only when the permanent release key is provided.
+        }
         debug {
-            signingConfig = if (hasReleaseKeystore) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 }
