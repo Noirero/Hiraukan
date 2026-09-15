@@ -21,6 +21,7 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
@@ -38,6 +39,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        multiDexEnabled = true
     }
 
     signingConfigs {
@@ -77,6 +79,10 @@ flutter {
 // artifacts aligned on 1.6.1, which contains the 32-bit FLAC extractor fix,
 // while retaining Android's native AudioTrack playback backend.
 dependencies {
+    // flutter_local_notifications 10+ requires core library desugaring on
+    // Android even when scheduled notifications are not used.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+
     // local_auth's biometric prompt requires an AppCompat-compatible Activity
     // theme. Declare it explicitly instead of relying on a transitive AndroidX
     // dependency so the theme resources stay deterministic across plugin updates.
