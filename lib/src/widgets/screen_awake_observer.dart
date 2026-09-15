@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/audio_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/screen_awake_service.dart';
+import 'app_lock_gate.dart';
 
 class ScreenAwakeObserver extends ConsumerStatefulWidget {
   const ScreenAwakeObserver({
@@ -46,6 +47,6 @@ class _ScreenAwakeObserverState extends ConsumerState<ScreenAwakeObserver> {
         );
 
     _apply(keepAwake && hasTrack);
-    return widget.child;
+    return AppLockGate(child: widget.child);
   }
 }
