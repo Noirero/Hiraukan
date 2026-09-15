@@ -5,9 +5,11 @@ import '../models/work.dart';
 import '../providers/work_card_display_provider.dart';
 import '../providers/works_provider.dart';
 import '../providers/auth_provider.dart';
+import '../sources/unified_source_registry.dart';
 import '../utils/responsive_grid_helper.dart';
 import '../utils/work_cover_prefetch.dart';
 import 'enhanced_work_card.dart';
+import 'unified_work_card.dart';
 import 'virtualized_sliver_collection.dart';
 
 class WorksGridView extends ConsumerWidget {
@@ -116,12 +118,22 @@ class WorksGridView extends ConsumerWidget {
         sliversBefore: sliversBefore,
         items: works,
         itemId: (work) => work.id,
-        itemBuilder: (context, work, index) => EnhancedWorkCard(
-          key: ValueKey(work.id),
-          work: work,
-          crossAxisCount: crossAxisCount,
-          isListLayout: layoutType == LayoutType.list,
-        ),
+        itemBuilder: (context, work, index) {
+          if (UnifiedSourceRegistry.instance.contains(work.id)) {
+            return UnifiedWorkCard(
+              key: ValueKey('unified_${work.id}'),
+              work: work,
+              crossAxisCount: crossAxisCount,
+              isListLayout: layoutType == LayoutType.list,
+            );
+          }
+          return EnhancedWorkCard(
+            key: ValueKey(work.id),
+            work: work,
+            crossAxisCount: crossAxisCount,
+            isListLayout: layoutType == LayoutType.list,
+          );
+        },
         layout: isGrid
             ? VirtualizedCollectionLayout.masonry
             : VirtualizedCollectionLayout.list,
@@ -147,14 +159,19 @@ class WorksGridView extends ConsumerWidget {
         ),
         onRetry: onRetry,
         onPrefetch: (items) {
-          prefetchWorkCovers(
-            context,
-            items,
-            host: auth.$1,
-            token: auth.$2,
-            crossAxisCount: crossAxisCount,
-            isListCard: layoutType == LayoutType.list,
-          );
+          final normalItems = items
+              .where((work) => !UnifiedSourceRegistry.instance.contains(work.id))
+              .toList(growable: false);
+          if (normalItems.isNotEmpty) {
+            prefetchWorkCovers(
+              context,
+              normalItems,
+              host: auth.$1,
+              token: auth.$2,
+              crossAxisCount: crossAxisCount,
+              isListCard: layoutType == LayoutType.list,
+            );
+          }
           onPrefetch?.call(items);
         },
         emptyBuilder: emptyBuilder,
