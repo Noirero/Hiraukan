@@ -2,31 +2,32 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// 主题模式枚举
+// Theme mode. System remains the default so Hiraukan follows the device while
+// keeping both the paired light and dark visual identities available.
 enum AppThemeMode {
-  system, // 跟随系统
-  light, // 浅色模式
-  dark, // 深色模式
+  system,
+  light,
+  dark,
 }
 
-// 颜色方案类型枚举
+// Color scheme choices. Hiraukan's lavender palette is the default identity,
+// while the existing alternatives remain available to users who prefer them.
 enum ColorSchemeType {
-  oceanBlue, // 海洋蓝（默认）
-  forestGreen, // 森林绿
-  sunsetOrange, // 日落橙
-  lavenderPurple, // 薰衣草紫
-  sakuraPink, // 樱花粉
-  dynamic, // 系统动态取色
+  oceanBlue,
+  forestGreen,
+  sunsetOrange,
+  lavenderPurple,
+  sakuraPink,
+  dynamic,
 }
 
-// 主题设置状态
 class ThemeSettings {
   final AppThemeMode themeMode;
   final ColorSchemeType colorSchemeType;
 
   const ThemeSettings({
     this.themeMode = AppThemeMode.system,
-    this.colorSchemeType = ColorSchemeType.oceanBlue,
+    this.colorSchemeType = ColorSchemeType.lavenderPurple,
   });
 
   ThemeSettings copyWith({
@@ -51,7 +52,6 @@ class ThemeSettings {
   }
 }
 
-// 主题设置控制器
 class ThemeSettingsNotifier extends StateNotifier<ThemeSettings> {
   static const String _themeModeKey = 'theme_mode';
   static const String _colorSchemeTypeKey = 'color_scheme_type';
@@ -64,13 +64,20 @@ class ThemeSettingsNotifier extends StateNotifier<ThemeSettings> {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
 
-    final themeModeIndex = prefs.getInt(_themeModeKey) ?? 0;
-    final colorSchemeTypeIndex = prefs.getInt(_colorSchemeTypeKey) ?? 0;
+    final themeModeIndex = prefs.getInt(_themeModeKey) ?? AppThemeMode.system.index;
+    // Do not overwrite an explicit existing color choice. New installs (or
+    // installs that never selected a palette) start with Hiraukan lavender.
+    final colorSchemeTypeIndex = prefs.getInt(_colorSchemeTypeKey) ??
+        ColorSchemeType.lavenderPurple.index;
     if (!mounted || _changedLocally) return;
 
+    final safeThemeModeIndex = themeModeIndex.clamp(0, AppThemeMode.values.length - 1);
+    final safeColorSchemeIndex =
+        colorSchemeTypeIndex.clamp(0, ColorSchemeType.values.length - 1);
+
     state = ThemeSettings(
-      themeMode: AppThemeMode.values[themeModeIndex],
-      colorSchemeType: ColorSchemeType.values[colorSchemeTypeIndex],
+      themeMode: AppThemeMode.values[safeThemeModeIndex],
+      colorSchemeType: ColorSchemeType.values[safeColorSchemeIndex],
     );
   }
 
@@ -93,11 +100,13 @@ class ThemeSettingsNotifier extends StateNotifier<ThemeSettings> {
     state = const ThemeSettings();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_themeModeKey, AppThemeMode.system.index);
-    await prefs.setInt(_colorSchemeTypeKey, ColorSchemeType.oceanBlue.index);
+    await prefs.setInt(
+      _colorSchemeTypeKey,
+      ColorSchemeType.lavenderPurple.index,
+    );
   }
 }
 
-// 主题设置提供者
 final themeSettingsProvider =
     StateNotifierProvider<ThemeSettingsNotifier, ThemeSettings>((ref) {
   return ThemeSettingsNotifier();
