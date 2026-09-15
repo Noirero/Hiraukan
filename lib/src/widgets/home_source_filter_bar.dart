@@ -19,30 +19,7 @@ class HomeSourceFilterBar extends ConsumerWidget {
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
-            children: [
-              ChoiceChip(
-                avatar: const Icon(Icons.eco_outlined, size: 17),
-                label: const Text('ASMR SFW'),
-                selected: state.safetyMode == AsmrSafetyMode.sfw,
-                onSelected: (_) => notifier.setSafetyMode(AsmrSafetyMode.sfw),
-              ),
-              const SizedBox(width: 8),
-              ChoiceChip(
-                avatar: const Icon(Icons.explicit_outlined, size: 17),
-                label: const Text('ASMR NSFW'),
-                selected: state.safetyMode == AsmrSafetyMode.nsfw,
-                onSelected: (_) => notifier.setSafetyMode(AsmrSafetyMode.nsfw),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
             children: HomeSourceFilter.values.map((source) {
-              final disabled =
-                  state.safetyMode == AsmrSafetyMode.sfw && source.adultOnly;
               final kind = source.unifiedSource;
               final health = kind == null
                   ? null
@@ -55,15 +32,11 @@ class HomeSourceFilterBar extends ConsumerWidget {
                       : Icon(
                           _healthIcon(health!),
                           size: 16,
-                          color: disabled
-                              ? theme.disabledColor
-                              : _healthColor(context, health),
+                          color: _healthColor(context, health),
                         ),
                   label: Text(source.label),
                   selected: state.sourceFilter == source,
-                  onSelected: disabled
-                      ? null
-                      : (_) => notifier.setSourceFilter(source),
+                  onSelected: (_) => notifier.setSourceFilter(source),
                 ),
               );
             }).toList(growable: false),
@@ -74,9 +47,7 @@ class HomeSourceFilterBar extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Icon(
-              state.safetyMode == AsmrSafetyMode.sfw
-                  ? Icons.verified_user_outlined
-                  : Icons.info_outline,
+              Icons.info_outline,
               size: 15,
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -96,16 +67,15 @@ class HomeSourceFilterBar extends ConsumerWidget {
   }
 
   static String _helperText(WorksState state) {
-    if (state.safetyMode == AsmrSafetyMode.sfw) {
-      return 'SFW ketat: konten dewasa dan metadata umur yang tidak jelas tidak ditampilkan.';
-    }
     if (state.displayMode != DisplayMode.all) {
-      return 'Populer dan Rekomendasi saat ini memakai katalog ASMR.one.';
+      return 'Populer dan Rekomendasi memakai katalog ASMR.one.';
     }
-    if (state.sourceFilter == HomeSourceFilter.all) {
-      return 'NSFW dari semua sumber digabung; karya dengan ID kanonis yang sama dideduplikasi.';
-    }
-    return 'Menampilkan ASMR NSFW dari ${state.sourceFilter.label}.';
+    return switch (state.sourceFilter) {
+      HomeSourceFilter.all =>
+        'Semua sumber digabung; karya dengan ID kanonis yang sama dideduplikasi.',
+      HomeSourceFilter.asmrOne => 'Menampilkan katalog ASMR.one.',
+      _ => 'Menampilkan karya dari ${state.sourceFilter.label}.',
+    };
   }
 
   static IconData _healthIcon(UnifiedSourceHealth health) => switch (health) {
