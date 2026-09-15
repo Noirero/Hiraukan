@@ -34,11 +34,6 @@ enum LayoutType {
   bigGrid,
 }
 
-enum AsmrSafetyMode {
-  sfw,
-  nsfw,
-}
-
 enum HomeSourceFilter {
   all,
   asmrOne,
@@ -61,8 +56,8 @@ extension HomeSourceFilterX on HomeSourceFilter {
         HomeSourceFilter.eroVoice => UnifiedSourceKind.eroVoice,
       };
 
-  bool get adultOnly =>
-      this == HomeSourceFilter.hentaiAsmr || this == HomeSourceFilter.eroVoice;
+  bool get supportsCuratedModes =>
+      this == HomeSourceFilter.all || this == HomeSourceFilter.asmrOne;
 }
 
 class WorksModeSnapshot extends Equatable {
@@ -150,7 +145,6 @@ class WorksState extends Equatable {
   final SortOrder sortOption;
   final SortDirection sortDirection;
   final DisplayMode displayMode;
-  final AsmrSafetyMode safetyMode;
   final HomeSourceFilter sourceFilter;
   final Map<UnifiedSourceKind, UnifiedSourceHealth> sourceHealth;
   final int subtitleFilter;
@@ -162,7 +156,6 @@ class WorksState extends Equatable {
     this.sortOption = SortOrder.release,
     this.sortDirection = SortDirection.desc,
     this.displayMode = DisplayMode.all,
-    this.safetyMode = AsmrSafetyMode.sfw,
     this.sourceFilter = HomeSourceFilter.all,
     this.sourceHealth = const {},
     this.subtitleFilter = 0,
@@ -174,8 +167,7 @@ class WorksState extends Equatable {
       ? basePageSize * 2
       : basePageSize;
 
-  String get activeFeedKey =>
-      '${displayMode.name}|${safetyMode.name}|${sourceFilter.name}';
+  String get activeFeedKey => '${displayMode.name}|${sourceFilter.name}';
 
   WorksModeSnapshot get _currentModeState =>
       modeStates[activeFeedKey] ?? const WorksModeSnapshot();
@@ -193,13 +185,10 @@ class WorksState extends Equatable {
   bool get hasMore => _currentModeState.hasMore;
   bool get isLastPage => _currentModeState.isLastPage;
 
-  bool get curatedModesAvailable => !sourceFilter.adultOnly;
+  bool get curatedModesAvailable => sourceFilter.supportsCuratedModes;
 
   bool get usesUnifiedBrowse =>
-      displayMode == DisplayMode.all &&
-      sourceFilter != HomeSourceFilter.asmrOne &&
-      !(safetyMode == AsmrSafetyMode.sfw &&
-          sourceFilter == HomeSourceFilter.all);
+      displayMode == DisplayMode.all && sourceFilter != HomeSourceFilter.asmrOne;
 
   bool get canSortBrowse => displayMode == DisplayMode.all && !usesUnifiedBrowse;
 
@@ -208,7 +197,6 @@ class WorksState extends Equatable {
     SortOrder? sortOption,
     SortDirection? sortDirection,
     DisplayMode? displayMode,
-    AsmrSafetyMode? safetyMode,
     HomeSourceFilter? sourceFilter,
     Map<UnifiedSourceKind, UnifiedSourceHealth>? sourceHealth,
     int? subtitleFilter,
@@ -220,7 +208,6 @@ class WorksState extends Equatable {
       sortOption: sortOption ?? this.sortOption,
       sortDirection: sortDirection ?? this.sortDirection,
       displayMode: displayMode ?? this.displayMode,
-      safetyMode: safetyMode ?? this.safetyMode,
       sourceFilter: sourceFilter ?? this.sourceFilter,
       sourceHealth: sourceHealth ?? this.sourceHealth,
       subtitleFilter: subtitleFilter ?? this.subtitleFilter,
@@ -235,7 +222,6 @@ class WorksState extends Equatable {
         sortOption,
         sortDirection,
         displayMode,
-        safetyMode,
         sourceFilter,
         sourceHealth,
         subtitleFilter,
@@ -246,7 +232,6 @@ class WorksState extends Equatable {
 
 class WorksNotifier extends StateNotifier<WorksState> {
   static const String layoutPreferenceKey = 'works_layout_type';
-  static const String safetyPreferenceKey = 'home_asmr_safety_mode';
   static const String sourcePreferenceKey = 'home_unified_source_filter';
 
   final KikoeruApiService _apiService;
@@ -255,11 +240,6 @@ class WorksNotifier extends StateNotifier<WorksState> {
     key: layoutPreferenceKey,
     values: LayoutType.values,
     fallback: LayoutType.bigGrid,
-  );
-  final _safetyPreference = PersistentEnumPreference<AsmrSafetyMode>(
-    key: safetyPreferenceKey,
-    values: AsmrSafetyMode.values,
-    fallback: AsmrSafetyMode.sfw,
   );
   final _sourcePreference = PersistentEnumPreference<HomeSourceFilter>(
     key: sourcePreferenceKey,
@@ -286,24 +266,20 @@ class WorksNotifier extends StateNotifier<WorksState> {
   Future<void> _loadPreferences() async {
     final values = await Future.wait<Object?>([
       _layoutPreference.load(),
-      _safetyPreference.load(),
       _sourcePreference.load(),
     ]);
     if (!mounted) return;
 
     final layout = values[0] as LayoutType? ?? LayoutType.bigGrid;
-    final safety = values[1] as AsmrSafetyMode? ?? AsmrSafetyMode.sfw;
-    var source = values[2] as HomeSourceFilter? ?? HomeSourceFilter.all;
-    if (safety == AsmrSafetyMode.sfw && source.adultOnly) {
-      source = HomeSourceFilter.all;
-    }
+    final source = values[1] as HomeSourceFilter? ?? HomeSourceFilter.all;
 
     final oldKey = state.activeFeedKey;
     state = state.copyWith(
       layoutType: layout,
-      safetyMode: safety,
       sourceFilter: source,
-      displayMode: source.adultOnly ? DisplayMode.all : state.displayMode,
+      displayMode: source.supportsCuratedModes
+          ? state.displayMode
+          : DisplayMode.all,
     );
     if (state.activeFeedKey != oldKey && !state.hasLoaded && !state.isLoading) {
       unawaited(loadWorks(targetPage: 1, supersede: true));
@@ -340,23 +316,13 @@ class WorksNotifier extends StateNotifier<WorksState> {
     unawaited(loadWorks(targetPage: 1, supersede: true));
   }
 
-  Set<UnifiedSourceKind> _enabledUnifiedSources(
-    AsmrSafetyMode safety,
-    HomeSourceFilter source,
-  ) {
+  Set<UnifiedSourceKind> _enabledUnifiedSources(HomeSourceFilter source) {
     if (source.unifiedSource case final selected?) return {selected};
-    if (safety == AsmrSafetyMode.sfw) return {UnifiedSourceKind.asmrOne};
     return UnifiedSourceKind.values.toSet();
   }
 
-  bool _usesUnifiedBrowse(
-    DisplayMode mode,
-    AsmrSafetyMode safety,
-    HomeSourceFilter source,
-  ) {
-    return mode == DisplayMode.all &&
-        source != HomeSourceFilter.asmrOne &&
-        !(safety == AsmrSafetyMode.sfw && source == HomeSourceFilter.all);
+  bool _usesUnifiedBrowse(DisplayMode mode, HomeSourceFilter source) {
+    return mode == DisplayMode.all && source != HomeSourceFilter.asmrOne;
   }
 
   Future<void> loadWorks({
@@ -366,7 +332,6 @@ class WorksNotifier extends StateNotifier<WorksState> {
     bool supersede = false,
   }) async {
     final mode = state.displayMode;
-    final safety = state.safetyMode;
     final source = state.sourceFilter;
     final feedKey = state.activeFeedKey;
     final generation = _catalogGeneration;
@@ -401,7 +366,7 @@ class WorksNotifier extends StateNotifier<WorksState> {
       final sortOption = state.sortOption;
       final sortDirection = state.sortDirection;
       const serverSubtitleParam = 0;
-      final unifiedBrowse = _usesUnifiedBrowse(mode, safety, source);
+      final unifiedBrowse = _usesUnifiedBrowse(mode, source);
 
       List<Work> incomingWorks;
       int totalCount;
@@ -414,7 +379,7 @@ class WorksNotifier extends StateNotifier<WorksState> {
               keyword: '',
               page: page,
               pageSize: pageSize,
-              enabledSources: _enabledUnifiedSources(safety, source),
+              enabledSources: _enabledUnifiedSources(source),
             );
         incomingWorks = result.works;
         totalCount = result.totalCount;
@@ -469,13 +434,10 @@ class WorksNotifier extends StateNotifier<WorksState> {
         return;
       }
 
-      final safetyWorks = incomingWorks
-          .where((work) => _matchesSafety(work, safety))
-          .toList(growable: false);
       final latestModeState = _getFeedState(feedKey);
       final newRawWorks = mergePagedItems<Work, int>(
         existing: shouldAppend ? latestModeState.rawWorks : const [],
-        incoming: safetyWorks,
+        incoming: incomingWorks,
         idOf: (work) => work.id,
         replace: !shouldAppend,
       );
@@ -531,7 +493,7 @@ class WorksNotifier extends StateNotifier<WorksState> {
         ),
       );
       if (state.activeFeedKey == feedKey &&
-          !_usesUnifiedBrowse(mode, safety, source)) {
+          !_usesUnifiedBrowse(mode, source)) {
         final health = Map<UnifiedSourceKind, UnifiedSourceHealth>.from(
           state.sourceHealth,
         )..[UnifiedSourceKind.asmrOne] = UnifiedSourceHealth.broken;
@@ -629,24 +591,11 @@ class WorksNotifier extends StateNotifier<WorksState> {
     _loadCurrentFeedIfNeeded();
   }
 
-  void setSafetyMode(AsmrSafetyMode mode) {
-    if (state.safetyMode == mode) return;
-    var source = state.sourceFilter;
-    if (mode == AsmrSafetyMode.sfw && source.adultOnly) {
-      source = HomeSourceFilter.all;
-    }
-    state = state.copyWith(safetyMode: mode, sourceFilter: source);
-    unawaited(_safetyPreference.save(mode));
-    if (source != state.sourceFilter) {
-      unawaited(_sourcePreference.save(source));
-    }
-    _loadCurrentFeedIfNeeded();
-  }
-
   void setSourceFilter(HomeSourceFilter source) {
     if (state.sourceFilter == source) return;
-    if (state.safetyMode == AsmrSafetyMode.sfw && source.adultOnly) return;
-    final displayMode = source.adultOnly ? DisplayMode.all : state.displayMode;
+    final displayMode = source.supportsCuratedModes
+        ? state.displayMode
+        : DisplayMode.all;
     state = state.copyWith(sourceFilter: source, displayMode: displayMode);
     unawaited(_sourcePreference.save(source));
     _loadCurrentFeedIfNeeded();
@@ -688,29 +637,6 @@ class WorksNotifier extends StateNotifier<WorksState> {
       );
     });
     state = state.copyWith(modeStates: updatedStates);
-  }
-
-  bool _matchesSafety(Work work, AsmrSafetyMode mode) {
-    final raw = work.age?.trim().toLowerCase();
-    if (raw == null || raw.isEmpty) return false;
-    final normalized = raw.replaceAll(RegExp(r'[\s_\-]+'), '');
-
-    final isAdult = normalized.startsWith('r18') ||
-        normalized.contains('18+') ||
-        normalized.contains('18禁') ||
-        normalized.contains('成人') ||
-        normalized.contains('adult') ||
-        normalized.contains('nsfw');
-    final isSafe = normalized.contains('全年龄') ||
-        normalized.contains('全年齢') ||
-        normalized.contains('全年齡') ||
-        normalized.contains('allages') ||
-        normalized.contains('allage') ||
-        normalized.contains('generalaudience') ||
-        normalized == 'general' ||
-        normalized.contains('一般向');
-
-    return mode == AsmrSafetyMode.nsfw ? isAdult : isSafe;
   }
 
   List<Work> _filterWorks(List<Work> works, BlockedItemsState blockedItems) {
