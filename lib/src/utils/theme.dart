@@ -2,14 +2,15 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../providers/theme_provider.dart';
 
+/// Hiraukan's application theme.
+///
+/// The default lavender pair is deliberately designed as one identity across
+/// light and dark mode: same hierarchy, radii and components, with only the
+/// luminance/surface treatment changing. This keeps light mode from feeling
+/// like a separate white application while preserving the calmer night look.
 class AppTheme {
-  // iOS 使用 Cupertino 转场以支持侧滑返回
   static const _pageTransitionsTheme = PageTransitionsTheme();
 
-  /// Apple 平台对应语言的原生 CJK 字体。
-  ///
-  /// 显式给出有限 fallback 可避免信息流滚动时反复搜索系统字体；把当前
-  /// 语言的字体放在首位，则不会再把中文界面优先渲染成日文字形。
   @visibleForTesting
   static List<String> iosFontFamilyFallback(Locale locale) {
     if (locale.languageCode == 'zh') {
@@ -21,54 +22,34 @@ class AppTheme {
           ? const ['PingFang TC', 'PingFang HK', 'Hiragino Sans']
           : const ['PingFang SC', 'PingFang TC', 'Hiragino Sans'];
     }
-
     return const ['Hiragino Sans', 'PingFang SC', 'PingFang TC'];
   }
 
   static List<String>? _platformFontFamilyFallback(Locale locale) =>
       Platform.isIOS ? iosFontFamilyFallback(locale) : null;
 
-  // 平台字体配置
   static TextTheme? _getTextTheme() {
     if (Platform.isWindows) {
-      // 使用 Microsoft YaHei 作为主字体，确保中文显示一致
       const fontFamily = 'Microsoft YaHei';
       return const TextTheme(
-        displayLarge:
-            TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w400),
-        displayMedium:
-            TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w400),
-        displaySmall:
-            TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w400),
-        headlineLarge:
-            TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w400),
-        headlineMedium:
-            TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w400),
-        headlineSmall:
-            TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w400),
-        titleLarge:
-            TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w500),
-        titleMedium:
-            TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w500),
-        titleSmall:
-            TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w500),
-        bodyLarge:
-            TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w400),
-        bodyMedium:
-            TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w400),
-        bodySmall:
-            TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w400),
-        labelLarge:
-            TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w500),
-        labelMedium:
-            TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w500),
-        labelSmall:
-            TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w500),
+        displayLarge: TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w400),
+        displayMedium: TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w400),
+        displaySmall: TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w400),
+        headlineLarge: TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w500),
+        headlineMedium: TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w500),
+        headlineSmall: TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w500),
+        titleLarge: TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w600),
+        titleMedium: TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w600),
+        titleSmall: TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w600),
+        bodyLarge: TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w400),
+        bodyMedium: TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w400),
+        bodySmall: TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w400),
+        labelLarge: TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w600),
+        labelMedium: TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w600),
+        labelSmall: TextStyle(fontFamily: fontFamily, fontWeight: FontWeight.w600),
       );
     }
     if (Platform.isLinux) {
-      // Linux 上 Flutter 默认使用 Roboto，不含 CJK 字符
-      // 通过 fontFamilyFallback 回退到系统 CJK 字体
       const fallback = [
         'Noto Sans CJK SC',
         'Noto Sans CJK TC',
@@ -78,148 +59,224 @@ class AppTheme {
         'Droid Sans Fallback',
       ];
       return const TextTheme(
-        displayLarge: TextStyle(
-            fontFamilyFallback: fallback, fontWeight: FontWeight.w400),
-        displayMedium: TextStyle(
-            fontFamilyFallback: fallback, fontWeight: FontWeight.w400),
-        displaySmall: TextStyle(
-            fontFamilyFallback: fallback, fontWeight: FontWeight.w400),
-        headlineLarge: TextStyle(
-            fontFamilyFallback: fallback, fontWeight: FontWeight.w400),
-        headlineMedium: TextStyle(
-            fontFamilyFallback: fallback, fontWeight: FontWeight.w400),
-        headlineSmall: TextStyle(
-            fontFamilyFallback: fallback, fontWeight: FontWeight.w400),
-        titleLarge: TextStyle(
-            fontFamilyFallback: fallback, fontWeight: FontWeight.w500),
-        titleMedium: TextStyle(
-            fontFamilyFallback: fallback, fontWeight: FontWeight.w500),
-        titleSmall: TextStyle(
-            fontFamilyFallback: fallback, fontWeight: FontWeight.w500),
-        bodyLarge: TextStyle(
-            fontFamilyFallback: fallback, fontWeight: FontWeight.w400),
-        bodyMedium: TextStyle(
-            fontFamilyFallback: fallback, fontWeight: FontWeight.w400),
-        bodySmall: TextStyle(
-            fontFamilyFallback: fallback, fontWeight: FontWeight.w400),
-        labelLarge: TextStyle(
-            fontFamilyFallback: fallback, fontWeight: FontWeight.w500),
-        labelMedium: TextStyle(
-            fontFamilyFallback: fallback, fontWeight: FontWeight.w500),
-        labelSmall: TextStyle(
-            fontFamilyFallback: fallback, fontWeight: FontWeight.w500),
+        displayLarge: TextStyle(fontFamilyFallback: fallback, fontWeight: FontWeight.w400),
+        displayMedium: TextStyle(fontFamilyFallback: fallback, fontWeight: FontWeight.w400),
+        displaySmall: TextStyle(fontFamilyFallback: fallback, fontWeight: FontWeight.w400),
+        headlineLarge: TextStyle(fontFamilyFallback: fallback, fontWeight: FontWeight.w500),
+        headlineMedium: TextStyle(fontFamilyFallback: fallback, fontWeight: FontWeight.w500),
+        headlineSmall: TextStyle(fontFamilyFallback: fallback, fontWeight: FontWeight.w500),
+        titleLarge: TextStyle(fontFamilyFallback: fallback, fontWeight: FontWeight.w600),
+        titleMedium: TextStyle(fontFamilyFallback: fallback, fontWeight: FontWeight.w600),
+        titleSmall: TextStyle(fontFamilyFallback: fallback, fontWeight: FontWeight.w600),
+        bodyLarge: TextStyle(fontFamilyFallback: fallback, fontWeight: FontWeight.w400),
+        bodyMedium: TextStyle(fontFamilyFallback: fallback, fontWeight: FontWeight.w400),
+        bodySmall: TextStyle(fontFamilyFallback: fallback, fontWeight: FontWeight.w400),
+        labelLarge: TextStyle(fontFamilyFallback: fallback, fontWeight: FontWeight.w600),
+        labelMedium: TextStyle(fontFamilyFallback: fallback, fontWeight: FontWeight.w600),
+        labelSmall: TextStyle(fontFamilyFallback: fallback, fontWeight: FontWeight.w600),
       );
     }
     return null;
   }
 
-  static ThemeData lightTheme(ColorScheme? lightDynamic,
-      [ColorSchemeType? themeType, Locale? locale]) {
-    final ColorScheme colorScheme;
-    if (lightDynamic != null) {
-      colorScheme = lightDynamic;
-    } else {
-      colorScheme =
-          _getColorScheme(themeType ?? ColorSchemeType.oceanBlue, false);
-    }
+  static ThemeData lightTheme(
+    ColorScheme? lightDynamic, [
+    ColorSchemeType? themeType,
+    Locale? locale,
+  ]) {
+    final scheme = lightDynamic ??
+        _getColorScheme(themeType ?? ColorSchemeType.lavenderPurple, false);
+    return _buildTheme(scheme, locale);
+  }
+
+  static ThemeData darkTheme(
+    ColorScheme? darkDynamic, [
+    ColorSchemeType? themeType,
+    Locale? locale,
+  ]) {
+    final scheme = darkDynamic ??
+        _getColorScheme(themeType ?? ColorSchemeType.lavenderPurple, true);
+    return _buildTheme(scheme, locale);
+  }
+
+  static ThemeData _buildTheme(ColorScheme colorScheme, Locale? locale) {
+    final isDark = colorScheme.brightness == Brightness.dark;
+    final borderColor = colorScheme.outlineVariant.withValues(
+      alpha: isDark ? 0.34 : 0.52,
+    );
+    final subtleShadow = colorScheme.shadow.withValues(
+      alpha: isDark ? 0.24 : 0.08,
+    );
 
     return ThemeData(
       useMaterial3: true,
+      brightness: colorScheme.brightness,
       colorScheme: colorScheme,
+      scaffoldBackgroundColor: colorScheme.surface,
+      canvasColor: colorScheme.surface,
       textTheme: _getTextTheme(),
       fontFamilyFallback: _platformFontFamilyFallback(
         locale ?? WidgetsBinding.instance.platformDispatcher.locale,
       ),
       pageTransitionsTheme: _pageTransitionsTheme,
       appBarTheme: AppBarTheme(
-        centerTitle: true,
+        centerTitle: false,
         elevation: 0,
-        scrolledUnderElevation: 1,
+        scrolledUnderElevation: 0,
         backgroundColor: colorScheme.surface,
         foregroundColor: colorScheme.onSurface,
+        surfaceTintColor: Colors.transparent,
+        titleTextStyle: TextStyle(
+          color: colorScheme.onSurface,
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.2,
+        ),
       ),
-      cardTheme: const CardThemeData(
-        elevation: 2,
+      cardTheme: CardThemeData(
+        elevation: 0,
+        color: colorScheme.surfaceContainerLow,
+        surfaceTintColor: Colors.transparent,
+        shadowColor: subtleShadow,
+        margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(16)),
+          side: BorderSide(color: borderColor, width: 0.7),
+          borderRadius: const BorderRadius.all(Radius.circular(20)),
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: colorScheme.surfaceContainer,
+        indicatorColor: colorScheme.primaryContainer,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return IconThemeData(
+            color: selected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+            size: selected ? 24 : 22,
+          );
+        }),
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return TextStyle(
+            fontSize: 11,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            color: selected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+          );
+        }),
+      ),
+      navigationRailTheme: NavigationRailThemeData(
         backgroundColor: colorScheme.surface,
         indicatorColor: colorScheme.primaryContainer,
-        labelTextStyle: WidgetStateProperty.all(
-          TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: colorScheme.onSurface,
-          ),
-        ),
+        selectedIconTheme: IconThemeData(color: colorScheme.primary),
+        unselectedIconTheme: IconThemeData(color: colorScheme.onSurfaceVariant),
       ),
-      bottomSheetTheme: const BottomSheetThemeData(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: colorScheme.surfaceContainerLow,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        modalElevation: 0,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
       ),
       listTileTheme: ListTileThemeData(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        iconColor: colorScheme.onSurfaceVariant,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: colorScheme.surfaceContainerHigh.withValues(alpha: isDark ? 0.72 : 0.78),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: borderColor, width: 0.7),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: colorScheme.primary, width: 1.4),
+        ),
+      ),
+      dividerTheme: DividerThemeData(
+        color: colorScheme.outlineVariant.withValues(alpha: isDark ? 0.32 : 0.48),
+        thickness: 0.7,
+        space: 1,
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        elevation: 0,
+        focusElevation: 0,
+        hoverElevation: 1,
+        highlightElevation: 0,
+        backgroundColor: colorScheme.primaryContainer,
+        foregroundColor: colorScheme.onPrimaryContainer,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: ButtonStyle(
+          elevation: const WidgetStatePropertyAll(0),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          ),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ButtonStyle(
+          elevation: const WidgetStatePropertyAll(0),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: ButtonStyle(
+          side: WidgetStatePropertyAll(BorderSide(color: borderColor)),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          ),
+        ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: ButtonStyle(
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
+        ),
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: colorScheme.primary,
+        linearTrackColor: colorScheme.surfaceContainerHighest,
+      ),
+      sliderTheme: SliderThemeData(
+        activeTrackColor: colorScheme.primary,
+        inactiveTrackColor: colorScheme.surfaceContainerHighest,
+        thumbColor: colorScheme.primary,
+        overlayColor: colorScheme.primary.withValues(alpha: 0.12),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: colorScheme.inverseSurface,
+        contentTextStyle: TextStyle(color: colorScheme.onInverseSurface),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
     );
   }
 
-  static ThemeData darkTheme(ColorScheme? darkDynamic,
-      [ColorSchemeType? themeType, Locale? locale]) {
-    final ColorScheme colorScheme;
-    if (darkDynamic != null) {
-      colorScheme = darkDynamic;
-    } else {
-      colorScheme =
-          _getColorScheme(themeType ?? ColorSchemeType.oceanBlue, true);
-    }
-
-    return ThemeData(
-      useMaterial3: true,
-      colorScheme: colorScheme,
-      textTheme: _getTextTheme(),
-      fontFamilyFallback: _platformFontFamilyFallback(
-        locale ?? WidgetsBinding.instance.platformDispatcher.locale,
-      ),
-      pageTransitionsTheme: _pageTransitionsTheme,
-      appBarTheme: AppBarTheme(
-        centerTitle: true,
-        elevation: 0,
-        scrolledUnderElevation: 1,
-        backgroundColor: colorScheme.surface,
-        foregroundColor: colorScheme.onSurface,
-      ),
-      cardTheme: const CardThemeData(
-        elevation: 2,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(16)),
-        ),
-      ),
-      navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: colorScheme.surface,
-        indicatorColor: colorScheme.primaryContainer,
-        labelTextStyle: WidgetStateProperty.all(
-          TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: colorScheme.onSurface,
-          ),
-        ),
-      ),
-      bottomSheetTheme: const BottomSheetThemeData(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-      ),
-      listTileTheme: ListTileThemeData(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-  }
-
-  // 根据主题类型获取对应的颜色方案
   static ColorScheme getColorScheme(ColorSchemeType type, bool isDark) {
     switch (type) {
       case ColorSchemeType.oceanBlue:
@@ -229,20 +286,65 @@ class AppTheme {
       case ColorSchemeType.sunsetOrange:
         return isDark ? _sunsetOrangeDark : _sunsetOrangeLight;
       case ColorSchemeType.lavenderPurple:
-        return isDark ? _lavenderPurpleDark : _lavenderPurpleLight;
+        return isDark ? _hiraukanDark : _hiraukanLight;
       case ColorSchemeType.sakuraPink:
         return isDark ? _sakuraPinkDark : _sakuraPinkLight;
       case ColorSchemeType.dynamic:
-        return isDark ? _oceanBlueDark : _oceanBlueLight; // 动态主题的后备方案
+        return isDark ? _hiraukanDark : _hiraukanLight;
     }
   }
 
-  // 根据主题类型获取对应的颜色方案
-  static ColorScheme _getColorScheme(ColorSchemeType type, bool isDark) {
-    return getColorScheme(type, isDark);
-  }
+  static ColorScheme _getColorScheme(ColorSchemeType type, bool isDark) =>
+      getColorScheme(type, isDark);
 
-  // ========== 海洋蓝主题 ==========
+  // Hiraukan signature pair. Light is warm/lavender-tinted rather than stark
+  // white; dark is a deep blue-black rather than neutral black.
+  static const _hiraukanLight = ColorScheme(
+    brightness: Brightness.light,
+    primary: Color(0xFF8F67BC),
+    onPrimary: Color(0xFFFFFFFF),
+    primaryContainer: Color(0xFFE9DDF4),
+    onPrimaryContainer: Color(0xFF2B183B),
+    secondary: Color(0xFF74627E),
+    onSecondary: Color(0xFFFFFFFF),
+    secondaryContainer: Color(0xFFE8DEE9),
+    onSecondaryContainer: Color(0xFF2A202F),
+    tertiary: Color(0xFF865F76),
+    onTertiary: Color(0xFFFFFFFF),
+    tertiaryContainer: Color(0xFFF3DAE7),
+    onTertiaryContainer: Color(0xFF351D2B),
+    error: Color(0xFFBA1A1A),
+    onError: Color(0xFFFFFFFF),
+    errorContainer: Color(0xFFFFDAD6),
+    onErrorContainer: Color(0xFF410002),
+    surface: Color(0xFFF5F1F3),
+    onSurface: Color(0xFF25202B),
+    onSurfaceVariant: Color(0xFF5E5663),
+  );
+
+  static const _hiraukanDark = ColorScheme(
+    brightness: Brightness.dark,
+    primary: Color(0xFFC9A7FF),
+    onPrimary: Color(0xFF35204D),
+    primaryContainer: Color(0xFF4B3863),
+    onPrimaryContainer: Color(0xFFF0E5FF),
+    secondary: Color(0xFFCDBED8),
+    onSecondary: Color(0xFF352E3D),
+    secondaryContainer: Color(0xFF463D4E),
+    onSecondaryContainer: Color(0xFFEBDD F2),
+    tertiary: Color(0xFFE5B7D1),
+    onTertiary: Color(0xFF45283A),
+    tertiaryContainer: Color(0xFF5D3D50),
+    onTertiaryContainer: Color(0xFFFFD9EC),
+    error: Color(0xFFFFB4AB),
+    onError: Color(0xFF690005),
+    errorContainer: Color(0xFF93000A),
+    onErrorContainer: Color(0xFFFFDAD6),
+    surface: Color(0xFF0C111B),
+    onSurface: Color(0xFFF4F0F7),
+    onSurfaceVariant: Color(0xFFC8BDC9),
+  );
+
   static const _oceanBlueLight = ColorScheme(
     brightness: Brightness.light,
     primary: Color(0xFF146683),
@@ -289,7 +391,6 @@ class AppTheme {
     onSurfaceVariant: Color(0xFFC0C8CD),
   );
 
-  // ========== 森林绿主题 ==========
   static const _forestGreenLight = ColorScheme(
     brightness: Brightness.light,
     primary: Color(0xFF3A6F41),
@@ -336,7 +437,6 @@ class AppTheme {
     onSurfaceVariant: Color(0xFFC1C9BF),
   );
 
-  // ========== 日落橙主题 ==========
   static const _sunsetOrangeLight = ColorScheme(
     brightness: Brightness.light,
     primary: Color(0xFF904D00),
@@ -383,54 +483,6 @@ class AppTheme {
     onSurfaceVariant: Color(0xFFD3C4B8),
   );
 
-  // ========== 薰衣草紫主题 ==========
-  static const _lavenderPurpleLight = ColorScheme(
-    brightness: Brightness.light,
-    primary: Color(0xFF6750A4),
-    onPrimary: Color(0xFFFFFFFF),
-    primaryContainer: Color(0xFFE9DDFF),
-    onPrimaryContainer: Color(0xFF22005D),
-    secondary: Color(0xFF625B71),
-    onSecondary: Color(0xFFFFFFFF),
-    secondaryContainer: Color(0xFFE8DEF8),
-    onSecondaryContainer: Color(0xFF1E192B),
-    tertiary: Color(0xFF7E5260),
-    onTertiary: Color(0xFFFFFFFF),
-    tertiaryContainer: Color(0xFFFFD9E3),
-    onTertiaryContainer: Color(0xFF31101D),
-    error: Color(0xFFBA1A1A),
-    onError: Color(0xFFFFFFFF),
-    errorContainer: Color(0xFFFFDAD6),
-    onErrorContainer: Color(0xFF410002),
-    surface: Color(0xFFFFFBFF),
-    onSurface: Color(0xFF1C1B1E),
-    onSurfaceVariant: Color(0xFF49454E),
-  );
-
-  static const _lavenderPurpleDark = ColorScheme(
-    brightness: Brightness.dark,
-    primary: Color(0xFFCFBCFF),
-    onPrimary: Color(0xFF381E72),
-    primaryContainer: Color(0xFF4F378A),
-    onPrimaryContainer: Color(0xFFE9DDFF),
-    secondary: Color(0xFFCCC2DC),
-    onSecondary: Color(0xFF332D41),
-    secondaryContainer: Color(0xFF4A4458),
-    onSecondaryContainer: Color(0xFFE8DEF8),
-    tertiary: Color(0xFFEFB8C8),
-    onTertiary: Color(0xFF4A2532),
-    tertiaryContainer: Color(0xFF633B48),
-    onTertiaryContainer: Color(0xFFFFD9E3),
-    error: Color(0xFFFFB4AB),
-    onError: Color(0xFF690005),
-    errorContainer: Color(0xFF93000A),
-    onErrorContainer: Color(0xFFFFB4AB),
-    surface: Color(0xFF141218),
-    onSurface: Color(0xFFE6E1E6),
-    onSurfaceVariant: Color(0xFFCAC4CF),
-  );
-
-  // ========== 樱花粉主题 ==========
   static const _sakuraPinkLight = ColorScheme(
     brightness: Brightness.light,
     primary: Color(0xFFB4276E),
