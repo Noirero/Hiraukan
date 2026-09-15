@@ -71,9 +71,11 @@ class ThemeSettingsNotifier extends StateNotifier<ThemeSettings> {
         ColorSchemeType.lavenderPurple.index;
     if (!mounted || _changedLocally) return;
 
-    final safeThemeModeIndex = themeModeIndex.clamp(0, AppThemeMode.values.length - 1);
-    final safeColorSchemeIndex =
-        colorSchemeTypeIndex.clamp(0, ColorSchemeType.values.length - 1);
+    final safeThemeModeIndex =
+        themeModeIndex.clamp(0, AppThemeMode.values.length - 1).toInt();
+    final safeColorSchemeIndex = colorSchemeTypeIndex
+        .clamp(0, ColorSchemeType.values.length - 1)
+        .toInt();
 
     state = ThemeSettings(
       themeMode: AppThemeMode.values[safeThemeModeIndex],
