@@ -40,21 +40,29 @@ Fallback currently happens while resolving/loading a work. Mid-track network fai
 
 ## State and identity
 
-`UnifiedSourceRegistry` associates the displayed `Work.id` with all provider references for that logical work. External-only results use deterministic negative IDs to avoid colliding with Kikoeru integer IDs. When ASMR.one is present it remains the preferred primary representation so existing KikoFlu behavior is preserved as much as possible.
+Unified identity is provider-order independent. Exact RJ identity maps to the numeric RJ id used by legacy Kikoeru/ASMR.one state, so History/Favorites/playlists that already key by `Work.id` keep the same identity in the normal RJ case. BJ/VJ and metadata-only logical works use deterministic namespaced negative ids to avoid collisions and source-order changes.
+
+`UnifiedSourceRegistry` is keyed by both stable `Work.id` and canonical key. Old development ids are retained as in-memory aliases when encountered. Normal All/Popular/Recommended grids opt out of unified rendering, so a prior federated search cannot accidentally turn a normal Kikoeru card into a unified card merely because an integer id is present in the registry.
+
+Multi-source references are persisted only for works the user actually opens or plays. On restart the resolver hydrates those mirrors before detail/playback resolution, preserving fallback availability without permanently caching every search result.
 
 ## Health isolation
 
 Each source reports `HEALTHY`, `DEGRADED`, `BROKEN` or `UNKNOWN` at the adapter layer. Federated search catches source-specific failures independently; a broken EroVoice or HentaiASMR request does not discard successful ASMR.one results, and vice versa.
 
+ASMR.one health probes the configured API rather than generic device connectivity.
+
 ## Network notes
 
-The existing Android project already permits clear-text traffic, and the existing iOS configuration already allows arbitrary network loads. EroVoice therefore can attempt its HTTP endpoint when HTTPS is unavailable without adding broader permissions in this branch.
+The existing Android project already permits clear-text traffic, and the existing iOS configuration already allows arbitrary network loads. EroVoice therefore can attempt its HTTP endpoint when HTTPS is unavailable without adding broader permissions in this branch. Those broad settings predate Unified Sources and are intentionally not tightened here because KikoFlu also supports user-configured/local HTTP Kikoeru servers.
 
-## Known runtime-verification boundary
+## Runtime verification boundary
 
-ASMR.one uses the established API path already used by KikoFlu. HentaiASMR's current public catalog exposes RJ-linked work pages, but the exact work-page audio markup can change, so its isolated parser needs device smoke testing. EroVoice has recently been intermittently unreachable from external probes, so its adapter is designed to fail closed while the other providers continue working.
+ASMR.one uses the established API path already used by KikoFlu. HentaiASMR's current public catalog exposes RJ-linked work pages, matching the adapter's catalog parser. Work-page media markup remains isolated behind its adapter because it can change independently of KikoFlu.
 
-## Safety rule for promotion
+EroVoice is treated as optional and fail-closed. When its HTTPS/HTTP endpoint or Blogger feed cannot be reached, its search/health state becomes unavailable while ASMR.one and HentaiASMR continue independently.
+
+## Promotion gate
 
 Do not merge this branch to `main` merely because source parsing compiles. Before promotion, require:
 
@@ -65,3 +73,5 @@ Do not merge this branch to `main` merely because source parsing compiles. Befor
 - duplicate RJ test across at least two providers;
 - playback test from each currently reachable provider;
 - confirmation that existing ASMR.one-only search/player behavior still works.
+
+The original full multi-platform `Build test` workflow must remain present. The focused Unified Sources workflow is additive and must not replace release/build validation.

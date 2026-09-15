@@ -18,29 +18,32 @@ class UnifiedSourceRegistry {
   bool contains(int workId) => _byWorkId.containsKey(workId);
 
   void register(UnifiedWorkBundle bundle) {
-    final existing =
-        _byCanonicalKey[bundle.canonicalKey] ?? _byWorkId[bundle.work.id];
+    final normalized = _normalizeCanonicalWork(bundle);
+    final existing = _byCanonicalKey[normalized.canonicalKey] ??
+        _byWorkId[normalized.work.id] ??
+        _byWorkId[bundle.work.id];
     if (existing == null) {
-      _store(bundle);
+      _store(normalized, aliases: [bundle.work.id]);
       return;
     }
 
     final refs = <UnifiedSourceKind, UnifiedSourceRef>{
       for (final ref in existing.sources) ref.source: ref,
-      for (final ref in bundle.sources) ref.source: ref,
+      for (final ref in normalized.sources) ref.source: ref,
     };
     final merged = UnifiedWorkBundle(
-      work: bundle.work,
-      canonicalKey: bundle.canonicalKey,
+      work: normalized.work,
+      canonicalKey: normalized.canonicalKey,
       sources: refs.values.toList(growable: false)
         ..sort((a, b) => a.source.priority.compareTo(b.source.priority)),
     );
 
-    // Keep old ids as aliases so history written by an earlier development
-    // build can still recover the richer canonical bundle.
+    // Keep previous/development ids as aliases while canonical RJ identity is
+    // used by new unified results and persistent state.
     _byWorkId[existing.work.id] = merged;
     _byWorkId[bundle.work.id] = merged;
-    _byCanonicalKey[bundle.canonicalKey] = merged;
+    _byWorkId[merged.work.id] = merged;
+    _byCanonicalKey[merged.canonicalKey] = merged;
   }
 
   void registerAll(Iterable<UnifiedWorkBundle> bundles) {
@@ -92,7 +95,8 @@ class UnifiedSourceRegistry {
       sources: [ref],
     );
     register(bundle);
-    return bundle;
+    return _byWorkId[work.id] ??
+        (canonicalKey == null ? null : _byCanonicalKey[canonicalKey]);
   }
 
   UnifiedSourceKind? _inferSource(Work work) {
@@ -123,8 +127,24 @@ class UnifiedSourceRegistry {
     };
   }
 
-  void _store(UnifiedWorkBundle bundle) {
+  UnifiedWorkBundle _normalizeCanonicalWork(UnifiedWorkBundle bundle) {
+    if (!bundle.canonicalKey.startsWith('id:')) return bundle;
+    final stableId = SourceHtmlParser.stableUnifiedWorkId(
+      bundle.canonicalKey.substring(3),
+    );
+    if (bundle.work.id == stableId) return bundle;
+    return UnifiedWorkBundle(
+      work: bundle.work.copyWith(id: stableId),
+      canonicalKey: bundle.canonicalKey,
+      sources: bundle.sources,
+    );
+  }
+
+  void _store(UnifiedWorkBundle bundle, {Iterable<int> aliases = const []}) {
     _byWorkId[bundle.work.id] = bundle;
+    for (final alias in aliases) {
+      _byWorkId[alias] = bundle;
+    }
     _byCanonicalKey[bundle.canonicalKey] = bundle;
   }
 
