@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -6,6 +7,7 @@ import 'package:whisper_ggml_plus/whisper_ggml_plus.dart';
 
 import '../services/ai_transcription_service.dart';
 import '../services/audio_conversion_service.dart';
+import '../services/floating_lyric_enhancement_service.dart';
 import '../services/hi_res_audio_service.dart';
 import '../services/kikoflu_feature_coordinator.dart';
 import '../services/kikoflu_feature_settings.dart';
@@ -21,7 +23,10 @@ class KikoFluFeaturesSettingsScreen extends StatefulWidget {
 
 class _KikoFluFeaturesSettingsScreenState
     extends State<KikoFluFeaturesSettingsScreen> {
+  static const _transcriptionNotificationId = 0x48495241;
+
   final _settings = KikoFluFeatureSettings.instance;
+  final _floatingLyric = FloatingLyricEnhancementService.instance;
   bool _busy = false;
   double? _modelProgress;
   String? _status;
@@ -30,6 +35,14 @@ class _KikoFluFeaturesSettingsScreenState
 
   WhisperModel get _selectedModel => AiTranscriptionService.instance
       .modelFromName(_settings.whisperModel);
+
+  String _transparencyModeLabel(int mode) {
+    return switch (mode) {
+      1 => 'Transparent',
+      2 => 'Padded glass',
+      _ => 'Normal',
+    };
+  }
 
   Future<void> _downloadModel() async {
     setState(() {
@@ -73,23 +86,49 @@ class _KikoFluFeaturesSettingsScreenState
       _busy = true;
       _status = 'Scanning audio files…';
     });
-    final result = await AiTranscriptionService.instance.transcribeDirectory(
-      Directory(path),
-      model: _selectedModel,
-      threads: _settings.whisperThreads,
-      skipExisting: true,
-      onProgress: (done, total, file) {
-        if (!mounted) return;
-        setState(() => _status =
-            'Transcribing $done/$total — ${File(file).uri.pathSegments.last}');
-      },
-    );
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      _status =
-          'Batch complete: ${result.completed} created, ${result.skipped} skipped, ${result.failed} failed.';
-    });
+
+    try {
+      final result = await AiTranscriptionService.instance.transcribeDirectory(
+        Directory(path),
+        model: _selectedModel,
+        threads: _settings.whisperThreads,
+        skipExisting: true,
+        onProgress: (done, total, file) {
+          final fileName = File(file).uri.pathSegments.last;
+          if (total > 0) {
+            unawaited(KikoFluNotificationService.instance.showProgress(
+              id: _transcriptionNotificationId,
+              title: 'AI transcription',
+              body: '$done/$total — $fileName',
+              progress: done,
+              maxProgress: total,
+            ));
+          }
+          if (!mounted) return;
+          setState(() => _status =
+              'Transcribing $done/$total — $fileName');
+        },
+      );
+
+      final summary =
+          '${result.completed} created, ${result.skipped} skipped, ${result.failed} failed.';
+      await KikoFluNotificationService.instance.showMessage(
+        id: _transcriptionNotificationId,
+        title: 'AI transcription complete',
+        body: summary,
+      );
+      if (!mounted) return;
+      setState(() => _status = 'Batch complete: $summary');
+    } catch (error) {
+      await KikoFluNotificationService.instance.showMessage(
+        id: _transcriptionNotificationId,
+        title: 'AI transcription failed',
+        body: '$error',
+      );
+      if (mounted) setState(() => _status = 'Batch failed: $error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _testFcm() async {
@@ -137,6 +176,87 @@ class _KikoFluFeaturesSettingsScreenState
                 'KikoFlu-derived features are opt-in. Existing Hiraukan sources, downloads and playback remain the default path.',
                 style: theme.textTheme.bodyMedium,
               ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Column(
+              children: [
+                const ListTile(
+                  leading: Icon(Icons.lyrics_outlined),
+                  title: Text('Floating lyric enhancements'),
+                  subtitle: Text(
+                    'Adds KikoFlu-style controls without replacing Hiraukan floating lyrics.',
+                  ),
+                ),
+                const Divider(height: 1),
+                SwitchListTile(
+                  secondary: const Icon(Icons.close_rounded),
+                  title: const Text('Show close button'),
+                  value: _floatingLyric.showCloseButton,
+                  onChanged: (value) async {
+                    await _floatingLyric.setShowCloseButton(value);
+                    _refresh();
+                  },
+                ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.blur_on_rounded),
+                  title: const Text('Text shadow'),
+                  value: _floatingLyric.shadowEnabled,
+                  onChanged: (value) async {
+                    await _floatingLyric.setShadowEnabled(value);
+                    _refresh();
+                  },
+                ),
+                if (_floatingLyric.shadowEnabled) ...[
+                  ListTile(
+                    title: const Text('Shadow blur'),
+                    subtitle: Slider(
+                      value: _floatingLyric.shadowBlur.clamp(0.0, 24.0),
+                      min: 0,
+                      max: 24,
+                      divisions: 24,
+                      label: _floatingLyric.shadowBlur.toStringAsFixed(0),
+                      onChanged: (value) async {
+                        await _floatingLyric.setShadowBlur(value);
+                        _refresh();
+                      },
+                    ),
+                  ),
+                ],
+                ListTile(
+                  title: const Text('Background style'),
+                  trailing: DropdownButton<int>(
+                    value: _floatingLyric.transparencyMode.clamp(0, 2),
+                    items: List.generate(
+                      3,
+                      (mode) => DropdownMenuItem(
+                        value: mode,
+                        child: Text(_transparencyModeLabel(mode)),
+                      ),
+                    ),
+                    onChanged: (value) async {
+                      if (value == null) return;
+                      await _floatingLyric.setTransparencyMode(value);
+                      _refresh();
+                    },
+                  ),
+                ),
+                ListTile(
+                  title: const Text('Font weight'),
+                  subtitle: Slider(
+                    value: _floatingLyric.fontWeight.clamp(0, 8).toDouble(),
+                    min: 0,
+                    max: 8,
+                    divisions: 8,
+                    label: '${(_floatingLyric.fontWeight + 1) * 100}',
+                    onChanged: (value) async {
+                      await _floatingLyric.setFontWeight(value.round());
+                      _refresh();
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 12),
