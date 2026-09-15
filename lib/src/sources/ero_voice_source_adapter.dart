@@ -14,6 +14,7 @@ class EroVoiceSourceAdapter implements UnifiedSourceAdapter {
   ];
 
   final Dio _dio;
+  final Map<String, String> _entryContentByUrl = <String, String>{};
   String? _healthyBase;
 
   EroVoiceSourceAdapter({Dio? dio}) : _dio = dio ?? Dio() {
@@ -102,11 +103,26 @@ class EroVoiceSourceAdapter implements UnifiedSourceAdapter {
           : null;
       if (detailUrl == null || detailUrl.isEmpty) continue;
 
+      if (content.isNotEmpty) {
+        _entryContentByUrl[detailUrl] = content;
+      }
+
       final localId = canonical ?? detailUrl;
-      final cover = SourceHtmlParser.extractFirstImage(
-        content,
-        base: Uri.tryParse(usedBase ?? _baseCandidates.first),
-      );
+      final mediaThumbnail = raw[r'media$thumbnail'];
+      final thumbnail = mediaThumbnail is Map
+          ? mediaThumbnail['url']?.toString()
+          : null;
+      final cover = SourceHtmlParser.resolveUrl(
+            thumbnail,
+            base: Uri.tryParse(usedBase ?? _baseCandidates.first),
+          ) ??
+          SourceHtmlParser.extractFirstImage(
+            content,
+            base: Uri.tryParse(usedBase ?? _baseCandidates.first),
+          );
+      final circle = _extractMetadata(content, 'Circle');
+      final release = _extractMetadata(content, 'Release');
+      final voiceActor = _extractMetadata(content, 'Voice Actor');
       final effectiveTitle = title.isEmpty ? canonical ?? 'EroVoice' : title;
       final ref = UnifiedSourceRef(
         source: kind,
@@ -115,10 +131,21 @@ class EroVoiceSourceAdapter implements UnifiedSourceAdapter {
         detailUrl: detailUrl,
         coverUrl: cover,
         title: effectiveTitle,
+        circle: circle,
       );
       final work = Work(
         id: SourceHtmlParser.stableNegativeId('erovoice:$localId'),
         title: effectiveTitle,
+        name: circle,
+        release: release,
+        vas: voiceActor == null
+            ? null
+            : [
+                Va(
+                  id: 'erovoice:${SourceHtmlParser.stableNegativeId(voiceActor)}',
+                  name: voiceActor,
+                ),
+              ],
         images: cover == null ? null : [cover],
         sourceUrl: detailUrl,
         sourceId: canonical,
@@ -129,24 +156,27 @@ class EroVoiceSourceAdapter implements UnifiedSourceAdapter {
     return SourceSearchPage(
       items: items,
       totalCount: totalCount,
-      hasMore: startIndex - 1 + items.length < totalCount,
+      hasMore: startIndex - 1 + entries.length < totalCount,
     );
   }
 
   @override
   Future<Work> loadDetail(UnifiedSourceRef ref) async {
-    final html = await _getHtml(ref.detailUrl);
+    final content = await _loadPageOrCachedContent(ref);
     final title =
-        SourceHtmlParser.extractTitle(html) ?? ref.title ?? ref.localId;
+        SourceHtmlParser.extractTitle(content) ?? ref.title ?? ref.localId;
     final canonical = ref.canonicalId ??
-        SourceHtmlParser.extractCanonicalId('$title $html');
+        SourceHtmlParser.extractCanonicalId('$title $content');
     final cover = SourceHtmlParser.extractFirstImage(
-          html,
+          content,
           base: Uri.tryParse(ref.detailUrl),
         ) ??
         ref.coverUrl;
+    final circle = _extractMetadata(content, 'Circle') ?? ref.circle;
+    final release = _extractMetadata(content, 'Release');
+    final voiceActor = _extractMetadata(content, 'Voice Actor');
     final audioUrls = SourceHtmlParser.extractAudioUrls(
-      html,
+      content,
       base: Uri.tryParse(ref.detailUrl),
     );
 
@@ -155,10 +185,20 @@ class EroVoiceSourceAdapter implements UnifiedSourceAdapter {
         'erovoice:${canonical ?? ref.localId}',
       ),
       title: title,
+      name: circle,
+      release: release,
+      vas: voiceActor == null
+          ? null
+          : [
+              Va(
+                id: 'erovoice:${SourceHtmlParser.stableNegativeId(voiceActor)}',
+                name: voiceActor,
+              ),
+            ],
       images: cover == null ? null : [cover],
       sourceUrl: ref.detailUrl,
       sourceId: canonical,
-      description: SourceHtmlParser.extractMetaContent(html, 'description'),
+      description: SourceHtmlParser.extractMetaContent(content, 'description'),
       children: audioUrls
           .asMap()
           .entries
@@ -178,9 +218,9 @@ class EroVoiceSourceAdapter implements UnifiedSourceAdapter {
 
   @override
   Future<List<dynamic>> loadTracks(UnifiedSourceRef ref) async {
-    final html = await _getHtml(ref.detailUrl);
+    final content = await _loadPageOrCachedContent(ref);
     final urls = SourceHtmlParser.extractAudioUrls(
-      html,
+      content,
       base: Uri.tryParse(ref.detailUrl),
     );
     return urls.asMap().entries.map((entry) {
@@ -198,7 +238,7 @@ class EroVoiceSourceAdapter implements UnifiedSourceAdapter {
     for (final base in _orderedBases) {
       try {
         final response = await _dio.get<String>(
-          '$base/',
+          '$base/feeds/posts/default?alt=json&max-results=1',
           options: Options(
             responseType: ResponseType.plain,
             validateStatus: (status) => status != null && status < 500,
@@ -206,8 +246,12 @@ class EroVoiceSourceAdapter implements UnifiedSourceAdapter {
         );
         final status = response.statusCode ?? 0;
         if (status >= 200 && status < 400) {
-          _healthyBase = base;
-          return UnifiedSourceHealth.healthy;
+          final decoded = jsonDecode(response.data ?? '{}');
+          if (decoded is Map && decoded['feed'] is Map) {
+            _healthyBase = base;
+            return UnifiedSourceHealth.healthy;
+          }
+          return UnifiedSourceHealth.degraded;
         }
         if (status > 0) return UnifiedSourceHealth.degraded;
       } catch (_) {
@@ -223,6 +267,28 @@ class EroVoiceSourceAdapter implements UnifiedSourceAdapter {
     for (final base in _baseCandidates) {
       if (base != healthy) yield base;
     }
+  }
+
+  Future<String> _loadPageOrCachedContent(UnifiedSourceRef ref) async {
+    try {
+      return await _getHtml(ref.detailUrl);
+    } catch (_) {
+      final cached = _entryContentByUrl[ref.detailUrl];
+      if (cached != null && cached.isNotEmpty) return cached;
+      rethrow;
+    }
+  }
+
+  String? _extractMetadata(String html, String label) {
+    final match = RegExp(
+      '${RegExp.escape(label)}\\s*:\\s*([^<&]+)',
+      caseSensitive: false,
+    ).firstMatch(html);
+    if (match == null) return null;
+    final value = SourceHtmlParser.decodeEntities(match.group(1)!)
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return value.isEmpty ? null : value;
   }
 
   Future<String> _getHtml(String url) async {
