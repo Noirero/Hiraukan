@@ -6,7 +6,7 @@ import '../../models/audio_track.dart';
 import '../../utils/local_file_url.dart';
 import '../privacy_blur_cover.dart';
 
-/// 播放器封面组件
+/// Immersive artwork surface used by the Hiraukan player.
 class PlayerCoverWidget extends StatelessWidget {
   final AudioTrack track;
   final String? workCoverUrl;
@@ -21,18 +21,20 @@ class PlayerCoverWidget extends StatelessWidget {
     this.onTap,
   });
 
-  // 判断是否为本地文件路径
-  bool _isLocalFile(String? url) {
-    return LocalFileUrl.isLocalFileUrl(url);
-  }
+  bool _isLocalFile(String? url) => LocalFileUrl.isLocalFileUrl(url);
 
-  // 从 file:// URL 获取本地文件路径
   String _getLocalPath(String fileUrl) {
     return LocalFileUrl.pathFromUrl(fileUrl) ?? fileUrl;
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    const radius = 24.0;
+    final artworkUrl = workCoverUrl ?? track.artworkUrl;
+
     return GestureDetector(
       onTap: onTap,
       child: Center(
@@ -47,74 +49,75 @@ class PlayerCoverWidget extends StatelessWidget {
                   ? MediaQuery.of(context).size.height * 0.6
                   : MediaQuery.of(context).size.height * 0.4,
             ),
-            child: Container(
+            child: DecoratedBox(
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(radius),
+                color: scheme.surfaceContainerHighest,
+                border: Border.all(
+                  color: scheme.primary.withValues(alpha: isDark ? 0.18 : 0.12),
+                  width: 0.8,
+                ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
+                    color: scheme.shadow.withValues(alpha: isDark ? 0.40 : 0.15),
+                    blurRadius: 34,
+                    spreadRadius: -6,
+                    offset: const Offset(0, 18),
+                  ),
+                  BoxShadow(
+                    color: scheme.primary.withValues(alpha: isDark ? 0.16 : 0.09),
+                    blurRadius: 44,
+                    spreadRadius: -12,
                   ),
                 ],
               ),
-              child: (workCoverUrl ?? track.artworkUrl) != null
-                  ? PrivacyBlurCover(
-                      borderRadius: BorderRadius.circular(16),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: _isLocalFile(workCoverUrl ?? track.artworkUrl)
-                            ? Image.file(
-                                File(_getLocalPath(
-                                    (workCoverUrl ?? track.artworkUrl)!)),
-                                fit: BoxFit.contain,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Padding(
-                                    padding: const EdgeInsets.all(40),
-                                    child: Icon(
-                                      Icons.album,
-                                      size: isLandscape ? 80 : 120,
-                                    ),
-                                  );
-                                },
-                              )
-                            : CachedNetworkImage(
-                                imageUrl: (workCoverUrl ?? track.artworkUrl)!,
-                                // 使用workId作为cacheKey，与作品详情页保持一致，避免token变化导致重新下载
-                                cacheKey: track.workId != null
-                                    ? 'work_cover_${track.workId}'
-                                    : null,
-                                fit: BoxFit.contain,
-                                errorWidget: (context, url, error) {
-                                  return Padding(
-                                    padding: const EdgeInsets.all(40),
-                                    child: Icon(
-                                      Icons.album,
-                                      size: isLandscape ? 80 : 120,
-                                    ),
-                                  );
-                                },
-                                placeholder: (context, url) {
-                                  return Padding(
-                                    padding: const EdgeInsets.all(40),
-                                    child: Icon(
-                                      Icons.album,
-                                      size: isLandscape ? 80 : 120,
-                                    ),
-                                  );
-                                },
-                              ),
-                      ),
-                    )
-                  : Padding(
-                      padding: const EdgeInsets.all(40),
-                      child: Icon(
-                        Icons.album,
-                        size: isLandscape ? 80 : 120,
-                      ),
-                    ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(radius),
+                child: artworkUrl != null
+                    ? PrivacyBlurCover(
+                        borderRadius: BorderRadius.circular(radius),
+                        child: _buildArtwork(context, artworkUrl),
+                      )
+                    : _buildPlaceholder(context),
+              ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildArtwork(BuildContext context, String artworkUrl) {
+    if (_isLocalFile(artworkUrl)) {
+      return Image.file(
+        File(_getLocalPath(artworkUrl)),
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) => _buildPlaceholder(context),
+      );
+    }
+
+    return CachedNetworkImage(
+      imageUrl: artworkUrl,
+      // Keep the existing work-based cache key so auth token changes do not
+      // invalidate artwork that is already present locally.
+      cacheKey: track.workId != null ? 'work_cover_${track.workId}' : null,
+      fit: BoxFit.contain,
+      errorWidget: (context, url, error) => _buildPlaceholder(context),
+      placeholder: (context, url) => _buildPlaceholder(context),
+    );
+  }
+
+  Widget _buildPlaceholder(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ColoredBox(
+      color: scheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Center(
+          child: Icon(
+            Icons.graphic_eq_rounded,
+            size: isLandscape ? 80 : 112,
+            color: scheme.primary.withValues(alpha: 0.72),
           ),
         ),
       ),
