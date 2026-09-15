@@ -115,6 +115,39 @@ void main() {
     expect(registry.bundleFor(101)!.sources, hasLength(2));
   });
 
+  test('canonical ids with different zero padding still merge', () async {
+    final registry = UnifiedSourceRegistry.instance..clear();
+    final asmr = _candidate(
+      source: UnifiedSourceKind.asmrOne,
+      id: 303,
+      localId: '303',
+      title: 'Padded Work',
+      canonical: 'RJ01655238',
+      circle: 'Circle B',
+    );
+    final mirror = _candidate(
+      source: UnifiedSourceKind.hentaiAsmr,
+      id: -304,
+      localId: 'RJ1655238',
+      title: 'Padded Work',
+      canonical: 'RJ1655238',
+      circle: 'Circle B',
+    );
+
+    final service = UnifiedSourceService(
+      adapters: [
+        _FakeAdapter(kind: UnifiedSourceKind.asmrOne, candidates: [asmr]),
+        _FakeAdapter(kind: UnifiedSourceKind.hentaiAsmr, candidates: [mirror]),
+      ],
+      registry: registry,
+    );
+
+    final result = await service.search(keyword: 'padded', page: 1, pageSize: 20);
+    expect(result.works, hasLength(1));
+    expect(result.works.single.sourceId, 'RJ01655238');
+    expect(registry.bundleFor(303)!.sources, hasLength(2));
+  });
+
   test('unknown works without creator are not fuzzily merged by title', () async {
     final registry = UnifiedSourceRegistry.instance..clear();
     final first = _candidate(
