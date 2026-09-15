@@ -35,7 +35,7 @@ class HentaiAsmrSourceAdapter implements UnifiedSourceAdapter {
     final base = Uri.parse(baseUrl);
 
     final linkPattern = RegExp(
-      r'<a\b[^>]*href=["\']([^"\']*/(rj\d+)\.html(?:\?[^"\']*)?)["\'][^>]*>(.*?)</a>',
+      r'''<a\b[^>]*href=["']([^"']*/(rj\d+)\.html(?:\?[^"']*)?)["'][^>]*>(.*?)</a>''',
       caseSensitive: false,
       dotAll: true,
     );
@@ -61,7 +61,12 @@ class HentaiAsmrSourceAdapter implements UnifiedSourceAdapter {
         );
       }
       title = title
-          .replaceFirst(RegExp(r'^\s*\d+\s+(?:(?:\d{1,2}:)?\d{1,2}:\d{2})\s+\d+\s+'), '')
+          .replaceFirst(
+            RegExp(
+              r'^\s*\d+\s+(?:(?:\d{1,2}:)?\d{1,2}:\d{2})\s+\d+\s+',
+            ),
+            '',
+          )
           .trim();
       if (title.isEmpty) title = canonical ?? localId;
 
@@ -92,8 +97,8 @@ class HentaiAsmrSourceAdapter implements UnifiedSourceAdapter {
       caseSensitive: false,
     ).hasMatch(html);
     final hasMore = nextPageHint || items.length >= pageSize;
-    final estimatedTotal = (page - 1) * pageSize + items.length +
-        (hasMore ? pageSize : 0);
+    final estimatedTotal =
+        (page - 1) * pageSize + items.length + (hasMore ? pageSize : 0);
 
     return SourceSearchPage(
       items: items,
@@ -107,12 +112,16 @@ class HentaiAsmrSourceAdapter implements UnifiedSourceAdapter {
     final html = await _getHtml(ref.detailUrl);
     final base = Uri.parse(ref.detailUrl);
     final title = SourceHtmlParser.extractTitle(html) ?? ref.title ?? ref.localId;
-    final canonical = ref.canonicalId ?? SourceHtmlParser.extractCanonicalId('$title $html');
-    final cover = SourceHtmlParser.extractFirstImage(html, base: base) ?? ref.coverUrl;
+    final canonical =
+        ref.canonicalId ?? SourceHtmlParser.extractCanonicalId('$title $html');
+    final cover =
+        SourceHtmlParser.extractFirstImage(html, base: base) ?? ref.coverUrl;
     final audioUrls = SourceHtmlParser.extractAudioUrls(html, base: base);
 
     return Work(
-      id: SourceHtmlParser.stableNegativeId('hentai:${canonical ?? ref.localId}'),
+      id: SourceHtmlParser.stableNegativeId(
+        'hentai:${canonical ?? ref.localId}',
+      ),
       title: title,
       duration: ref.durationSeconds,
       images: cover == null ? null : [cover],
@@ -173,8 +182,9 @@ class HentaiAsmrSourceAdapter implements UnifiedSourceAdapter {
       url,
       options: Options(
         responseType: ResponseType.plain,
-        headers: const {'Referer': '$baseUrl/'},
-        validateStatus: (status) => status != null && status >= 200 && status < 400,
+        headers: {'Referer': '$baseUrl/'},
+        validateStatus: (status) =>
+            status != null && status >= 200 && status < 400,
       ),
     );
     return response.data ?? '';
