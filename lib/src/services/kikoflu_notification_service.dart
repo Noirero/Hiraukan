@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
@@ -20,6 +21,7 @@ class KikoFluNotificationService {
       FlutterLocalNotificationsPlugin();
   bool _localReady = false;
   bool _firebaseReady = false;
+  StreamSubscription<RemoteMessage>? _foregroundSubscription;
 
   Future<void> initialize() async {
     if (!_localReady) {
@@ -27,7 +29,11 @@ class KikoFluNotificationService {
       const darwin = DarwinInitializationSettings();
       try {
         await _local.initialize(
-          const InitializationSettings(android: android, iOS: darwin, macOS: darwin),
+          const InitializationSettings(
+            android: android,
+            iOS: darwin,
+            macOS: darwin,
+          ),
         );
         _localReady = true;
       } catch (error) {
@@ -41,8 +47,10 @@ class KikoFluNotificationService {
   }
 
   Future<bool> initializeFirebaseIfConfigured() async {
-    if (_firebaseReady) return true;
-    if (!(Platform.isAndroid || Platform.isIOS || Platform.isMacOS)) return false;
+    if (_firebaseReady && _foregroundSubscription != null) return true;
+    if (!(Platform.isAndroid || Platform.isIOS || Platform.isMacOS)) {
+      return false;
+    }
 
     try {
       if (Firebase.apps.isEmpty) await Firebase.initializeApp();
@@ -52,7 +60,9 @@ class KikoFluNotificationService {
         sound: true,
       );
       _firebaseReady = true;
-      FirebaseMessaging.onMessage.listen((message) async {
+      _foregroundSubscription ??=
+          FirebaseMessaging.onMessage.listen((message) async {
+        if (!KikoFluFeatureSettings.instance.fcmEnabled) return;
         final notification = message.notification;
         if (notification == null) return;
         await showMessage(
@@ -72,7 +82,27 @@ class KikoFluNotificationService {
     }
   }
 
+  /// Applies the FCM toggle immediately. Turning it off removes the foreground
+  /// listener and best-effort deletes the token, so disabling the feature does
+  /// not keep delivering KikoFlu-derived push behavior in the current session.
+  Future<bool> setFcmEnabled(bool enabled) async {
+    if (enabled) return initializeFirebaseIfConfigured();
+
+    await _foregroundSubscription?.cancel();
+    _foregroundSubscription = null;
+    _firebaseReady = false;
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        await FirebaseMessaging.instance.deleteToken();
+      }
+    } catch (error) {
+      _log.warning('FCM token cleanup skipped: $error', tag: 'Notify');
+    }
+    return false;
+  }
+
   Future<String?> getFcmToken() async {
+    if (!KikoFluFeatureSettings.instance.fcmEnabled) return null;
     if (!await initializeFirebaseIfConfigured()) return null;
     try {
       return FirebaseMessaging.instance.getToken();
@@ -117,6 +147,7 @@ class KikoFluNotificationService {
     if (!KikoFluFeatureSettings.instance.notificationsEnabled) return;
     await initialize();
     if (!_localReady) return;
+    final safeMax = maxProgress <= 0 ? 100 : maxProgress;
     await _local.show(
       id,
       title,
@@ -128,8 +159,8 @@ class KikoFluNotificationService {
           channelDescription: 'Download, conversion and transcription progress',
           onlyAlertOnce: true,
           showProgress: true,
-          progress: progress.clamp(0, maxProgress),
-          maxProgress: maxProgress <= 0 ? 100 : maxProgress,
+          progress: progress.clamp(0, safeMax),
+          maxProgress: safeMax,
         ),
       ),
     );
