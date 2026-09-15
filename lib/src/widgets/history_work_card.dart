@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/history_record.dart';
 import '../models/download_task.dart';
+import '../models/audio_tap_playlist_mode.dart';
 import '../providers/auth_provider.dart';
 import '../providers/audio_provider.dart';
 import '../providers/history_provider.dart';
@@ -13,7 +14,11 @@ import '../services/log_service.dart';
 import '../services/audio_file_url_resolver.dart';
 import '../services/audio_track_queue_builder.dart';
 import '../screens/work_detail_screen.dart';
+import '../screens/unified_work_detail_screen.dart';
 import '../services/storage_service.dart';
+import '../sources/unified_source_preferences.dart';
+import '../sources/unified_source_provider.dart';
+import '../sources/unified_source_registry.dart';
 import '../utils/string_utils.dart';
 import '../utils/work_cover_prefetch.dart';
 import '../providers/lyric_provider.dart';
@@ -43,15 +48,26 @@ class HistoryWorkCard extends ConsumerWidget {
     final token = authState.token ?? '';
     final work = record.work;
     final showAgeRating = ref.watch(workCardDisplayProvider).showAgeRating;
+    final isUnifiedExternal = _isUnifiedExternalWork(work);
+    final unifiedBundle = isUnifiedExternal
+        ? (UnifiedSourceRegistry.instance.bundleFor(work.id) ??
+            UnifiedSourceRegistry.instance.ensureFromWork(work))
+        : null;
 
-    final httpHeaders = StorageService.serverCookieHeaders;
-    final initialCoverImageProvider = host.isEmpty
+    final httpHeaders = isUnifiedExternal
+        ? null
+        : StorageService.serverCookieHeaders;
+    final initialCoverImageProvider = isUnifiedExternal || host.isEmpty
         ? null
         : createWorkCoverImageProvider(
             work: work,
             host: host,
             token: token,
           );
+    final directCover = isUnifiedExternal
+        ? (unifiedBundle?.coverUrl ??
+            (work.images?.isNotEmpty == true ? work.images!.first : null))
+        : null;
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -64,10 +80,12 @@ class HistoryWorkCard extends ConsumerWidget {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => WorkDetailScreen(
-                work: work,
-                initialCoverImageProvider: initialCoverImageProvider,
-              ),
+              builder: (context) => isUnifiedExternal
+                  ? UnifiedWorkDetailScreen(work: work)
+                  : WorkDetailScreen(
+                      work: work,
+                      initialCoverImageProvider: initialCoverImageProvider,
+                    ),
             ),
           );
         },
@@ -87,7 +105,6 @@ class HistoryWorkCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Cover
             Expanded(
               child: Stack(
                 fit: StackFit.expand,
@@ -97,27 +114,17 @@ class HistoryWorkCard extends ConsumerWidget {
                     child: Material(
                       color: Colors.transparent,
                       child: PrivacyBlurCover(
-                        child: CachedNetworkImage(
-                          imageUrl: work.getCoverImageUrl(host, token: token),
+                        child: _HistoryCover(
+                          work: work,
+                          host: host,
+                          token: token,
+                          directCover: directCover,
                           httpHeaders: httpHeaders,
-                          cacheKey: 'work_cover_${work.id}',
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(
-                            color: Colors.grey[200],
-                            child: const Center(
-                                child: Icon(Icons.image, color: Colors.grey)),
-                          ),
-                          errorWidget: (context, url, error) => Container(
-                            color: Colors.grey[200],
-                            child: const Center(
-                                child: Icon(Icons.broken_image,
-                                    color: Colors.grey)),
-                          ),
+                          isUnifiedExternal: isUnifiedExternal,
                         ),
                       ),
                     ),
                   ),
-                  // Gradient
                   Positioned(
                     left: 0,
                     right: 0,
@@ -142,7 +149,6 @@ class HistoryWorkCard extends ConsumerWidget {
                       right: 8,
                       child: AgeRatingChip(age: work.age, compact: true),
                     ),
-                  // Play Button
                   if (record.lastTrack != null)
                     Positioned(
                       right: 8,
@@ -168,7 +174,6 @@ class HistoryWorkCard extends ConsumerWidget {
                 ],
               ),
             ),
-            // Info
             Container(
               padding: const EdgeInsets.all(12),
               child: Column(
@@ -264,14 +269,26 @@ class HistoryWorkCard extends ConsumerWidget {
     );
   }
 
+  bool _isUnifiedExternalWork(dynamic work) {
+    if (work.id < 0) return true;
+    final rawUrl = work.sourceUrl?.toString();
+    if (rawUrl == null || rawUrl.isEmpty) return false;
+    final host = Uri.tryParse(rawUrl)?.host.toLowerCase() ?? '';
+    return host.contains('hentaiasmr.moe') || host.contains('erovoice.us');
+  }
+
   Future<void> _resumePlayback(BuildContext context, WidgetRef ref) async {
-    final l10n = S.of(context);
     final work = record.work;
+    if (_isUnifiedExternalWork(work)) {
+      await _resumeUnifiedPlayback(context, ref);
+      return;
+    }
+
+    final l10n = S.of(context);
     final authState = ref.read(authProvider);
     final host = authState.host ?? '';
     final token = authState.token ?? '';
 
-    // 1. Get all files
     final apiService = ref.read(kikoeruApiServiceProvider);
     List<dynamic> allFiles = [];
     try {
@@ -283,7 +300,6 @@ class HistoryWorkCard extends ConsumerWidget {
     } catch (e) {
       _log.captureOutput('Failed to update file list: $e');
 
-      // 尝试从已下载的任务中构建文件列表
       try {
         final tasks = await DownloadService.instance.getWorkTasks(work.id);
         if (tasks.isNotEmpty) {
@@ -311,7 +327,6 @@ class HistoryWorkCard extends ConsumerWidget {
     }
 
     if (allFiles.isEmpty) {
-      // Fallback to single track if list fetch fails
       if (record.lastTrack != null) {
         try {
           await AudioPlayerService.instance.updateQueue([record.lastTrack!]);
@@ -332,9 +347,7 @@ class HistoryWorkCard extends ConsumerWidget {
       return;
     }
 
-    // 2. Find the directory containing the last track and get its audio files
     List<dynamic> getSiblingAudioFiles(List<dynamic> files) {
-      // Helper to check if a file matches the last track
       bool isTargetFile(dynamic file) {
         if (file['type'] == 'folder') return false;
         final fileHash = file['hash'];
@@ -344,11 +357,9 @@ class HistoryWorkCard extends ConsumerWidget {
             fileHash == record.lastTrack!.hash) {
           return true;
         }
-        // Fallback to title match if hash is missing
         return fileName == record.lastTrack!.title;
       }
 
-      // Helper to extract audio files from a list
       List<dynamic> extractAudioFiles(List<dynamic> list) {
         return list.where((file) {
           if (file['type'] == 'folder') return false;
@@ -358,24 +369,18 @@ class HistoryWorkCard extends ConsumerWidget {
         }).toList();
       }
 
-      // Recursive search
       for (final file in files) {
         if (file['type'] == 'folder') {
           if (file['children'] != null) {
-            // Check if target is in this folder's children (direct siblings)
             final children = file['children'] as List<dynamic>;
             if (children.any(isTargetFile)) {
               return extractAudioFiles(children);
             }
-            // If not found directly, recurse deeper
             final result = getSiblingAudioFiles(children);
             if (result.isNotEmpty) return result;
           }
-        } else {
-          // Check if target is in the root list
-          if (isTargetFile(file)) {
-            return extractAudioFiles(files);
-          }
+        } else if (isTargetFile(file)) {
+          return extractAudioFiles(files);
         }
       }
 
@@ -384,8 +389,6 @@ class HistoryWorkCard extends ConsumerWidget {
 
     List<dynamic> audioFiles = getSiblingAudioFiles(allFiles);
 
-    // If we couldn't find the specific directory (e.g. file moved/renamed),
-    // fallback to flattening all files to ensure playback works
     if (audioFiles.isEmpty) {
       List<dynamic> flattenAudioFiles(List<dynamic> files) {
         final List<dynamic> result = [];
@@ -410,7 +413,6 @@ class HistoryWorkCard extends ConsumerWidget {
 
     final downloadService = DownloadService.instance;
 
-    // Current work cover URL
     String? coverUrl;
     if (host.isNotEmpty) {
       String normalizedUrl = host;
@@ -459,7 +461,6 @@ class HistoryWorkCard extends ConsumerWidget {
       index = 0;
     }
 
-    // 5. Play
     if (tracks.isNotEmpty) {
       try {
         await AudioPlayerService.instance
@@ -478,5 +479,136 @@ class HistoryWorkCard extends ConsumerWidget {
         }
       }
     }
+  }
+
+  Future<void> _resumeUnifiedPlayback(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final work = record.work;
+    final authState = ref.read(authProvider);
+    final host = authState.host ?? '';
+    final token = authState.token ?? '';
+    final l10n = S.of(context);
+
+    try {
+      final registry = UnifiedSourceRegistry.instance;
+      registry.ensureFromWork(work);
+      final preferred = await UnifiedSourcePreferences.loadPreferredSource();
+      final service = ref.read(unifiedSourceServiceProvider);
+      final resolved = await service.resolveTracks(
+        work,
+        preferredSource: preferred,
+      );
+      final tracks = service.buildAudioTracks(
+        work: work,
+        resolved: resolved,
+        host: host,
+        token: token,
+      );
+      if (tracks.isEmpty) {
+        throw StateError('No playable tracks are available');
+      }
+
+      var index = 0;
+      final lastTrack = record.lastTrack;
+      if (lastTrack != null) {
+        final found = tracks.indexWhere((track) {
+          if (lastTrack.hash != null && track.hash == lastTrack.hash) {
+            return true;
+          }
+          return track.title == lastTrack.title;
+        });
+        if (found >= 0) index = found;
+      }
+
+      final controller = ref.read(audioPlayerControllerProvider.notifier);
+      await controller.playTracks(
+        tracks,
+        startIndex: index,
+        work: work,
+        playlistMode: AudioTapPlaylistMode.replaceQueue,
+      );
+      await controller.seek(
+        Duration(milliseconds: record.lastPositionMs),
+      );
+    } catch (error) {
+      _log.captureOutput('Failed to resume unified playback: $error');
+
+      // Last-known URL is still a useful final fallback if the provider parser
+      // is temporarily unavailable but the previously resolved media remains
+      // reachable.
+      final lastTrack = record.lastTrack;
+      if (lastTrack != null) {
+        try {
+          await AudioPlayerService.instance.updateQueue([lastTrack]);
+          await AudioPlayerService.instance
+              .seek(Duration(milliseconds: record.lastPositionMs));
+          await AudioPlayerService.instance.play();
+          ref.read(miniPlayerVisibilityProvider.notifier).show();
+          return;
+        } catch (fallbackError) {
+          _log.captureOutput(
+            'Failed to resume unified last-known track: $fallbackError',
+          );
+        }
+      }
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.playbackFailed(error.toString()))),
+        );
+      }
+    }
+  }
+}
+
+class _HistoryCover extends StatelessWidget {
+  final dynamic work;
+  final String host;
+  final String token;
+  final String? directCover;
+  final Map<String, String>? httpHeaders;
+  final bool isUnifiedExternal;
+
+  const _HistoryCover({
+    required this.work,
+    required this.host,
+    required this.token,
+    required this.directCover,
+    required this.httpHeaders,
+    required this.isUnifiedExternal,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final url = isUnifiedExternal
+        ? directCover
+        : work.getCoverImageUrl(host, token: token).toString();
+    if (url == null || url.trim().isEmpty) {
+      return Container(
+        color: Colors.grey[200],
+        child: const Center(
+          child: Icon(Icons.graphic_eq, color: Colors.grey, size: 42),
+        ),
+      );
+    }
+
+    return CachedNetworkImage(
+      imageUrl: url,
+      httpHeaders: httpHeaders,
+      cacheKey: isUnifiedExternal ? 'unified_history_${work.id}_$url' : 'work_cover_${work.id}',
+      fit: BoxFit.cover,
+      placeholder: (context, value) => Container(
+        color: Colors.grey[200],
+        child: const Center(child: Icon(Icons.image, color: Colors.grey)),
+      ),
+      errorWidget: (context, value, error) => Container(
+        color: Colors.grey[200],
+        child: const Center(
+          child: Icon(Icons.broken_image, color: Colors.grey),
+        ),
+      ),
+    );
   }
 }
