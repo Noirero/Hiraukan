@@ -1,10 +1,10 @@
-name: Build and Release
+name: Build and Release Android
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version, for example 3.8.1 or v3.8.1'
+        description: 'Release version, for example 3.8.3 or v3.8.3'
         required: true
         type: string
       release_notes:
@@ -15,6 +15,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: hiraukan-android-release
+  cancel-in-progress: false
+
 jobs:
   prepare:
     name: Prepare Release Metadata
@@ -23,6 +27,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
       suffix: ${{ steps.version.outputs.suffix }}
+      build_number: ${{ steps.version.outputs.build_number }}
     steps:
       - name: Normalize and validate version
         id: version
@@ -34,8 +39,22 @@ jobs:
           set -euo pipefail
 
           version="${INPUT_VERSION#v}"
-          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Version must use MAJOR.MINOR.PATCH, for example 3.8.1."
+          if [[ ! "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "::error::Version must use MAJOR.MINOR.PATCH, for example 3.8.3."
+            exit 1
+          fi
+
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+          patch="${BASH_REMATCH[3]}"
+          if (( minor > 999 || patch > 999 )); then
+            echo "::error::MINOR and PATCH must be 0-999."
+            exit 1
+          fi
+
+          build_number=$((major * 1000000 + minor * 1000 + patch))
+          if (( build_number <= 0 || build_number > 2100000000 )); then
+            echo "::error::Computed Android versionCode is outside the supported range."
             exit 1
           fi
 
@@ -46,7 +65,6 @@ jobs:
             echo "::error::Release $tag already exists. Choose a new version."
             exit 1
           fi
-
           if gh api "repos/${GH_REPO}/git/ref/tags/${tag}" >/dev/null 2>&1; then
             echo "::error::Git tag $tag already exists. Choose a new version."
             exit 1
@@ -55,45 +73,42 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "suffix=$suffix" >> "$GITHUB_OUTPUT"
-          echo "Building release $tag with filename suffix $suffix"
+          echo "build_number=$build_number" >> "$GITHUB_OUTPUT"
 
   android:
-    name: Android Build
+    name: Android ARM64 Release APK
     needs: prepare
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set Application Version
-        run: |
-          sed -i.bak -E 's/^version: .*/version: ${{ needs.prepare.outputs.version }}/' pubspec.yaml
-          rm pubspec.yaml.bak
-
-      - name: Prepare Android Signing
-        id: android_signing
+      - name: Require permanent Android signing
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_CERT_SHA256: ${{ secrets.ANDROID_CERT_SHA256 }}
         run: |
-          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "ANDROID_KEYSTORE_BASE64 secret missing; skipping signing setup."
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          printf "%s" "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-key.jks
-          cat <<EOF > android/key.properties
+          set -euo pipefail
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD ANDROID_CERT_SHA256; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::$name is required. Production releases must never fall back to a debug/test key."
+              exit 1
+            fi
+          done
+
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-key.jks
+          cat <<PROPS > android/key.properties
           storeFile=app/release-key.jks
           storePassword=$ANDROID_KEYSTORE_PASSWORD
           keyAlias=$ANDROID_KEY_ALIAS
           keyPassword=$ANDROID_KEY_PASSWORD
-          EOF
+          PROPS
           chmod 600 android/app/release-key.jks android/key.properties
-          echo "configured=true" >> "$GITHUB_OUTPUT"
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'zulu'
           java-version: '17'
@@ -103,373 +118,93 @@ jobs:
         with:
           flutter-version: '3.44.7'
           channel: 'stable'
+          cache: true
 
       - name: Get Dependencies
         run: flutter pub get
 
-      - name: Build Android APKs
+      - name: Build Android ARM64 APK
         run: |
           set -euo pipefail
           mkdir -p dist
+          flutter build apk \
+            --release \
+            --flavor prod \
+            --target-platform android-arm64 \
+            --split-per-abi \
+            --build-name="${{ needs.prepare.outputs.version }}" \
+            --build-number="${{ needs.prepare.outputs.build_number }}"
+          mv build/app/outputs/flutter-apk/app-prod-arm64-v8a-release.apk \
+            "dist/Hiraukan-android-arm64-v8a_${{ needs.prepare.outputs.suffix }}.apk"
 
-          flutter build apk --release
-          mv build/app/outputs/flutter-apk/app-release.apk \
-            "dist/KikoFlu-android-universe_${{ needs.prepare.outputs.suffix }}.apk"
-
-          # Preserve the legacy split APK versionCode scheme so existing
-          # arm64 installations can be upgraded in place.
-          flutter build apk --release --split-per-abi
-          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
-            "dist/KikoFlu-android-arm64-v8a_${{ needs.prepare.outputs.suffix }}.apk"
-
-      - name: Verify Android Package Compatibility
+      - name: Verify Android identity, version, and signing
         env:
           EXPECTED_VERSION: ${{ needs.prepare.outputs.version }}
-          SIGNING_CONFIGURED: ${{ steps.android_signing.outputs.configured }}
-          EXPECTED_CERT_SHA256: b49fcc1a879b7dab15f223f7431dfbee447dbe268d1578fc549340c430ddc87f
+          EXPECTED_CERT_SHA256: ${{ secrets.ANDROID_CERT_SHA256 }}
         run: |
           set -euo pipefail
-
           build_tools_dir="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
           aapt="$build_tools_dir/aapt"
           apksigner="$build_tools_dir/apksigner"
-          universal_apk="dist/KikoFlu-android-universe_${{ needs.prepare.outputs.suffix }}.apk"
-          arm64_apk="dist/KikoFlu-android-arm64-v8a_${{ needs.prepare.outputs.suffix }}.apk"
+          apk="dist/Hiraukan-android-arm64-v8a_${{ needs.prepare.outputs.suffix }}.apk"
 
-          for tool in "$aapt" "$apksigner"; do
-            if [ ! -x "$tool" ]; then
-              echo "::error::Required Android build tool not found: $tool"
-              exit 1
-            fi
-          done
+          badging="$("$aapt" dump badging "$apk")"
+          package_name="$(sed -n "s/.*package: name='\([^']*\)'.*/\1/p" <<< "$badging" | head -n1)"
+          version_name="$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" <<< "$badging" | head -n1)"
+          app_label="$(sed -n "s/^application-label:'\([^']*\)'.*/\1/p" <<< "$badging" | head -n1)"
 
-          universal_badging="$("$aapt" dump badging "$universal_apk" | sed -n '1p')"
-          arm64_badging="$("$aapt" dump badging "$arm64_apk" | sed -n '1p')"
-          universal_code="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<< "$universal_badging")"
-          arm64_code="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<< "$arm64_badging")"
-
-          for badging in "$universal_badging" "$arm64_badging"; do
-            package_name="$(sed -n "s/.*package: name='\([^']*\)'.*/\1/p" <<< "$badging")"
-            version_name="$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" <<< "$badging")"
-            if [ "$package_name" != "com.meteor.kikoeruflutter" ] || [ "$version_name" != "$EXPECTED_VERSION" ]; then
-              echo "::error::Unexpected Android package metadata: $badging"
-              exit 1
-            fi
-          done
-
-          if [ "$arm64_code" -ne $((universal_code + 2000)) ]; then
-            echo "::error::arm64 versionCode $arm64_code does not preserve the legacy split offset from $universal_code."
+          if [ "$package_name" != "com.noirero.hiraukan" ]; then
+            echo "::error::Unexpected package: $package_name"
+            exit 1
+          fi
+          if [ "$version_name" != "$EXPECTED_VERSION" ]; then
+            echo "::error::Unexpected versionName: $version_name"
+            exit 1
+          fi
+          if [ "$app_label" != "Hiraukan" ]; then
+            echo "::error::Unexpected app label: $app_label"
             exit 1
           fi
 
-          if [ "$SIGNING_CONFIGURED" = "true" ]; then
-            for apk in "$universal_apk" "$arm64_apk"; do
-              cert_output="$("$apksigner" verify --print-certs "$apk" 2>&1)"
-              actual_cert="$(
-                printf '%s\n' "$cert_output" |
-                  sed -nE '/certificate SHA-256 digest:/I {
-                    s/.*certificate SHA-256 digest:[[:space:]]*//I
-                    p
-                    q
-                  }' |
-                  tr -d '[:space:]:' |
-                  tr '[:upper:]' '[:lower:]'
-              )"
-              if [ -z "$actual_cert" ]; then
-                echo "::error::Unable to read the Android signing certificate for $apk."
-                printf '%s\n' "$cert_output" >&2
-                exit 1
-              fi
-              if [ "$actual_cert" != "$EXPECTED_CERT_SHA256" ]; then
-                echo "::error::Unexpected Android signing certificate for $apk: $actual_cert"
-                exit 1
-              fi
-            done
+          expected_cert="$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+          cert_output="$("$apksigner" verify --print-certs "$apk" 2>&1)"
+          actual_cert="$(
+            printf '%s\n' "$cert_output" |
+              sed -nE '/certificate SHA-256 digest:/I {
+                s/.*certificate SHA-256 digest:[[:space:]]*//I
+                p
+                q
+              }' |
+              tr -d '[:space:]:' |
+              tr '[:upper:]' '[:lower:]'
+          )"
+          if [ -z "$actual_cert" ] || [ "$actual_cert" != "$expected_cert" ]; then
+            echo "::error::Android release signing certificate mismatch: $actual_cert"
+            exit 1
           fi
 
-      - name: Upload Android Artifacts
+      - name: Upload Android release APK
         uses: actions/upload-artifact@v6
         with:
           name: release-assets-android
-          path: dist/*
+          path: dist/Hiraukan-android-arm64-v8a_${{ needs.prepare.outputs.suffix }}.apk
           if-no-files-found: error
-
-  windows:
-    name: Windows Build
-    needs: prepare
-    # windows-latest currently ships newer VS/CMake versions that break
-    # older native Flutter plugins used by this project.
-    runs-on: windows-2022
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set Application Version
-        shell: pwsh
-        run: |
-          $content = Get-Content pubspec.yaml -Raw
-          $content = [Regex]::Replace($content, '(?m)^version:\s+.*$', 'version: ${{ needs.prepare.outputs.version }}', 1)
-          Set-Content -Path pubspec.yaml -Value $content -NoNewline
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.44.7'
-          channel: 'stable'
-
-      - name: Get Dependencies
-        run: flutter pub get
-
-      - name: Build Windows Release
-        run: flutter build windows --release
-
-      - name: Install Inno Setup
-        run: |
-          choco install innosetup --no-progress
-          echo "C:\Program Files (x86)\Inno Setup 6" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Build Windows Installer
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          iscc /DMyAppVersion="${{ needs.prepare.outputs.version }}" installer_script.iss
-          Copy-Item -Path 'Output/KikoFlu-windows-setup.exe' -Destination "dist/KikoFlu-windows-setup_${{ needs.prepare.outputs.suffix }}.exe"
-
-      # Keep the legacy archive implementation and unsigned Windows outputs.
-      - name: Create Windows Portable Archive
-        uses: thedoctor0/zip-release@0.7.6
-        with:
-          type: 'zip'
-          filename: 'KikoFlu-windows.zip'
-          directory: 'build/windows/x64/runner/Release'
-
-      - name: Rename Windows Portable Archive
-        shell: pwsh
-        run: |
-          Move-Item -Path 'build/windows/x64/runner/Release/KikoFlu-windows.zip' -Destination "dist/KikoFlu-windows_${{ needs.prepare.outputs.suffix }}.zip"
-
-      - name: Upload Windows Artifacts
-        uses: actions/upload-artifact@v6
-        with:
-          name: release-assets-windows
-          path: dist/*
-          if-no-files-found: error
-
-  ios:
-    name: iOS Build (Unsigned)
-    needs: prepare
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set Application Version
-        run: |
-          sed -i.bak -E 's/^version: .*/version: ${{ needs.prepare.outputs.version }}/' pubspec.yaml
-          rm pubspec.yaml.bak
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.44.7'
-          channel: 'stable'
-
-      - name: Get Dependencies
-        run: flutter pub get
-
-      - name: Build iOS App (Unsigned)
-        run: flutter build ios --release --no-codesign
-
-      - name: Package IPA
-        run: |
-          set -euo pipefail
-          rm -rf build/Payload dist
-          mkdir -p build/Payload dist
-          cp -R build/ios/iphoneos/Runner.app build/Payload/
-          (cd build && zip -qr \
-            "$GITHUB_WORKSPACE/dist/KikoFlu-ios-unsigned_${{ needs.prepare.outputs.suffix }}.ipa" \
-            Payload)
-
-      - name: Upload iOS Artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: release-assets-ios
-          path: dist/*
-          if-no-files-found: error
-
-  macos:
-    name: macOS Build
-    needs: prepare
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set Application Version
-        run: |
-          sed -i.bak -E 's/^version: .*/version: ${{ needs.prepare.outputs.version }}/' pubspec.yaml
-          rm pubspec.yaml.bak
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.44.7'
-          channel: 'stable'
-
-      - name: Get Dependencies
-        run: flutter pub get
-
-      - name: Build macOS Release
-        run: flutter build macos --release
-
-      - name: Create DMG
-        run: |
-          set -euo pipefail
-          rm -rf build/dmg dist
-          mkdir -p build/dmg dist
-          cp -R build/macos/Build/Products/Release/KikoFlu.app build/dmg/
-          hdiutil create -volname "KikoFlu" \
-            -srcfolder build/dmg \
-            -ov -format UDZO \
-            "dist/KikoFlu-macos_${{ needs.prepare.outputs.suffix }}.dmg"
-
-      - name: Upload macOS Artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: release-assets-macos
-          path: dist/*
-          if-no-files-found: error
-
-  linux:
-    name: Linux x64 Build
-    needs: prepare
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set Application Version
-        run: |
-          sed -i.bak -E 's/^version: .*/version: ${{ needs.prepare.outputs.version }}/' pubspec.yaml
-          rm pubspec.yaml.bak
-
-      - name: Install Linux Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            clang cmake ninja-build pkg-config \
-            libgtk-3-dev \
-            libmpv-dev \
-            libsqlite3-dev
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.44.7'
-          channel: 'stable'
-
-      - name: Get Dependencies
-        run: flutter pub get
-
-      - name: Build Linux Release
-        run: flutter build linux --release
-
-      - name: Create Archive
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          (cd build/linux/x64/release/bundle && tar -czf \
-            "$GITHUB_WORKSPACE/dist/KikoFlu-linux-x64_${{ needs.prepare.outputs.suffix }}.tar.gz" .)
-
-      - name: Upload Linux Artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: release-assets-linux-x64
-          path: dist/*
-          if-no-files-found: error
-
-  linux-arm64:
-    name: Linux ARM64 Build
-    needs: prepare
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
-      - name: Build in ARM64 Container
-        uses: uraimo/run-on-arch-action@v2
-        with:
-          arch: aarch64
-          distro: ubuntu22.04
-          githubToken: ${{ github.token }}
-          install: |
-            apt-get update
-            apt-get install -y \
-              curl git unzip xz-utils \
-              clang cmake ninja-build pkg-config \
-              libgtk-3-dev \
-              libmpv-dev \
-              libsqlite3-dev
-            git clone https://github.com/flutter/flutter.git -b 3.44.7 /opt/flutter --depth 1
-            /opt/flutter/bin/flutter --version
-          run: |
-            set -e
-            export PATH="/opt/flutter/bin:$PATH"
-            export CC=clang
-            export CXX=clang++
-            export CMAKE_BUILD_PARALLEL_LEVEL=1
-            export MAKEFLAGS="-j1"
-            sed -i.bak -E 's/^version: .*/version: ${{ needs.prepare.outputs.version }}/' pubspec.yaml
-            rm pubspec.yaml.bak
-            flutter pub get
-
-            for attempt in 1 2; do
-              echo "Linux ARM64 release build attempt ${attempt}/2"
-              if flutter build linux --release; then
-                break
-              fi
-
-              if [ "$attempt" -eq 2 ]; then
-                exit 1
-              fi
-
-              echo "Build failed in ARM64 emulation; cleaning and retrying once..."
-              flutter clean
-              flutter pub get
-            done
-
-            mkdir -p "$GITHUB_WORKSPACE/dist"
-            (cd build/linux/arm64/release/bundle && tar -czf \
-              "$GITHUB_WORKSPACE/dist/KikoFlu-linux-arm64_${{ needs.prepare.outputs.suffix }}.tar.gz" .)
-
-      - name: Upload Linux ARM64 Artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: release-assets-linux-arm64
-          path: dist/*
-          if-no-files-found: error
+          retention-days: 7
 
   release:
     name: Create GitHub Release
     needs:
       - prepare
       - android
-      - windows
-      - ios
-      - macos
-      - linux
-      - linux-arm64
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download release artifacts
+      - name: Download Android release artifact
         uses: actions/download-artifact@v6
         with:
-          pattern: release-assets-*
+          name: release-assets-android
           path: release-assets
-          merge-multiple: true
 
       - name: Verify and publish release atomically
         env:
@@ -477,29 +212,14 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.prepare.outputs.tag }}
           RELEASE_NOTES: ${{ inputs.release_notes }}
+          ASSET_NAME: Hiraukan-android-arm64-v8a_${{ needs.prepare.outputs.suffix }}.apk
         run: |
           set -euo pipefail
-
-          expected=(
-            "KikoFlu-android-arm64-v8a_${{ needs.prepare.outputs.suffix }}.apk"
-            "KikoFlu-android-universe_${{ needs.prepare.outputs.suffix }}.apk"
-            "KikoFlu-ios-unsigned_${{ needs.prepare.outputs.suffix }}.ipa"
-            "KikoFlu-linux-arm64_${{ needs.prepare.outputs.suffix }}.tar.gz"
-            "KikoFlu-linux-x64_${{ needs.prepare.outputs.suffix }}.tar.gz"
-            "KikoFlu-macos_${{ needs.prepare.outputs.suffix }}.dmg"
-            "KikoFlu-windows-setup_${{ needs.prepare.outputs.suffix }}.exe"
-            "KikoFlu-windows_${{ needs.prepare.outputs.suffix }}.zip"
-          )
-
-          assets=()
-          for asset in "${expected[@]}"; do
-            path="release-assets/$asset"
-            if [ ! -s "$path" ]; then
-              echo "::error::Missing or empty release asset: $asset"
-              exit 1
-            fi
-            assets+=("$path")
-          done
+          asset="release-assets/$ASSET_NAME"
+          if [ ! -s "$asset" ]; then
+            echo "::error::Missing or empty Android release APK: $ASSET_NAME"
+            exit 1
+          fi
 
           release_id=""
           release_tag=""
@@ -508,7 +228,6 @@ jobs:
             status="$1"
             trap - ERR INT TERM
             if [ "$draft_created" = "true" ] && [ -n "$release_id" ]; then
-              echo "Cleaning up incomplete draft release $TAG (id $release_id)"
               gh api --method DELETE "repos/${GH_REPO}/releases/${release_id}" || true
               if [ "$release_tag" = "$TAG" ] && gh api "repos/${GH_REPO}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
                 gh api --method DELETE "repos/${GH_REPO}/git/refs/tags/${TAG}" || true
@@ -531,47 +250,24 @@ jobs:
           release_tag="$(jq -r '.tag_name // empty' <<< "$release_json")"
           upload_url="$(jq -r '.upload_url // empty' <<< "$release_json" | sed 's/{?name,label}$//')"
           if [ -z "$release_id" ] || [ -z "$upload_url" ]; then
-            echo "::error::GitHub did not return a usable draft release id or upload URL."
-            printf '%s\n' "$release_json"
+            echo "::error::GitHub did not return a usable draft release."
             exit 1
           fi
           draft_created=true
 
-          for asset in "${assets[@]}"; do
-            asset_name="$(basename "$asset")"
-            encoded_name="$(jq -nr --arg name "$asset_name" '$name | @uri')"
-            echo "Uploading $asset_name"
-            curl --fail-with-body --silent --show-error \
-              --request POST "${upload_url}?name=${encoded_name}" \
-              --header "Authorization: Bearer ${GH_TOKEN}" \
-              --header 'Accept: application/vnd.github+json' \
-              --header 'Content-Type: application/octet-stream' \
-              --data-binary "@${asset}"
-          done
+          encoded_name="$(jq -nr --arg name "$ASSET_NAME" '$name | @uri')"
+          curl --fail-with-body --silent --show-error \
+            --request POST "${upload_url}?name=${encoded_name}" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'Content-Type: application/octet-stream' \
+            --data-binary "@${asset}"
 
-          remote_assets="$(gh api "repos/${GH_REPO}/releases/${release_id}" \
-            --jq '.assets[] | [.name, .size, .state] | @tsv')"
-          mapfile -t uploaded < <(
-            printf '%s\n' "$remote_assets" |
-              awk -F '\t' '$2 > 0 && $3 == "uploaded" { print $1 }' |
-              sort
-          )
-          mapfile -t expected_sorted < <(printf '%s\n' "${expected[@]}" | sort)
-
-          if [ "${#uploaded[@]}" -ne "${#expected_sorted[@]}" ]; then
-            echo "::error::Draft release contains an unexpected number of complete assets."
-            printf 'Expected: %s\n' "${expected_sorted[*]}"
-            printf 'Uploaded: %s\n' "${uploaded[*]}"
-            false
+          uploaded_size="$(gh api "repos/${GH_REPO}/releases/${release_id}" --jq ".assets[] | select(.name == \"${ASSET_NAME}\") | .size")"
+          if [ -z "$uploaded_size" ] || [ "$uploaded_size" -le 0 ]; then
+            echo "::error::Uploaded APK is missing or empty in draft release."
+            exit 1
           fi
-          for index in "${!expected_sorted[@]}"; do
-            if [ "${uploaded[$index]}" != "${expected_sorted[$index]}" ]; then
-              echo "::error::Draft release assets do not match the expected set."
-              printf 'Expected: %s\n' "${expected_sorted[*]}"
-              printf 'Uploaded: %s\n' "${uploaded[*]}"
-              false
-            fi
-          done
 
           gh api --method PATCH "repos/${GH_REPO}/releases/${release_id}" \
             -F 'draft=false' \
