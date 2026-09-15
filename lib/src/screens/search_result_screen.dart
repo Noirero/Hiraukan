@@ -79,12 +79,21 @@ class _SearchResultContent extends ConsumerStatefulWidget {
 class _SearchResultContentState extends ConsumerState<_SearchResultContent> {
   final ScrollController _scrollController = ScrollController();
 
+  bool get _isFederatedSearch {
+    final value = widget.keyword.trim();
+    final hasDirectKikoeruSelector =
+        widget.searchParams?.containsKey('vaId') == true ||
+            widget.searchParams?.containsKey('tagId') == true;
+    return !hasDirectKikoeruSelector &&
+        value.isNotEmpty &&
+        !value.contains(r'$');
+  }
+
   @override
   void initState() {
     super.initState();
     logOutput(
         '[SearchResult] Screen initialized with keyword: ${widget.keyword}, type: ${widget.searchTypeLabel}');
-    // Load initial data
     WidgetsBinding.instance.addPostFrameCallback((_) {
       logOutput(
           '[SearchResult] Starting search with params: ${widget.searchParams}');
@@ -152,9 +161,7 @@ class _SearchResultContentState extends ConsumerState<_SearchResultContent> {
   @override
   Widget build(BuildContext context) {
     final searchState = ref.watch(searchResultProvider);
-
     final horizontalPadding = FloatingToolbarLayout.horizontalPadding(context);
-
     final topPadding = MediaQuery.paddingOf(context).top;
     final systemOverlayStyle =
         transparentSystemBarsForBrightness(Theme.of(context).brightness);
@@ -229,25 +236,21 @@ class _SearchResultContentState extends ConsumerState<_SearchResultContent> {
   }
 
   Widget _buildSearchInfo(BuildContext context, SearchResultState searchState) {
-    // 检查是否有详细的搜索条件
     final conditions = widget.searchParams?['conditions'] as List?;
     final minRate = widget.searchParams?['minRate'] as num?;
     final ageRating = widget.searchParams?['ageRating'] as String?;
     final salesRange = widget.searchParams?['salesRange'] as String?;
 
-    // 如果有详细条件，显示为芯片
     if (conditions != null && conditions.isNotEmpty) {
       return Wrap(
         spacing: 8,
         runSpacing: 8,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          // 搜索条件芯片
           ...conditions.map((condition) {
             final type = condition['type'] as String;
             final value = condition['value'] as String;
             final isExclude = condition['isExclude'] as bool? ?? false;
-            // RJ号需要添加RJ前缀显示
             final isRjNumber = RegExp(r'^\d+$').hasMatch(value);
             final displayValue = isRjNumber ? 'RJ$value' : value;
 
@@ -264,8 +267,6 @@ class _SearchResultContentState extends ConsumerState<_SearchResultContent> {
                   : Theme.of(context).colorScheme.secondaryContainer,
             );
           }),
-
-          // 高级筛选条件芯片
           if (minRate != null && minRate > 0)
             SearchConditionChip(
               avatar: const Icon(Icons.star, size: 16),
@@ -285,8 +286,6 @@ class _SearchResultContentState extends ConsumerState<_SearchResultContent> {
               label: salesRange,
               backgroundColor: Theme.of(context).colorScheme.tertiaryContainer,
             ),
-
-          // 结果统计
           if (searchState.totalCount > 0)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -302,7 +301,6 @@ class _SearchResultContentState extends ConsumerState<_SearchResultContent> {
       );
     }
 
-    // 原有的简单显示方式（兼容旧逻辑）
     String searchInfo = widget.keyword;
     if (widget.searchTypeLabel != null) {
       searchInfo = '${widget.searchTypeLabel}: $searchInfo';
@@ -427,6 +425,7 @@ class _SearchResultContentState extends ConsumerState<_SearchResultContent> {
       loadMoreError: searchState.loadMoreError,
       onRetry: () => ref.read(searchResultProvider.notifier).refresh(),
       showInlineLoadingIndicator: searchState.isLoading,
+      unifiedSourcesEnabled: _isFederatedSearch,
       pagination: VirtualizedPagination(
         currentPage: searchState.currentPage,
         pageSize: searchState.pageSize,
@@ -478,8 +477,6 @@ class _SearchResultContentState extends ConsumerState<_SearchResultContent> {
   }
 
   IconData _getConditionIcon(String type) {
-    // type is a localized label, so we match by checking common patterns
-    // This is a best-effort fallback; the main UI uses SearchType enum directly
     return Icons.search;
   }
 }

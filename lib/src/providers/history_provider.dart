@@ -7,6 +7,9 @@ import '../services/history_database.dart';
 import '../services/audio_player_service.dart' as import_service;
 import '../services/log_service.dart';
 import '../services/playback_history_service.dart';
+import '../sources/unified_source_models.dart';
+import '../sources/unified_source_preferences.dart';
+import '../sources/unified_source_registry.dart';
 import '../utils/paged_collection.dart';
 
 class HistoryState {
@@ -100,9 +103,12 @@ class HistoryNotifier extends StateNotifier<HistoryState> {
     );
 
     try {
-      final records = await HistoryDatabase.instance.getAllHistory(
+      final storedRecords = await HistoryDatabase.instance.getAllHistory(
         limit: state.pageSize,
         offset: offset,
+      );
+      final records = await Future.wait(
+        storedRecords.map(_hydrateUnifiedHistoryRecord),
       );
       final totalCount = await HistoryDatabase.instance.getHistoryCount();
       if (!_requestGate.isCurrent(token)) return;
@@ -131,6 +137,46 @@ class HistoryNotifier extends StateNotifier<HistoryState> {
       logOutput('Failed to load history: $e');
     } finally {
       _requestGate.complete(token);
+    }
+  }
+
+  /// Hydrates source mirrors before history cards are built. HistoryWorkCard's
+  /// existing external/unified path is selected by sourceUrl, so a work whose
+  /// primary source was ASMR.one but which also has an external mirror receives
+  /// a transient external source URL in UI state. The database row itself is
+  /// left untouched until the user actually plays it again.
+  Future<HistoryRecord> _hydrateUnifiedHistoryRecord(
+    HistoryRecord record,
+  ) async {
+    try {
+      final bundle = await UnifiedSourcePreferences.loadBundle(record.work);
+      if (bundle == null) return record;
+      UnifiedSourceRegistry.instance.register(bundle);
+
+      UnifiedSourceRef? externalRef;
+      for (final source in bundle.sources) {
+        if (source.source != UnifiedSourceKind.asmrOne) {
+          externalRef = source;
+          break;
+        }
+      }
+      if (externalRef == null) return record;
+
+      final currentHost = Uri.tryParse(record.work.sourceUrl ?? '')
+              ?.host
+              .toLowerCase() ??
+          '';
+      if (currentHost.contains('hentaiasmr.moe') ||
+          currentHost.contains('erovoice.us')) {
+        return record;
+      }
+
+      return record.copyWith(
+        work: record.work.copyWith(sourceUrl: externalRef.detailUrl),
+      );
+    } catch (error) {
+      logOutput('Failed to hydrate unified history metadata: $error');
+      return record;
     }
   }
 
