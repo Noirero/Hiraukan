@@ -4,7 +4,6 @@ import 'dart:io';
 import 'audio_conversion_service.dart';
 import 'download_path_service.dart';
 import 'download_service.dart';
-import 'hi_res_audio_service.dart';
 import 'kikoflu_feature_settings.dart';
 import 'kikoflu_notification_service.dart';
 import 'log_service.dart';
@@ -40,10 +39,6 @@ class KikoFluFeatureCoordinator {
     _initialized = true;
 
     unawaited(KikoFluNotificationService.instance.initialize());
-    if (_settings.hiResEnabled) {
-      unawaited(HiResAudioService.instance.setEnabled(true));
-    }
-
     await refreshDownloadWatcher();
   }
 
