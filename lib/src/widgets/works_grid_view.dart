@@ -9,6 +9,7 @@ import '../sources/unified_source_registry.dart';
 import '../utils/responsive_grid_helper.dart';
 import '../utils/work_cover_prefetch.dart';
 import 'enhanced_work_card.dart';
+import 'unified_source_filter_bar.dart';
 import 'unified_work_card.dart';
 import 'virtualized_sliver_collection.dart';
 
@@ -74,6 +75,14 @@ class WorksGridView extends ConsumerWidget {
     final auth = ref.watch(
       authProvider.select((state) => (state.host ?? '', state.token ?? '')),
     );
+    final hasUnifiedWorks =
+        works.any((work) => UnifiedSourceRegistry.instance.contains(work.id));
+    final effectiveSliversBefore = <Widget>[
+      ...sliversBefore,
+      if (hasUnifiedWorks)
+        const SliverToBoxAdapter(child: UnifiedSourceFilterBar()),
+    ];
+
     return LayoutBuilder(builder: (context, constraints) {
       final mediaSize = MediaQuery.sizeOf(context);
       final availableWidth = constraints.hasBoundedWidth
@@ -115,7 +124,7 @@ class WorksGridView extends ConsumerWidget {
       return VirtualizedSliverCollection<Work>(
         controller: scrollController,
         pageStorageKey: pageStorageKey,
-        sliversBefore: sliversBefore,
+        sliversBefore: effectiveSliversBefore,
         items: works,
         itemId: (work) => work.id,
         itemBuilder: (context, work, index) {
