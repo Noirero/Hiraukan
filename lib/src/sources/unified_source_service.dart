@@ -281,10 +281,12 @@ class UnifiedSourceService {
   }
 
   String _canonicalKey(SourceWorkCandidate candidate) {
-    final canonical = candidate.ref.canonicalId ??
-        SourceHtmlParser.extractCanonicalId(candidate.work.sourceId) ??
-        SourceHtmlParser.extractCanonicalId(candidate.work.title);
-    if (canonical != null) return 'id:${canonical.toUpperCase()}';
+    final canonical = SourceHtmlParser.canonicalMatchKey(
+      candidate.ref.canonicalId ??
+          candidate.work.sourceId ??
+          candidate.work.title,
+    );
+    if (canonical != null) return 'id:$canonical';
 
     final title = _normalize(candidate.work.title);
     final circle = _normalize(candidate.work.name ?? candidate.ref.circle ?? '');
