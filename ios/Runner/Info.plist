@@ -58,10 +58,6 @@
 	<!-- Audio permissions -->
 	<key>NSMicrophoneUsageDescription</key>
 	<string>This app needs access to microphone for audio recording features.</string>
-
-	<!-- App Lock biometric authentication -->
-	<key>NSFaceIDUsageDescription</key>
-	<string>Hiraukan uses Face ID only to unlock the app when App Lock is enabled.</string>
 	
 	<!-- Background audio -->
 	<key>UIBackgroundModes</key>
