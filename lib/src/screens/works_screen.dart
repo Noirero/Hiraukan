@@ -34,12 +34,11 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
   };
 
   @override
-  bool get wantKeepAlive => true; // 保持状态不被销毁
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
-    // 只在首次加载时获取数据，如果已有数据则不重新加载
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final worksState = ref.read(worksProvider);
       if (worksState.works.isEmpty) {
@@ -130,8 +129,7 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
   void _restoreScrollPosition(DisplayMode mode) {
     final targetOffset = _scrollPositions[mode] ?? 0;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (!_scrollController.hasClients) return;
+      if (!mounted || !_scrollController.hasClients) return;
       final maxExtent = _scrollController.position.maxScrollExtent;
       final safeMax = maxExtent.isFinite ? maxExtent : targetOffset;
       final clamped = targetOffset.clamp(0.0, safeMax).toDouble();
@@ -141,22 +139,17 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
 
   void _handleSwipe(DragEndDetails details) {
     if (details.primaryVelocity == null) return;
-
     final velocity = details.primaryVelocity!;
     final worksState = ref.read(worksProvider);
-
-    // Sensitivity threshold
     if (velocity.abs() < 500) return;
 
     if (velocity < 0) {
-      // Swipe Left (Next Tab)
       if (worksState.displayMode == DisplayMode.all) {
         _changeDisplayMode(DisplayMode.popular);
       } else if (worksState.displayMode == DisplayMode.popular) {
         _changeDisplayMode(DisplayMode.recommended);
       }
     } else {
-      // Swipe Right (Previous Tab)
       if (worksState.displayMode == DisplayMode.recommended) {
         _changeDisplayMode(DisplayMode.popular);
       } else if (worksState.displayMode == DisplayMode.popular) {
@@ -167,34 +160,37 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // 必须调用以保持状态
+    super.build(context);
     ref.listen<WorksState>(
       worksProvider,
       (previous, next) {
-        if (!mounted) return;
-        if (previous == null) return;
+        if (!mounted || previous == null) return;
         if (previous.displayMode == next.displayMode) return;
 
         final prevIndex = DisplayMode.values.indexOf(previous.displayMode);
         final nextIndex = DisplayMode.values.indexOf(next.displayMode);
-
         setState(() {
           _slideDirection = nextIndex >= prevIndex ? 1 : -1;
         });
-
         _restoreScrollPosition(next.displayMode);
       },
     );
+
     final worksState = ref.watch(worksProvider);
     final isRecommendMode = worksState.displayMode == DisplayMode.popular ||
         worksState.displayMode == DisplayMode.recommended;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
 
     final horizontalPadding = FloatingToolbarLayout.horizontalPadding(context);
     final topPadding = MediaQuery.paddingOf(context).top;
-    final toolbarTop = topPadding + 8;
+    final headerTop = topPadding + 10;
+    const headerHeight = 50.0;
+    final toolbarTop = headerTop + headerHeight + 4;
     final contentTopPadding = toolbarTop + 56;
     final systemOverlayStyle =
-        transparentSystemBarsForBrightness(Theme.of(context).brightness);
+        transparentSystemBarsForBrightness(theme.brightness);
 
     return AnnotatedRegion(
       value: systemOverlayStyle,
@@ -202,6 +198,26 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
         floatingActionButton: const DownloadFab(),
         body: Stack(
           children: [
+            // A restrained lavender ambience ties the artwork-heavy home feed
+            // to Hiraukan's night identity without making light mode gloomy.
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        scheme.primary.withValues(alpha: isDark ? 0.085 : 0.045),
+                        scheme.surface.withValues(alpha: 0),
+                        scheme.surface,
+                      ],
+                      stops: const [0, 0.34, 1],
+                    ),
+                  ),
+                ),
+              ),
+            ),
             Positioned.fill(
               child: GestureDetector(
                 onHorizontalDragEnd: _handleSwipe,
@@ -230,10 +246,10 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
                     child: _buildBody(
                       worksState,
                       EdgeInsets.fromLTRB(
-                        horizontalPadding,
+                        horizontalPadding + 4,
                         contentTopPadding,
-                        horizontalPadding,
-                        horizontalPadding,
+                        horizontalPadding + 4,
+                        horizontalPadding + 8,
                       ),
                     ),
                   ),
@@ -244,7 +260,18 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
               top: 0,
               left: 0,
               right: 0,
-              child: ProgressiveTopScrim(height: topPadding + 72),
+              child: ProgressiveTopScrim(height: toolbarTop + 52),
+            ),
+            Positioned(
+              top: headerTop,
+              left: horizontalPadding + 4,
+              right: horizontalPadding + 4,
+              height: headerHeight,
+              child: _HiraukanHomeHeader(
+                primary: scheme.primary,
+                foreground: scheme.onSurface,
+                secondary: scheme.onSurfaceVariant,
+              ),
             ),
             Positioned(
               top: toolbarTop,
@@ -272,19 +299,19 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
   ) {
     return [
       FloatingFeedModeAction(
-        icon: Icons.grid_view,
+        icon: Icons.grid_view_rounded,
         label: S.of(context).displayModeAll,
         isSelected: worksState.displayMode == DisplayMode.all,
         onPressed: () => _changeDisplayMode(DisplayMode.all),
       ),
       FloatingFeedModeAction(
-        icon: Icons.local_fire_department,
+        icon: Icons.local_fire_department_rounded,
         label: S.of(context).displayModePopular,
         isSelected: worksState.displayMode == DisplayMode.popular,
         onPressed: () => _changeDisplayMode(DisplayMode.popular),
       ),
       FloatingFeedModeAction(
-        icon: Icons.auto_awesome,
+        icon: Icons.auto_awesome_rounded,
         label: S.of(context).displayModeRecommended,
         isSelected: worksState.displayMode == DisplayMode.recommended,
         onPressed: () => _changeDisplayMode(DisplayMode.recommended),
@@ -297,8 +324,7 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
     WorksState worksState, {
     required bool isRecommendMode,
   }) {
-    final subtitleMode =
-        SubtitleFilterMode.fromValue(worksState.subtitleFilter);
+    final subtitleMode = SubtitleFilterMode.fromValue(worksState.subtitleFilter);
     return [
       FloatingFeedToolAction(
         icon: _getLayoutIcon(worksState.layoutType),
@@ -313,7 +339,7 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
             ref.read(worksProvider.notifier).toggleSubtitleFilter(),
       ),
       FloatingFeedToolAction(
-        icon: Icons.sort,
+        icon: Icons.tune_rounded,
         tooltip: isRecommendMode
             ? S.of(context).recommendedNoSort
             : S.of(context).sort,
@@ -458,6 +484,67 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
           ],
         ),
       ),
+    );
+  }
+}
+
+class _HiraukanHomeHeader extends StatelessWidget {
+  const _HiraukanHomeHeader({
+    required this.primary,
+    required this.foreground,
+    required this.secondary,
+  });
+
+  final Color primary;
+  final Color foreground;
+  final Color secondary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: primary.withValues(alpha: 0.13),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: primary.withValues(alpha: 0.22)),
+          ),
+          child: Icon(Icons.graphic_eq_rounded, color: primary, size: 22),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Hiraukan',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: foreground,
+                      fontSize: 23,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.2,
+                    ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                'A quieter world, always with you.',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: secondary,
+                      fontSize: 11.5,
+                      letterSpacing: 0.15,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
