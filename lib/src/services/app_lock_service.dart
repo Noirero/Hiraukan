@@ -110,7 +110,7 @@ class AppLockService {
   /// standard digest with repeated rounds instead, while keeping this local
   /// app lock lightweight and dependency-free beyond `crypto`.
   String _hashPin(String pin) {
-    var bytes = utf8.encode('hiraukan:app-lock:v1:$pin');
+    List<int> bytes = utf8.encode('hiraukan:app-lock:v1:$pin');
     for (var i = 0; i < 20000; i++) {
       bytes = sha256.convert(bytes).bytes;
     }
