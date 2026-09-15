@@ -7,6 +7,7 @@ import 'package:whisper_ggml_plus/whisper_ggml_plus.dart';
 import '../services/ai_transcription_service.dart';
 import '../services/audio_conversion_service.dart';
 import '../services/hi_res_audio_service.dart';
+import '../services/kikoflu_feature_coordinator.dart';
 import '../services/kikoflu_feature_settings.dart';
 import '../services/kikoflu_notification_service.dart';
 
@@ -79,13 +80,15 @@ class _KikoFluFeaturesSettingsScreenState
       skipExisting: true,
       onProgress: (done, total, file) {
         if (!mounted) return;
-        setState(() => _status = 'Transcribing $done/$total — ${File(file).uri.pathSegments.last}');
+        setState(() => _status =
+            'Transcribing $done/$total — ${File(file).uri.pathSegments.last}');
       },
     );
     if (!mounted) return;
     setState(() {
       _busy = false;
-      _status = 'Batch complete: ${result.completed} created, ${result.skipped} skipped, ${result.failed} failed.';
+      _status =
+          'Batch complete: ${result.completed} created, ${result.skipped} skipped, ${result.failed} failed.';
     });
   }
 
@@ -166,10 +169,14 @@ class _KikoFluFeaturesSettingsScreenState
                 SwitchListTile(
                   secondary: const Icon(Icons.transform_rounded),
                   title: const Text('Auto-convert WAV after download'),
-                  subtitle: const Text('Preserves download folder structure and metadata.'),
+                  subtitle: const Text(
+                    'Preserves download folder structure and metadata.',
+                  ),
                   value: _settings.autoConvertWav,
                   onChanged: (value) async {
                     await _settings.setAutoConvertWav(value);
+                    await KikoFluFeatureCoordinator.instance
+                        .refreshDownloadWatcher();
                     _refresh();
                   },
                 ),
@@ -178,11 +185,13 @@ class _KikoFluFeaturesSettingsScreenState
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                     child: DropdownButtonFormField<String>(
                       initialValue: _settings.conversionFormat,
-                      decoration: const InputDecoration(labelText: 'Target format'),
+                      decoration:
+                          const InputDecoration(labelText: 'Target format'),
                       items: WavConversionFormat.values
                           .where((format) =>
                               format != WavConversionFormat.none &&
-                              AudioConversionService.instance.isSupported(format))
+                              AudioConversionService.instance
+                                  .isSupported(format))
                           .map((format) => DropdownMenuItem(
                                 value: format.value,
                                 child: Text(format.displayName),
@@ -205,7 +214,9 @@ class _KikoFluFeaturesSettingsScreenState
                 SwitchListTile(
                   secondary: const Icon(Icons.graphic_eq_rounded),
                   title: const Text('On-device AI transcription'),
-                  subtitle: const Text('Whisper models are downloaded separately, not bundled in the APK.'),
+                  subtitle: const Text(
+                    'Whisper models are downloaded separately, not bundled in the APK.',
+                  ),
                   value: _settings.aiTranscriptionEnabled,
                   onChanged: (value) async {
                     await _settings.setAiTranscriptionEnabled(value);
@@ -217,9 +228,20 @@ class _KikoFluFeaturesSettingsScreenState
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: DropdownButtonFormField<String>(
                       initialValue: _settings.whisperModel,
-                      decoration: const InputDecoration(labelText: 'Whisper model'),
-                      items: const ['tiny', 'base', 'small', 'medium', 'large', 'largeV3Turbo']
-                          .map((name) => DropdownMenuItem(value: name, child: Text(name)))
+                      decoration:
+                          const InputDecoration(labelText: 'Whisper model'),
+                      items: const [
+                        'tiny',
+                        'base',
+                        'small',
+                        'medium',
+                        'large',
+                        'largeV3Turbo'
+                      ]
+                          .map((name) => DropdownMenuItem(
+                                value: name,
+                                child: Text(name),
+                              ))
                           .toList(),
                       onChanged: (value) async {
                         if (value == null) return;
@@ -240,7 +262,9 @@ class _KikoFluFeaturesSettingsScreenState
                   ListTile(
                     leading: const Icon(Icons.library_music_rounded),
                     title: const Text('Batch transcribe folder'),
-                    subtitle: const Text('Existing .lrc files are skipped; subtitle files are never scanned as audio.'),
+                    subtitle: const Text(
+                      'Existing .lrc files are skipped; subtitle files are never scanned as audio.',
+                    ),
                     enabled: !_busy,
                     onTap: _runBatchTranscription,
                   ),
@@ -253,7 +277,8 @@ class _KikoFluFeaturesSettingsScreenState
             child: Column(
               children: [
                 SwitchListTile(
-                  secondary: const Icon(Icons.notifications_active_outlined),
+                  secondary:
+                      const Icon(Icons.notifications_active_outlined),
                   title: const Text('Task notifications'),
                   value: _settings.notificationsEnabled,
                   onChanged: (value) async {
@@ -264,10 +289,14 @@ class _KikoFluFeaturesSettingsScreenState
                 SwitchListTile(
                   secondary: const Icon(Icons.cloud_outlined),
                   title: const Text('FCM push notifications'),
-                  subtitle: const Text('Requires Hiraukan-owned Firebase configuration; KikoFlu credentials are not copied.'),
+                  subtitle: const Text(
+                    'Requires Hiraukan-owned Firebase configuration; KikoFlu credentials are not copied.',
+                  ),
                   value: _settings.fcmEnabled,
                   onChanged: (value) async {
                     await _settings.setFcmEnabled(value);
+                    await KikoFluNotificationService.instance
+                        .setFcmEnabled(value);
                     if (value) await _testFcm();
                     _refresh();
                   },
@@ -282,7 +311,9 @@ class _KikoFluFeaturesSettingsScreenState
                 SwitchListTile(
                   secondary: const Icon(Icons.high_quality_rounded),
                   title: const Text('Hi-Res output'),
-                  subtitle: const Text('Falls back safely to normal playback when native support is unavailable.'),
+                  subtitle: const Text(
+                    'Falls back safely to normal playback when native support is unavailable.',
+                  ),
                   value: _settings.hiResEnabled,
                   onChanged: (value) async {
                     await _settings.setHiResEnabled(value);
