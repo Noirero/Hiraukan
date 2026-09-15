@@ -2,8 +2,20 @@ name: Build test
 
 on:
   push:
-  
   workflow_dispatch:
+    inputs:
+      target:
+        description: Build target
+        required: true
+        default: android
+        type: choice
+        options:
+          - android
+          - full
+
+concurrency:
+  group: build-test-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -11,6 +23,11 @@ permissions:
 jobs:
   android:
     name: Android Build
+    if: >-
+      github.ref == 'refs/heads/main' ||
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.head_commit.message || '', '[build android]') ||
+      contains(github.event.head_commit.message || '', '[full build]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -134,6 +151,10 @@ jobs:
 
   ios:
     name: iOS Build (Unsigned)
+    if: >-
+      github.ref == 'refs/heads/main' ||
+      (github.event_name == 'workflow_dispatch' && inputs.target == 'full') ||
+      contains(github.event.head_commit.message || '', '[full build]')
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
@@ -167,6 +188,10 @@ jobs:
 
   macos:
     name: macOS Build
+    if: >-
+      github.ref == 'refs/heads/main' ||
+      (github.event_name == 'workflow_dispatch' && inputs.target == 'full') ||
+      contains(github.event.head_commit.message || '', '[full build]')
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
@@ -201,6 +226,10 @@ jobs:
 
   windows:
     name: Windows Build
+    if: >-
+      github.ref == 'refs/heads/main' ||
+      (github.event_name == 'workflow_dispatch' && inputs.target == 'full') ||
+      contains(github.event.head_commit.message || '', '[full build]')
     # Keep this pinned for native plugin compatibility.
     runs-on: windows-2022
     steps:
@@ -252,6 +281,10 @@ jobs:
 
   linux:
     name: Linux x64 Build
+    if: >-
+      github.ref == 'refs/heads/main' ||
+      (github.event_name == 'workflow_dispatch' && inputs.target == 'full') ||
+      contains(github.event.head_commit.message || '', '[full build]')
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v6
@@ -290,6 +323,10 @@ jobs:
 
   linux-arm64:
     name: Linux ARM64 Build
+    if: >-
+      github.ref == 'refs/heads/main' ||
+      (github.event_name == 'workflow_dispatch' && inputs.target == 'full') ||
+      contains(github.event.head_commit.message || '', '[full build]')
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v6
