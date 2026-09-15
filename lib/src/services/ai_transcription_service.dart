@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -35,6 +36,16 @@ class TranscriptionResult {
   });
 }
 
+class TranscriptionSavedEvent {
+  final String audioPath;
+  final String lrcPath;
+
+  const TranscriptionSavedEvent({
+    required this.audioPath,
+    required this.lrcPath,
+  });
+}
+
 /// On-device Whisper transcription ported from KikoFlu.
 /// Models are not bundled into the APK; they are downloaded/imported only
 /// after the user explicitly enables and uses transcription.
@@ -44,6 +55,11 @@ class AiTranscriptionService {
   }
 
   static final instance = AiTranscriptionService._();
+
+  final StreamController<TranscriptionSavedEvent> _savedController =
+      StreamController<TranscriptionSavedEvent>.broadcast(sync: true);
+
+  Stream<TranscriptionSavedEvent> get savedLyrics => _savedController.stream;
 
   WhisperController? _controller;
   WhisperController get _ctrl => _controller ??= WhisperController();
@@ -124,7 +140,9 @@ class AiTranscriptionService {
     } finally {
       client.close(force: true);
       if (wake) {
-        try { await WakelockPlus.disable(); } catch (_) {}
+        try {
+          await WakelockPlus.disable();
+        } catch (_) {}
       }
     }
   }
@@ -170,7 +188,9 @@ class AiTranscriptionService {
       _log.error('Whisper transcription failed: $error', tag: 'AI');
       rethrow;
     } finally {
-      try { await WakelockPlus.disable(); } catch (_) {}
+      try {
+        await WakelockPlus.disable();
+      } catch (_) {}
     }
   }
 
@@ -192,7 +212,10 @@ class AiTranscriptionService {
       splitOnWord: true,
     );
     if (result == null) return null;
-    await File(lrcPath).writeAsString(result.lrcContent, encoding: utf8);
+    await File(lrcPath).writeAsString(result.lrcContent, encoding: utf8, flush: true);
+    _savedController.add(
+      TranscriptionSavedEvent(audioPath: audioPath, lrcPath: lrcPath),
+    );
     return lrcPath;
   }
 
