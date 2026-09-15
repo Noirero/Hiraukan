@@ -81,7 +81,10 @@ class _SearchResultContentState extends ConsumerState<_SearchResultContent> {
 
   bool get _isFederatedSearch {
     final value = widget.keyword.trim();
-    return widget.searchParams == null &&
+    final hasDirectKikoeruSelector =
+        widget.searchParams?.containsKey('vaId') == true ||
+            widget.searchParams?.containsKey('tagId') == true;
+    return !hasDirectKikoeruSelector &&
         value.isNotEmpty &&
         !value.contains(r'$');
   }
