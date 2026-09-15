@@ -42,6 +42,7 @@ class WorksGridView extends ConsumerWidget {
     this.physics,
     this.showInlineLoadingIndicator = false,
     this.unifiedSourcesEnabled = false,
+    this.showUnifiedSourceFilterBar = true,
   });
 
   final List<Work> works;
@@ -75,6 +76,10 @@ class WorksGridView extends ConsumerWidget {
   /// during an earlier federated search.
   final bool unifiedSourcesEnabled;
 
+  /// Search owns the multi-source filter bar. Home supplies its own single-
+  /// source + SFW/NSFW selector, so it disables this automatic search bar.
+  final bool showUnifiedSourceFilterBar;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final displaySettings = ref.watch(workCardDisplayProvider);
@@ -85,7 +90,7 @@ class WorksGridView extends ConsumerWidget {
         works.any((work) => UnifiedSourceRegistry.instance.contains(work.id));
     final effectiveSliversBefore = <Widget>[
       ...sliversBefore,
-      if (hasUnifiedWorks)
+      if (showUnifiedSourceFilterBar && hasUnifiedWorks)
         const SliverToBoxAdapter(child: UnifiedSourceFilterBar()),
     ];
 
