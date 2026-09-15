@@ -9,11 +9,6 @@ class KikoFluFeatureSettings {
 
   static const _prefix = 'hiraukan_kikoflu_';
 
-  bool get crossfadeEnabled =>
-      StorageService.getBool('${_prefix}crossfade_enabled') ?? false;
-  int get crossfadeMs =>
-      StorageService.getInt('${_prefix}crossfade_ms') ?? 1200;
-
   bool get autoConvertWav =>
       StorageService.getBool('${_prefix}auto_convert_wav') ?? false;
   String get conversionFormat =>
@@ -28,18 +23,10 @@ class KikoFluFeatureSettings {
 
   bool get notificationsEnabled =>
       StorageService.getBool('${_prefix}notifications') ?? true;
-  bool get fcmEnabled =>
-      StorageService.getBool('${_prefix}fcm') ?? false;
+  bool get fcmEnabled => StorageService.getBool('${_prefix}fcm') ?? false;
 
-  bool get hiResEnabled =>
-      StorageService.getBool('${_prefix}hi_res') ?? false;
-  bool get autoHiRes =>
-      StorageService.getBool('${_prefix}auto_hi_res') ?? true;
-
-  Future<void> setCrossfadeEnabled(bool value) =>
-      StorageService.setBool('${_prefix}crossfade_enabled', value);
-  Future<void> setCrossfadeMs(int value) =>
-      StorageService.setInt('${_prefix}crossfade_ms', value.clamp(0, 10000));
+  bool get hiResEnabled => StorageService.getBool('${_prefix}hi_res') ?? false;
+  bool get autoHiRes => StorageService.getBool('${_prefix}auto_hi_res') ?? true;
 
   Future<void> setAutoConvertWav(bool value) =>
       StorageService.setBool('${_prefix}auto_convert_wav', value);
