@@ -76,11 +76,19 @@ class AsmrOneSourceAdapter implements UnifiedSourceAdapter {
   @override
   Future<UnifiedSourceHealth> checkHealth() async {
     try {
-      return await api.isConnected()
-          ? UnifiedSourceHealth.healthy
-          : UnifiedSourceHealth.broken;
+      // Probe the configured Kikoeru/ASMR.one API itself rather than merely
+      // checking whether the device has generic internet connectivity.
+      await api.searchWorks(
+        keyword: '',
+        page: 1,
+        pageSize: 1,
+        order: 'create_date',
+        sort: 'desc',
+        subtitle: 0,
+      );
+      return UnifiedSourceHealth.healthy;
     } catch (_) {
-      return UnifiedSourceHealth.unknown;
+      return UnifiedSourceHealth.broken;
     }
   }
 }

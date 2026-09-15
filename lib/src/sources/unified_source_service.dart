@@ -5,6 +5,7 @@ import '../models/work.dart';
 import 'source_adapter.dart';
 import 'source_html_parser.dart';
 import 'unified_source_models.dart';
+import 'unified_source_preferences.dart';
 import 'unified_source_registry.dart';
 
 class UnifiedSourceService {
@@ -47,7 +48,7 @@ class UnifiedSourceService {
     }
 
     final candidates =
-        pages.expand((page) => page.items).toList(growable: false);
+        pages.expand((result) => result.items).toList(growable: false);
     final grouped = <String, List<SourceWorkCandidate>>{};
     for (final candidate in candidates) {
       final key = _canonicalKey(candidate);
@@ -69,9 +70,13 @@ class UnifiedSourceService {
     });
     registry.registerAll(bundles);
 
-    final totalCount =
-        pages.fold<int>(0, (sum, item) => sum + item.totalCount);
     final hasMore = pages.any((item) => item.hasMore);
+    // Provider totals overlap heavily after canonical deduplication. Reporting
+    // their sum makes the UI claim many duplicate works. Use an intentionally
+    // conservative page estimate based on unique bundles instead.
+    final totalCount = (page - 1) * pageSize +
+        bundles.length +
+        (hasMore ? pageSize : 0);
     return UnifiedSearchPage(
       works: bundles.map((bundle) => bundle.work).toList(growable: false),
       totalCount: totalCount,
@@ -80,11 +85,37 @@ class UnifiedSourceService {
     );
   }
 
+  /// Restores persisted mirrors for a work and remembers the richest bundle
+  /// when the user actually opens/plays it.
+  Future<UnifiedWorkBundle?> hydrateWork(Work work) async {
+    final existing = registry.bundleFor(work.id);
+    final cached = await UnifiedSourcePreferences.loadBundle(work);
+    if (cached != null) registry.register(cached);
+
+    final merged = registry.bundleFor(work.id) ??
+        (cached == null ? null : registry.bundleForCanonical(cached.canonicalKey));
+    if (merged != null) {
+      await UnifiedSourcePreferences.saveBundle(merged);
+      return merged;
+    }
+
+    if (existing != null) {
+      await UnifiedSourcePreferences.saveBundle(existing);
+      return existing;
+    }
+
+    final reconstructed = registry.ensureFromWork(work);
+    if (reconstructed != null) {
+      await UnifiedSourcePreferences.saveBundle(reconstructed);
+    }
+    return reconstructed;
+  }
+
   Future<Work> resolveDetail(
     Work work, {
     UnifiedSourceKind? preferredSource,
   }) async {
-    final bundle = registry.bundleFor(work.id);
+    final bundle = await hydrateWork(work);
     if (bundle == null) return work;
 
     Object? lastError;
@@ -118,7 +149,7 @@ class UnifiedSourceService {
     Work work, {
     UnifiedSourceKind? preferredSource,
   }) async {
-    final bundle = registry.bundleFor(work.id);
+    final bundle = await hydrateWork(work);
     if (bundle == null) {
       throw StateError(
         'Unified source metadata is missing for ${work.displayId}',
@@ -330,6 +361,13 @@ class UnifiedSourceService {
     return 'source:${candidate.ref.source.id}:${candidate.ref.localId}';
   }
 
+  int _stableWorkId(String canonicalKey) {
+    if (canonicalKey.startsWith('id:')) {
+      return SourceHtmlParser.stableUnifiedWorkId(canonicalKey.substring(3));
+    }
+    return SourceHtmlParser.stableNegativeId('unified:$canonicalKey');
+  }
+
   UnifiedWorkBundle _mergeGroup(
     String key,
     List<SourceWorkCandidate> candidates,
@@ -371,6 +409,7 @@ class UnifiedSourceService {
 
     final primaryWork = primary.work;
     final work = primaryWork.copyWith(
+      id: _stableWorkId(key),
       sourceId: canonical ?? primaryWork.sourceId,
       sourceUrl: primary.ref.detailUrl,
       images: primaryWork.images ?? (cover == null ? null : [cover]),

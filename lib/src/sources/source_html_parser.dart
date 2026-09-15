@@ -20,6 +20,22 @@ class SourceHtmlParser {
     return '$prefix$digits';
   }
 
+  /// Stable Work.id for a logical unified work.
+  ///
+  /// RJ identifiers deliberately map to their numeric component so a unified
+  /// result keeps compatibility with the legacy Kikoeru/ASMR.one integer id in
+  /// the common case. Other namespaces and metadata-only keys use a stable
+  /// negative id so provider order/availability can never change identity.
+  static int stableUnifiedWorkId(String canonicalKey) {
+    final normalized = canonicalKey.trim().toUpperCase();
+    final rj = RegExp(r'^RJ(\d+)$').firstMatch(normalized);
+    if (rj != null) {
+      final value = int.tryParse(rj.group(1)!);
+      if (value != null && value > 0 && value <= 0x7fffffff) return value;
+    }
+    return stableNegativeId('unified:$normalized');
+  }
+
   static String stripTags(String input) {
     final withoutScripts = input
         .replaceAll(

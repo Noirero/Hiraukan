@@ -8,13 +8,39 @@ class UnifiedSourceRegistry {
   static final UnifiedSourceRegistry instance = UnifiedSourceRegistry._();
 
   final Map<int, UnifiedWorkBundle> _byWorkId = {};
+  final Map<String, UnifiedWorkBundle> _byCanonicalKey = {};
 
   UnifiedWorkBundle? bundleFor(int workId) => _byWorkId[workId];
+
+  UnifiedWorkBundle? bundleForCanonical(String canonicalKey) =>
+      _byCanonicalKey[canonicalKey];
 
   bool contains(int workId) => _byWorkId.containsKey(workId);
 
   void register(UnifiedWorkBundle bundle) {
-    _byWorkId[bundle.work.id] = bundle;
+    final existing =
+        _byCanonicalKey[bundle.canonicalKey] ?? _byWorkId[bundle.work.id];
+    if (existing == null) {
+      _store(bundle);
+      return;
+    }
+
+    final refs = <UnifiedSourceKind, UnifiedSourceRef>{
+      for (final ref in existing.sources) ref.source: ref,
+      for (final ref in bundle.sources) ref.source: ref,
+    };
+    final merged = UnifiedWorkBundle(
+      work: bundle.work,
+      canonicalKey: bundle.canonicalKey,
+      sources: refs.values.toList(growable: false)
+        ..sort((a, b) => a.source.priority.compareTo(b.source.priority)),
+    );
+
+    // Keep old ids as aliases so history written by an earlier development
+    // build can still recover the richer canonical bundle.
+    _byWorkId[existing.work.id] = merged;
+    _byWorkId[bundle.work.id] = merged;
+    _byCanonicalKey[bundle.canonicalKey] = merged;
   }
 
   void registerAll(Iterable<UnifiedWorkBundle> bundles) {
@@ -24,19 +50,23 @@ class UnifiedSourceRegistry {
   }
 
   /// Recreates enough source metadata for persisted history/library entries to
-  /// remain usable after an app restart. This intentionally restores only the
-  /// source represented by the persisted Work; a later federated search can
-  /// enrich the same work with additional mirrors again.
+  /// remain usable after an app restart. A persisted multi-source bundle is
+  /// loaded asynchronously by UnifiedSourceService before this fallback is used.
   UnifiedWorkBundle? ensureFromWork(Work work) {
-    final existing = _byWorkId[work.id];
-    if (existing != null) return existing;
+    final canonical = SourceHtmlParser.canonicalMatchKey(
+      work.sourceId ?? work.title,
+    );
+    final canonicalKey = canonical == null ? null : 'id:$canonical';
+    final existing = _byWorkId[work.id] ??
+        (canonicalKey == null ? null : _byCanonicalKey[canonicalKey]);
+    if (existing != null) {
+      _byWorkId[work.id] = existing;
+      return existing;
+    }
 
     final source = _inferSource(work);
     if (source == null) return null;
 
-    final canonical = SourceHtmlParser.extractCanonicalId(
-      work.sourceId ?? work.title,
-    );
     final detailUrl = work.sourceUrl ?? _defaultDetailUrl(source, work);
     if (detailUrl == null || detailUrl.isEmpty) return null;
 
@@ -58,9 +88,7 @@ class UnifiedSourceRegistry {
     );
     final bundle = UnifiedWorkBundle(
       work: work,
-      canonicalKey: canonical == null
-          ? 'source:${source.id}:$localId'
-          : 'id:${SourceHtmlParser.canonicalMatchKey(canonical) ?? canonical}',
+      canonicalKey: canonicalKey ?? 'source:${source.id}:$localId',
       sources: [ref],
     );
     register(bundle);
@@ -80,8 +108,6 @@ class UnifiedSourceRegistry {
       return UnifiedSourceKind.asmrOne;
     }
 
-    // Existing Kikoeru/ASMR.one works use positive backend IDs. External-only
-    // results deliberately use negative IDs, so this is a safe last fallback.
     if (work.id > 0) return UnifiedSourceKind.asmrOne;
     return null;
   }
@@ -97,5 +123,13 @@ class UnifiedSourceRegistry {
     };
   }
 
-  void clear() => _byWorkId.clear();
+  void _store(UnifiedWorkBundle bundle) {
+    _byWorkId[bundle.work.id] = bundle;
+    _byCanonicalKey[bundle.canonicalKey] = bundle;
+  }
+
+  void clear() {
+    _byWorkId.clear();
+    _byCanonicalKey.clear();
+  }
 }
