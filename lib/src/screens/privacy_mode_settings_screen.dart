@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
+import 'app_lock_settings_screen.dart';
 import '../providers/settings_provider.dart';
+import '../services/app_lock_service.dart';
 import '../utils/snackbar_util.dart';
 import '../widgets/settings_section.dart';
 import '../widgets/common_input_dialog.dart';
@@ -53,6 +55,7 @@ class _PrivacyModeSettingsScreenState
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(privacyModeSettingsProvider);
+    final appLockEnabled = AppLockService.instance.isEnabled;
 
     return SettingsSubpageScaffold(
       title: S.of(context).privacyModeSettingsTitle,
@@ -218,6 +221,32 @@ class _PrivacyModeSettingsScreenState
                       : null,
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // App Lock — ported from KikoFlu and adapted to Hiraukan.
+          SettingsSectionCard(
+            child: SettingsListTile(
+              icon: appLockEnabled
+                  ? Icons.lock_rounded
+                  : Icons.lock_outline_rounded,
+              iconColor: appLockEnabled
+                  ? Colors.green
+                  : Theme.of(context).colorScheme.primary,
+              title: 'App Lock',
+              subtitle: appLockEnabled
+                  ? 'Aktif — lindungi Hiraukan dengan PIN/biometrik'
+                  : 'Kunci Hiraukan dengan PIN dan biometrik perangkat',
+              trailing: const Icon(Icons.arrow_forward_ios),
+              onTap: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const AppLockSettingsScreen(),
+                  ),
+                );
+                if (mounted) setState(() {});
+              },
             ),
           ),
           const SizedBox(height: 16),
