@@ -40,8 +40,10 @@ class KikoFluFeatureSettings {
       StorageService.setBool('${_prefix}ai_transcription', value);
   Future<void> setWhisperModel(String value) =>
       StorageService.setString('${_prefix}whisper_model', value);
-  Future<void> setWhisperThreads(int value) =>
-      StorageService.setInt('${_prefix}whisper_threads', value.clamp(1, 16));
+  Future<void> setWhisperThreads(int value) => StorageService.setInt(
+        '${_prefix}whisper_threads',
+        value.clamp(1, 16).toInt(),
+      );
 
   Future<void> setNotificationsEnabled(bool value) =>
       StorageService.setBool('${_prefix}notifications', value);
