@@ -2,8 +2,6 @@
 library just_audio_media_kit;
 
 import 'dart:collection';
-import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:just_audio_media_kit/mediakit_player.dart';
@@ -46,7 +44,8 @@ class JustAudioMediaKit extends JustAudioPlatform {
   ///
   /// This is highly experimental. Use at your own risk.
   ///
-  /// Check mpv's docs and the related just_audio_media_kit issue for details.
+  /// Check [mpv's docs](https://mpv.io/manual/stable/#options-prefetch-playlist) and
+  /// [the related issue](https://github.com/Pato05/just_audio_media_kit/issues/11) for more information
   static bool prefetchPlaylist = false;
 
   static final _logger = Logger('JustAudioMediaKit');
@@ -54,44 +53,6 @@ class JustAudioMediaKit extends JustAudioPlatform {
 
   /// Players that are disposing (player id -> future that completes when the player is disposed)
   final _disposingPlayers = HashMap<String, Future<void>>();
-
-  /// Hiraukan writes its normal mpv.conf immediately before this adapter is
-  /// initialized. On Windows, overlay the optional selected WASAPI endpoint at
-  /// this exact point so existing passthrough/proxy/video settings are kept.
-  static void _applyHiraukanWindowsAudioSidecar() {
-    if (!UniversalPlatform.isWindows) return;
-    try {
-      final exeDir = File(Platform.resolvedExecutable).parent;
-      final separator = Platform.pathSeparator;
-      final configDir = Directory('${exeDir.path}${separator}portable_config');
-      final sidecar = File('${configDir.path}${separator}hiraukan_wasapi.json');
-      if (!sidecar.existsSync()) return;
-      final decoded = jsonDecode(sidecar.readAsStringSync());
-      if (decoded is! Map || decoded['enabled'] != true) return;
-      final deviceId = decoded['deviceId']?.toString().trim() ?? '';
-      if (deviceId.isEmpty) return;
-
-      final config = File('${configDir.path}${separator}mpv.conf');
-      final original = config.existsSync() ? config.readAsStringSync() : '';
-      final filtered = original
-          .split('\n')
-          .where((line) =>
-              !line.startsWith('ao=') &&
-              !line.startsWith('audio-exclusive=') &&
-              !line.startsWith('audio-device='))
-          .join('\n')
-          .trimRight();
-      final output = StringBuffer();
-      if (filtered.isNotEmpty) output.writeln(filtered);
-      output
-        ..writeln('ao=wasapi')
-        ..writeln('audio-exclusive=yes')
-        ..writeln('audio-device=wasapi/$deviceId');
-      config.writeAsStringSync(output.toString());
-    } catch (error) {
-      _logger.warning('Failed to apply Hiraukan WASAPI device: $error');
-    }
-  }
 
   /// Initializes the plugin if the platform we're running on is marked
   /// as true, otherwise it will leave everything unchanged.
@@ -113,7 +74,6 @@ class JustAudioMediaKit extends JustAudioPlatform {
         (UniversalPlatform.isAndroid && android) ||
         (UniversalPlatform.isIOS && iOS) ||
         (UniversalPlatform.isMacOS && macOS)) {
-      _applyHiraukanWindowsAudioSidecar();
       registerWith();
       MediaKit.ensureInitialized(libmpv: libmpv);
     }
@@ -162,6 +122,7 @@ class JustAudioMediaKit extends JustAudioPlatform {
     await future;
     _disposingPlayers.remove(request.id);
 
+    _logger.fine('player ${request.id} disposed!');
     return DisposePlayerResponse();
   }
 
