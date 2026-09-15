@@ -14,9 +14,9 @@ import '../utils/subtitle_filter.dart';
 import '../utils/paged_collection.dart';
 import '../utils/persistent_enum_preference.dart';
 import '../sources/unified_source_models.dart';
+import '../sources/unified_source_preferences.dart';
 import '../sources/unified_source_provider.dart';
 
-// Layout types for search results
 enum SearchLayoutType {
   list,
   smallGrid,
@@ -169,7 +169,8 @@ class SearchResultNotifier extends StateNotifier<SearchResultState> {
 
   SearchResultNotifier(this._apiService, this._ref, {int initialPageSize = 20})
       : super(SearchResultState(basePageSize: initialPageSize)) {
-    _loadLayoutPreference();
+    unawaited(_loadLayoutPreference());
+    unawaited(_loadSourcePreferences());
   }
 
   Future<void> _loadLayoutPreference() async {
@@ -180,6 +181,21 @@ class SearchResultNotifier extends StateNotifier<SearchResultState> {
       error: state.error,
       loadMoreError: state.loadMoreError,
     );
+  }
+
+  Future<void> _loadSourcePreferences() async {
+    final enabled = await UnifiedSourcePreferences.loadEnabledSources();
+    if (!mounted ||
+        (enabled.length == state.enabledSources.length &&
+            enabled.containsAll(state.enabledSources))) {
+      return;
+    }
+    state = state.copyWith(enabledSources: enabled);
+    if (state.keyword.trim().isNotEmpty &&
+        state.searchParams == null &&
+        _supportsFederatedSearch(state.keyword)) {
+      await loadResults(targetPage: 1, supersede: true);
+    }
   }
 
   Future<void> initializeSearch({
@@ -335,8 +351,6 @@ class SearchResultNotifier extends StateNotifier<SearchResultState> {
   bool _supportsFederatedSearch(String keyword) {
     final value = keyword.trim();
     if (value.isEmpty) return false;
-    // Advanced Kikoeru syntax (tag/circle/VA/rating exclusions) remains on the
-    // Kikoeru backend because the external sources do not share that grammar.
     return !value.contains(r'$');
   }
 
@@ -348,19 +362,29 @@ class SearchResultNotifier extends StateNotifier<SearchResultState> {
       next.remove(source);
     }
     if (next.length == state.enabledSources.length &&
-        next.containsAll(state.enabledSources)) return;
-    state = state.copyWith(enabledSources: next, currentPage: 1, works: [], rawWorks: []);
-    refresh();
-  }
-
-  void enableAllSources() {
+        next.containsAll(state.enabledSources)) {
+      return;
+    }
     state = state.copyWith(
-      enabledSources: UnifiedSourceKind.values.toSet(),
+      enabledSources: next,
       currentPage: 1,
       works: [],
       rawWorks: [],
     );
-    refresh();
+    unawaited(UnifiedSourcePreferences.saveEnabledSources(next));
+    unawaited(refresh());
+  }
+
+  void enableAllSources() {
+    final all = UnifiedSourceKind.values.toSet();
+    state = state.copyWith(
+      enabledSources: all,
+      currentPage: 1,
+      works: [],
+      rawWorks: [],
+    );
+    unawaited(UnifiedSourcePreferences.saveEnabledSources(all));
+    unawaited(refresh());
   }
 
   void reapplyFilters() {
