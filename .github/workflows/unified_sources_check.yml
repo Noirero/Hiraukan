@@ -16,6 +16,7 @@ on:
       - 'lib/src/providers/history_provider.dart'
       - 'test/source_html_parser_test.dart'
       - 'test/unified_source_service_test.dart'
+      - '.github/workflows/build_test_only.yml'
       - '.github/workflows/unified_sources_check.yml'
   workflow_dispatch:
 
