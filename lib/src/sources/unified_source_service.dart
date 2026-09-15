@@ -23,7 +23,8 @@ class UnifiedSourceService {
     Set<UnifiedSourceKind>? enabledSources,
   }) async {
     final enabled = enabledSources ?? UnifiedSourceKind.values.toSet();
-    final selected = adapters.where((adapter) => enabled.contains(adapter.kind)).toList();
+    final selected =
+        adapters.where((adapter) => enabled.contains(adapter.kind)).toList();
     final health = <UnifiedSourceKind, UnifiedSourceHealth>{};
     final pages = <SourceSearchPage>[];
 
@@ -45,7 +46,8 @@ class UnifiedSourceService {
       health.putIfAbsent(source, () => UnifiedSourceHealth.unknown);
     }
 
-    final candidates = pages.expand((page) => page.items).toList(growable: false);
+    final candidates =
+        pages.expand((page) => page.items).toList(growable: false);
     final grouped = <String, List<SourceWorkCandidate>>{};
     for (final candidate in candidates) {
       final key = _canonicalKey(candidate);
@@ -54,21 +56,21 @@ class UnifiedSourceService {
 
     final bundles = <UnifiedWorkBundle>[];
     for (final entry in grouped.entries) {
-      final bundle = _mergeGroup(entry.key, entry.value);
-      bundles.add(bundle);
+      bundles.add(_mergeGroup(entry.key, entry.value));
     }
 
     bundles.sort((a, b) {
-      final aSources = a.sources.length;
-      final bSources = b.sources.length;
-      if (aSources != bSources) return bSources.compareTo(aSources);
+      if (a.sources.length != b.sources.length) {
+        return b.sources.length.compareTo(a.sources.length);
+      }
       final aRelease = a.work.release ?? '';
       final bRelease = b.work.release ?? '';
       return bRelease.compareTo(aRelease);
     });
     registry.registerAll(bundles);
 
-    final totalCount = pages.fold<int>(0, (sum, item) => sum + item.totalCount);
+    final totalCount =
+        pages.fold<int>(0, (sum, item) => sum + item.totalCount);
     final hasMore = pages.any((item) => item.hasMore);
     return UnifiedSearchPage(
       works: bundles.map((bundle) => bundle.work).toList(growable: false),
@@ -118,7 +120,9 @@ class UnifiedSourceService {
   }) async {
     final bundle = registry.bundleFor(work.id);
     if (bundle == null) {
-      throw StateError('Unified source metadata is missing for ${work.displayId}');
+      throw StateError(
+        'Unified source metadata is missing for ${work.displayId}',
+      );
     }
 
     Object? lastError;
@@ -130,19 +134,25 @@ class UnifiedSourceService {
       try {
         final files = await adapter.loadTracks(ref);
         if (files.isEmpty) {
-          lastError = StateError('${ref.source.label} returned no playable tracks');
+          lastError = StateError(
+            '${ref.source.label} returned no playable tracks',
+          );
           continue;
         }
         return ResolvedSourceTracks(
           source: ref,
           files: files,
-          usedFallback: preferredSource != null && ref.source != preferredSource || attempted > 1,
+          usedFallback:
+              (preferredSource != null && ref.source != preferredSource) ||
+                  attempted > 1,
         );
       } catch (error) {
         lastError = error;
       }
     }
-    throw StateError('No playable source is currently available: $lastError');
+    throw StateError(
+      'No playable source is currently available: $lastError',
+    );
   }
 
   List<AudioTrack> buildAudioTracks({
@@ -152,6 +162,7 @@ class UnifiedSourceService {
     required String token,
   }) {
     final flattened = <Map<String, dynamic>>[];
+
     void visit(List<dynamic> files) {
       for (final raw in files) {
         if (raw is! Map) continue;
@@ -160,7 +171,8 @@ class UnifiedSourceService {
         if (children is List) visit(children);
         final type = file['type']?.toString().toLowerCase();
         if (type == 'folder') continue;
-        final title = file['title']?.toString() ?? file['name']?.toString() ?? '';
+        final title =
+            file['title']?.toString() ?? file['name']?.toString() ?? '';
         final lower = title.toLowerCase();
         final looksAudio = type == 'audio' ||
             lower.endsWith('.mp3') ||
@@ -169,18 +181,25 @@ class UnifiedSourceService {
             lower.endsWith('.ogg') ||
             lower.endsWith('.opus') ||
             lower.endsWith('.wav') ||
-            lower.endsWith('.flac');
+            lower.endsWith('.flac') ||
+            lower.endsWith('.wma') ||
+            lower.endsWith('.m4b');
         if (looksAudio) flattened.add(file);
       }
     }
 
     visit(resolved.files);
-    final normalizedHost = host.isEmpty || host.startsWith('http') ? host : 'https://$host';
+    final normalizedHost = host.isEmpty || host.startsWith('http')
+        ? host
+        : 'https://$host';
     final bundle = registry.bundleFor(work.id);
     final artwork = bundle?.coverUrl ??
-        (normalizedHost.isEmpty ? null : work.getCoverImageUrl(normalizedHost, token: token));
+        (normalizedHost.isEmpty
+            ? null
+            : work.getCoverImageUrl(normalizedHost, token: token));
 
-    return flattened.asMap().entries.map((entry) {
+    final tracks = <AudioTrack>[];
+    for (final entry in flattened.asMap().entries) {
       final file = entry.value;
       final hash = file['hash']?.toString();
       var url = file['mediaStreamUrl']?.toString() ??
@@ -193,30 +212,37 @@ class UnifiedSourceService {
           resolved.source.source == UnifiedSourceKind.asmrOne) {
         url = '$normalizedHost/api/media/stream/$hash?token=$token';
       }
-      if (url == null || url.isEmpty) {
-        throw StateError('Track ${file['title'] ?? entry.key} has no playable URL');
-      }
+      // A malformed item must not make an otherwise playable source unusable.
+      if (url == null || url.isEmpty) continue;
+
       final durationValue = file['duration'];
-      final durationSeconds = durationValue is num ? durationValue.toDouble() : null;
+      final durationSeconds =
+          durationValue is num ? durationValue.toDouble() : null;
       final title = file['title']?.toString() ??
           file['name']?.toString() ??
           SourceHtmlParser.basenameFromUrl(url, entry.key);
-      final identity = hash ?? '${resolved.source.source.id}:${resolved.source.localId}:${entry.key}';
-      return AudioTrack(
-        id: identity,
-        title: title,
-        url: url,
-        artist: work.name,
-        album: work.title,
-        artworkUrl: artwork,
-        duration: durationSeconds == null
-            ? null
-            : Duration(milliseconds: (durationSeconds * 1000).round()),
-        workId: work.id,
-        hash: hash ?? identity,
-        sourcePath: resolved.source.detailUrl,
+      final identity = hash ??
+          '${resolved.source.source.id}:${resolved.source.localId}:${entry.key}';
+      tracks.add(
+        AudioTrack(
+          id: identity,
+          title: title,
+          url: url,
+          artist: work.name,
+          album: work.title,
+          artworkUrl: artwork,
+          duration: durationSeconds == null
+              ? null
+              : Duration(
+                  milliseconds: (durationSeconds * 1000).round(),
+                ),
+          workId: work.id,
+          hash: hash ?? identity,
+          sourcePath: resolved.source.detailUrl,
+        ),
       );
-    }).toList(growable: false);
+    }
+    return tracks;
   }
 
   Future<Map<UnifiedSourceKind, UnifiedSourceHealth>> checkHealth() async {
@@ -242,7 +268,8 @@ class UnifiedSourceService {
     List<UnifiedSourceRef> refs,
     UnifiedSourceKind? preferred,
   ) sync* {
-    final copy = [...refs]..sort((a, b) => a.source.priority.compareTo(b.source.priority));
+    final copy = [...refs]
+      ..sort((a, b) => a.source.priority.compareTo(b.source.priority));
     if (preferred != null) {
       for (final ref in copy) {
         if (ref.source == preferred) yield ref;
@@ -261,7 +288,9 @@ class UnifiedSourceService {
 
     final title = _normalize(candidate.work.title);
     final circle = _normalize(candidate.work.name ?? candidate.ref.circle ?? '');
-    if (title.isNotEmpty && circle.isNotEmpty) return 'meta:$title|$circle';
+    if (title.isNotEmpty && circle.isNotEmpty) {
+      return 'meta:$title|$circle';
+    }
 
     // Avoid false merges when the canonical product id and creator are unknown.
     return 'source:${candidate.ref.source.id}:${candidate.ref.localId}';
@@ -280,34 +309,51 @@ class UnifiedSourceService {
       if (seenSource.add(candidate.ref.source)) refs.add(candidate.ref);
     }
 
-    final canonical = refs
-        .map((ref) => ref.canonicalId)
-        .whereType<String>()
-        .cast<String?>()
-        .firstWhere((value) => value != null && value.isNotEmpty, orElse: () => null);
-    String? cover;
+    String? canonical;
     for (final ref in refs) {
-      if (ref.coverUrl != null && ref.coverUrl!.isNotEmpty) {
-        cover = ref.coverUrl;
+      final value = ref.canonicalId;
+      if (value != null && value.isNotEmpty) {
+        canonical = value;
         break;
       }
     }
+
+    String? cover;
+    for (final ref in refs) {
+      final value = ref.coverUrl;
+      if (value != null && value.isNotEmpty) {
+        cover = value;
+        break;
+      }
+    }
+
+    int? duration;
+    for (final ref in refs) {
+      if (ref.durationSeconds != null) {
+        duration = ref.durationSeconds;
+        break;
+      }
+    }
+
     final primaryWork = primary.work;
     final work = primaryWork.copyWith(
       sourceId: canonical ?? primaryWork.sourceId,
       sourceUrl: primary.ref.detailUrl,
       images: primaryWork.images ?? (cover == null ? null : [cover]),
-      duration: primaryWork.duration ?? refs.map((ref) => ref.durationSeconds).whereType<int>().firstOrNull,
+      duration: primaryWork.duration ?? duration,
     );
-    return UnifiedWorkBundle(work: work, canonicalKey: key, sources: refs);
+    return UnifiedWorkBundle(
+      work: work,
+      canonicalKey: key,
+      sources: refs,
+    );
   }
 
   String _normalize(String value) => value
       .toLowerCase()
-      .replaceAll(RegExp(r'[^a-z0-9\u3040-\u30ff\u3400-\u9fff]+'), '')
+      .replaceAll(
+        RegExp(r'[^a-z0-9\u3040-\u30ff\u3400-\u9fff]+'),
+        '',
+      )
       .trim();
-}
-
-extension _FirstOrNull<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
 }
