@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new_min/return_code.dart';
 import 'package:ffmpeg_kit_flutter_new_min/session.dart';
-import 'package:flutter/services.dart';
 
 import 'log_service.dart';
 
@@ -27,13 +26,11 @@ enum WavConversionFormat {
       );
 }
 
-/// KikoFlu-derived WAV conversion with guarded platform strategies.
+/// KikoFlu-derived WAV conversion adapted for Hiraukan's Android path.
 /// Conversion is opt-in and never changes Hiraukan's download layout.
 class AudioConversionService {
   AudioConversionService._();
   static final instance = AudioConversionService._();
-
-  static const _iosChannel = MethodChannel('com.kikoeru.flutter/audio_conversion');
 
   String outputPath(String input, WavConversionFormat format) {
     final file = File(input);
@@ -44,33 +41,15 @@ class AudioConversionService {
     return '${file.parent.path}${Platform.pathSeparator}$stem${format.extension}';
   }
 
-  bool isSupported(WavConversionFormat format) {
-    if (format == WavConversionFormat.none) return true;
-    if (Platform.isAndroid ||
-        Platform.isWindows ||
-        Platform.isLinux ||
-        Platform.isMacOS) {
-      return true;
-    }
-    if (Platform.isIOS) {
-      return format == WavConversionFormat.alac ||
-          format == WavConversionFormat.aac;
-    }
-    return false;
-  }
+  bool isSupported(WavConversionFormat format) =>
+      Platform.isAndroid && format != WavConversionFormat.none;
 
-  /// Runtime encoder guard matching KikoFlu's later hardening. The Android
-  /// min FFmpeg build only exposes the built-in formats kept in this enum.
   Future<bool> isEncoderAvailable(WavConversionFormat format) async {
-    if (!isSupported(format)) return false;
-    if (format == WavConversionFormat.none) return true;
-    if (Platform.isAndroid) return true;
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-      return await _findFfmpeg() != null;
-    }
-    // iOS support is provided by an optional native channel; the real check is
-    // the conversion call itself so a missing bridge safely keeps the WAV.
-    return Platform.isIOS;
+    if (!Platform.isAndroid || !isSupported(format)) return false;
+    // The Android FFmpeg package bundles the encoders used by the formats
+    // exposed above. If that package becomes unavailable, conversion itself
+    // fails closed and the original WAV is kept.
+    return true;
   }
 
   List<String> _args(WavConversionFormat format, String input, String output) {
@@ -125,7 +104,8 @@ class AudioConversionService {
     void Function(double progress)? onProgress,
     bool deleteOriginal = true,
   }) async {
-    if (format == WavConversionFormat.none || !isSupported(format)) return null;
+    if (!Platform.isAndroid || !isSupported(format)) return null;
+
     final source = File(input);
     if (!await source.exists() || !input.toLowerCase().endsWith('.wav')) {
       return null;
@@ -140,8 +120,8 @@ class AudioConversionService {
 
     final output = outputPath(input, format);
     final out = File(output);
-    // Never destroy a pre-existing download with the same stem. A collision is
-    // safer as a no-op; the original WAV remains available to Hiraukan.
+    // Never overwrite an existing download with the same stem. A collision is
+    // a no-op so the original WAV remains usable.
     if (await out.exists()) {
       _log.warning(
         'Conversion target already exists; keeping original WAV: $output',
@@ -163,29 +143,12 @@ class AudioConversionService {
     }
 
     try {
-      String? convertedTemporary;
-      if (Platform.isAndroid) {
-        convertedTemporary = await _convertAndroid(
-          source,
-          temporaryOutput,
-          format,
-          onProgress,
-        );
-      } else if (Platform.isIOS) {
-        convertedTemporary = await _convertIos(
-          source,
-          temporaryOutput,
-          format,
-        );
-      } else if (Platform.isWindows ||
-          Platform.isLinux ||
-          Platform.isMacOS) {
-        convertedTemporary = await _convertDesktop(
-          source,
-          temporaryOutput,
-          format,
-        );
-      }
+      final convertedTemporary = await _convertAndroid(
+        source,
+        temporaryOutput,
+        format,
+        onProgress,
+      );
 
       if (convertedTemporary == null || !await temporary.exists()) return null;
       final convertedSize = await temporary.length();
@@ -226,7 +189,8 @@ class AudioConversionService {
     final inputLength = await input.length();
     final args = _args(format, input.path, output);
     final cmd = args
-        .map((value) => value.contains(' ') ? '"${value.replaceAll('"', '\\"')}"' : value)
+        .map((value) =>
+            value.contains(' ') ? '"${value.replaceAll('"', '\\"')}"' : value)
         .join(' ');
     final completer = Completer<Session>();
 
@@ -239,7 +203,7 @@ class AudioConversionService {
       (statistics) {
         if (inputLength > 0) {
           onProgress?.call(
-            (statistics.getSize() / inputLength).clamp(0.0, 0.99),
+            (statistics.getSize() / inputLength).clamp(0.0, 0.99).toDouble(),
           );
         }
       },
@@ -253,85 +217,6 @@ class AudioConversionService {
         await file.length() > 0) {
       return output;
     }
-    return null;
-  }
-
-  Future<String?> _convertIos(
-    File input,
-    String output,
-    WavConversionFormat format,
-  ) async {
-    try {
-      final value = await _iosChannel.invokeMethod<String>('convertWav', {
-        'inputPath': input.path,
-        'outputPath': output,
-        'format': format.value,
-      });
-      final file = File(output);
-      return value == 'success' &&
-              await file.exists() &&
-              await file.length() > 0
-          ? output
-          : null;
-    } on MissingPluginException {
-      _log.warning(
-        'Native iOS conversion channel is unavailable',
-        tag: 'AudioConv',
-      );
-      return null;
-    }
-  }
-
-  Future<String?> _convertDesktop(
-    File input,
-    String output,
-    WavConversionFormat format,
-  ) async {
-    final executable = await _findFfmpeg();
-    if (executable == null) {
-      _log.warning('ffmpeg not found; keeping original WAV', tag: 'AudioConv');
-      return null;
-    }
-
-    final process = await Process.start(
-      executable,
-      _args(format, input.path, output),
-    );
-    final stdoutDrain = process.stdout.drain<void>();
-    final stderrFuture = process.stderr
-        .transform(const SystemEncoding().decoder)
-        .join();
-    final code = await process.exitCode;
-    await stdoutDrain;
-    final stderr = await stderrFuture;
-    final file = File(output);
-    if (code == 0 && await file.exists() && await file.length() > 0) {
-      return output;
-    }
-    _log.error('ffmpeg failed ($code): $stderr', tag: 'AudioConv');
-    return null;
-  }
-
-  Future<String?> _findFfmpeg() async {
-    try {
-      if (Platform.isWindows) {
-        final found = await Process.run(
-          'where',
-          ['ffmpeg.exe'],
-          runInShell: true,
-        );
-        if (found.exitCode == 0) {
-          final path = found.stdout.toString().trim().split('\n').first.trim();
-          if (path.isNotEmpty) return path;
-        }
-      } else {
-        final found = await Process.run('which', ['ffmpeg']);
-        if (found.exitCode == 0) {
-          final path = found.stdout.toString().trim();
-          if (path.isNotEmpty) return path;
-        }
-      }
-    } catch (_) {}
     return null;
   }
 }
