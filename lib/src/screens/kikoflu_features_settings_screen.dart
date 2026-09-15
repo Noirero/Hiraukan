@@ -105,8 +105,7 @@ class _KikoFluFeaturesSettingsScreenState
             ));
           }
           if (!mounted) return;
-          setState(() => _status =
-              'Transcribing $done/$total — $fileName');
+          setState(() => _status = 'Transcribing $done/$total — $fileName');
         },
       );
 
@@ -208,7 +207,7 @@ class _KikoFluFeaturesSettingsScreenState
                     _refresh();
                   },
                 ),
-                if (_floatingLyric.shadowEnabled) ...[
+                if (_floatingLyric.shadowEnabled)
                   ListTile(
                     title: const Text('Shadow blur'),
                     subtitle: Slider(
@@ -223,7 +222,6 @@ class _KikoFluFeaturesSettingsScreenState
                       },
                     ),
                   ),
-                ],
                 ListTile(
                   title: const Text('Background style'),
                   trailing: DropdownButton<int>(
@@ -263,29 +261,6 @@ class _KikoFluFeaturesSettingsScreenState
           Card(
             child: Column(
               children: [
-                SwitchListTile(
-                  secondary: const Icon(Icons.multitrack_audio_rounded),
-                  title: const Text('Crossfade'),
-                  subtitle: Text('${_settings.crossfadeMs} ms between tracks'),
-                  value: _settings.crossfadeEnabled,
-                  onChanged: (value) async {
-                    await _settings.setCrossfadeEnabled(value);
-                    _refresh();
-                  },
-                ),
-                if (_settings.crossfadeEnabled)
-                  Slider(
-                    value: _settings.crossfadeMs.toDouble(),
-                    min: 250,
-                    max: 5000,
-                    divisions: 19,
-                    label: '${_settings.crossfadeMs} ms',
-                    onChanged: (value) async {
-                      await _settings.setCrossfadeMs(value.round());
-                      _refresh();
-                    },
-                  ),
-                const Divider(height: 1),
                 SwitchListTile(
                   secondary: const Icon(Icons.transform_rounded),
                   title: const Text('Auto-convert WAV after download'),
@@ -356,7 +331,7 @@ class _KikoFluFeaturesSettingsScreenState
                         'small',
                         'medium',
                         'large',
-                        'largeV3Turbo'
+                        'largeV3Turbo',
                       ]
                           .map((name) => DropdownMenuItem(
                                 value: name,
