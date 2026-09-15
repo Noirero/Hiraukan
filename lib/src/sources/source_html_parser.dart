@@ -65,11 +65,11 @@ class SourceHtmlParser {
     final escaped = RegExp.escape(key);
     final patterns = [
       RegExp(
-        '<meta[^>]+(?:property|name)=["\']$escaped["\'][^>]+content=["\']([^"\']+)["\']',
+        '''<meta[^>]+(?:property|name)=["']$escaped["'][^>]+content=["']([^"']+)["']''',
         caseSensitive: false,
       ),
       RegExp(
-        '<meta[^>]+content=["\']([^"\']+)["\'][^>]+(?:property|name)=["\']$escaped["\']',
+        '''<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']$escaped["']''',
         caseSensitive: false,
       ),
     ];
