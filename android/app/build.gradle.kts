@@ -14,7 +14,7 @@ if (keystorePropertiesFile.exists()) {
 }
 val releaseKeystoreFile = keystoreProperties.getProperty("storeFile")?.let(rootProject::file)
 val hasReleaseKeystore = releaseKeystoreFile?.exists() == true
-val testKeystoreFile = rootProject.file("hiraukan-test-key.jks")
+val betaKeystoreFile = rootProject.file("hiraukan-beta-key.jks")
 
 android {
     // Keep the Kotlin/Java namespace stable for now so native channel classes do not need to move.
@@ -45,8 +45,8 @@ android {
     }
 
     signingConfigs {
-        create("hiraukanTest") {
-            storeFile = testKeystoreFile
+        create("hiraukanBeta") {
+            storeFile = betaKeystoreFile
             storePassword = "hiraukan-test-only-2026"
             keyAlias = "hiraukan-test"
             keyPassword = "hiraukan-test-only-2026"
@@ -63,14 +63,12 @@ android {
 
     flavorDimensions += "distribution"
     productFlavors {
-        // AGP reserves flavor names beginning with "test". Keep the user-facing
-        // identity as Hiraukan Test while using a neutral internal flavor name.
-        create("qa") {
+        create("beta") {
             dimension = "distribution"
-            applicationIdSuffix = ".test"
-            versionNameSuffix = "-test"
-            manifestPlaceholders["appLabel"] = "Hiraukan Test"
-            signingConfig = signingConfigs.getByName("hiraukanTest")
+            applicationIdSuffix = ".beta"
+            versionNameSuffix = "-beta"
+            manifestPlaceholders["appLabel"] = "Hiraukan Beta"
+            signingConfig = signingConfigs.getByName("hiraukanBeta")
         }
         create("prod") {
             dimension = "distribution"
@@ -83,7 +81,7 @@ android {
 
     buildTypes {
         release {
-            // Signing is selected by flavor. QA uses the committed test-only key;
+            // Signing is selected by flavor. Beta uses a stable beta-only key;
             // prod is signed only when the permanent release key is provided.
         }
         debug {
