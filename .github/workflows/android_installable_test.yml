@@ -1,0 +1,109 @@
+name: Android Installable Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-installable-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Stable-signed Android test APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Require stable test signing secrets
+        env:
+          TEST_ANDROID_KEYSTORE_BASE64: ${{ secrets.TEST_ANDROID_KEYSTORE_BASE64 }}
+          TEST_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.TEST_ANDROID_KEYSTORE_PASSWORD }}
+          TEST_ANDROID_KEY_ALIAS: ${{ secrets.TEST_ANDROID_KEY_ALIAS }}
+          TEST_ANDROID_KEY_PASSWORD: ${{ secrets.TEST_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in TEST_ANDROID_KEYSTORE_BASE64 TEST_ANDROID_KEYSTORE_PASSWORD TEST_ANDROID_KEY_ALIAS TEST_ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::$name is missing. Stable signing is required so test APK updates do not conflict on Android."
+              exit 1
+            fi
+          done
+          printf '%s' "$TEST_ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-key.jks
+          cat <<EOF > android/key.properties
+          storeFile=app/release-key.jks
+          storePassword=$TEST_ANDROID_KEYSTORE_PASSWORD
+          keyAlias=$TEST_ANDROID_KEY_ALIAS
+          keyPassword=$TEST_ANDROID_KEY_PASSWORD
+          EOF
+          chmod 600 android/app/release-key.jks android/key.properties
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.7'
+          channel: stable
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build Android APKs
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          flutter build apk --release
+          mv build/app/outputs/flutter-apk/app-release.apk dist/KikoFlu-Hiraukan-universal-test.apk
+          flutter build apk --release --split-per-abi
+          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk dist/KikoFlu-Hiraukan-arm64-v8a-test.apk
+
+      - name: Verify package and stable test certificate
+        env:
+          EXPECTED_TEST_CERT_SHA256: e7cec9376a9eb7d7050975f780eb66c163a6410bd0b1123f865c699f70b2db58
+        run: |
+          set -euo pipefail
+          build_tools_dir="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          aapt="$build_tools_dir/aapt"
+          apksigner="$build_tools_dir/apksigner"
+          universal_apk="dist/KikoFlu-Hiraukan-universal-test.apk"
+          arm64_apk="dist/KikoFlu-Hiraukan-arm64-v8a-test.apk"
+
+          universal_badging="$("$aapt" dump badging "$universal_apk" | sed -n '1p')"
+          arm64_badging="$("$aapt" dump badging "$arm64_apk" | sed -n '1p')"
+          universal_code="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<< "$universal_badging")"
+          arm64_code="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<< "$arm64_badging")"
+
+          for apk in "$universal_apk" "$arm64_apk"; do
+            badging="$("$aapt" dump badging "$apk" | sed -n '1p')"
+            package_name="$(sed -n "s/.*package: name='\([^']*\)'.*/\1/p" <<< "$badging")"
+            if [ "$package_name" != "com.meteor.kikoeruflutter" ]; then
+              echo "::error::Unexpected Android package: $package_name"
+              exit 1
+            fi
+
+            cert_output="$("$apksigner" verify --print-certs "$apk" 2>&1)"
+            actual_cert="$(printf '%s\n' "$cert_output" | sed -nE '/certificate SHA-256 digest:/I { s/.*certificate SHA-256 digest:[[:space:]]*//I; p; q; }' | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+            if [ "$actual_cert" != "$EXPECTED_TEST_CERT_SHA256" ]; then
+              echo "::error::Unexpected test signing certificate for $apk: $actual_cert"
+              exit 1
+            fi
+          done
+
+          if [ "$arm64_code" -ne $((universal_code + 2000)) ]; then
+            echo "::error::arm64 versionCode $arm64_code does not preserve the legacy split offset from $universal_code."
+            exit 1
+          fi
+
+      - name: Upload stable-signed Android APKs
+        uses: actions/upload-artifact@v6
+        with:
+          name: hiraukan-installable-android
+          path: dist/*
+          if-no-files-found: error
