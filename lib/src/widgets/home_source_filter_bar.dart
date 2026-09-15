@@ -4,6 +4,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/works_provider.dart';
 import '../sources/unified_source_models.dart';
 
+// Temporary compile-compatibility shim for a stale empty-state reference in
+// works_screen.dart. The SFW/NSFW Home feature itself is removed: this value is
+// always null, so the generic empty-state path is used and no safety filtering
+// is performed. Remove together with the stale reference when works_screen is
+// next refactored.
+enum AsmrSafetyMode { sfw }
+
+extension RemovedHomeSafetyCompatibility on WorksState {
+  AsmrSafetyMode? get safetyMode => null;
+}
+
 class HomeSourceFilterBar extends ConsumerWidget {
   const HomeSourceFilterBar({super.key});
 
