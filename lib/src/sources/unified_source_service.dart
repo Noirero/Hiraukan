@@ -210,10 +210,16 @@ class UnifiedSourceService {
           hash.isNotEmpty &&
           normalizedHost.isNotEmpty &&
           resolved.source.source == UnifiedSourceKind.asmrOne) {
-        url = '$normalizedHost/api/media/stream/$hash?token=$token';
+        url = '$normalizedHost/api/media/stream/$hash';
       }
-      // A malformed item must not make an otherwise playable source unusable.
       if (url == null || url.isEmpty) continue;
+      url = _resolveTrackUrl(
+        url,
+        source: resolved.source.source,
+        normalizedHost: normalizedHost,
+        token: token,
+      );
+      if (url == null) continue;
 
       final durationValue = file['duration'];
       final durationSeconds =
@@ -243,6 +249,33 @@ class UnifiedSourceService {
       );
     }
     return tracks;
+  }
+
+  String? _resolveTrackUrl(
+    String rawUrl, {
+    required UnifiedSourceKind source,
+    required String normalizedHost,
+    required String token,
+  }) {
+    var url = rawUrl.trim();
+    if (url.isEmpty) return null;
+
+    if (source == UnifiedSourceKind.asmrOne) {
+      if (url.startsWith('/')) {
+        if (normalizedHost.isEmpty) return null;
+        url = '$normalizedHost$url';
+      }
+      if (token.isNotEmpty && !url.contains('token=')) {
+        url = url.contains('?') ? '$url&token=$token' : '$url?token=$token';
+      }
+    }
+
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme) return null;
+    if (uri.scheme != 'http' && uri.scheme != 'https' && uri.scheme != 'file') {
+      return null;
+    }
+    return url;
   }
 
   Future<Map<UnifiedSourceKind, UnifiedSourceHealth>> checkHealth() async {
@@ -294,7 +327,6 @@ class UnifiedSourceService {
       return 'meta:$title|$circle';
     }
 
-    // Avoid false merges when the canonical product id and creator are unknown.
     return 'source:${candidate.ref.source.id}:${candidate.ref.localId}';
   }
 
