@@ -47,11 +47,11 @@ jobs:
           build_number=$((4000000 + GITHUB_RUN_NUMBER))
           flutter build apk \
             --release \
-            --flavor test \
+            --flavor qa \
             --target-platform android-arm64 \
             --split-per-abi \
             --build-number="$build_number"
-          mv build/app/outputs/flutter-apk/app-test-arm64-v8a-release.apk \
+          mv build/app/outputs/flutter-apk/app-qa-arm64-v8a-release.apk \
             dist/Hiraukan-android-arm64-v8a-test.apk
 
       - name: Verify Android identity and signing
