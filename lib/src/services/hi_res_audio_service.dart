@@ -45,18 +45,19 @@ class HiResAudioService {
       final devices = service.devices;
       if (devices.isEmpty) return HiResAudioCapabilities.unsupported;
       final settings = await service.load();
-      final selected = devices.cast<dynamic?>().firstWhere(
-            (device) => device?.id == settings.deviceId,
-            orElse: () => null,
-          );
-      final device = selected ?? devices.firstWhere(
-        (candidate) => candidate.isDefault,
-        orElse: () => devices.first,
-      );
+      final matching = devices
+          .where((device) => device.id == settings.deviceId)
+          .toList(growable: false);
+      final device = matching.isNotEmpty
+          ? matching.first
+          : devices.firstWhere(
+              (candidate) => candidate.isDefault,
+              orElse: () => devices.first,
+            );
       _enabled = settings.enabled && settings.hasDevice;
       return HiResAudioCapabilities(
         supported: true,
-        deviceName: device.name as String?,
+        deviceName: device.name,
       );
     }
 
