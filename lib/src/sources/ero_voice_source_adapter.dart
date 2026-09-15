@@ -21,7 +21,7 @@ class EroVoiceSourceAdapter implements UnifiedSourceAdapter {
     _dio.options
       ..connectTimeout = const Duration(seconds: 10)
       ..receiveTimeout = const Duration(seconds: 18)
-      ..headers['User-Agent'] = 'KikoFlu/3.8 UnifiedSources'
+      ..headers['User-Agent'] = 'Hiraukan/3.8 UnifiedSources'
       ..headers['Accept'] = 'application/json,text/html,application/xhtml+xml';
   }
 
@@ -35,16 +35,19 @@ class EroVoiceSourceAdapter implements UnifiedSourceAdapter {
     required int pageSize,
   }) async {
     final startIndex = ((page - 1) * pageSize) + 1;
-    final encoded = Uri.encodeQueryComponent(keyword.trim());
+    final trimmedKeyword = keyword.trim();
+    final encoded = Uri.encodeQueryComponent(trimmedKeyword);
     Object? decoded;
     String? usedBase;
 
     for (final base in _orderedBases) {
       try {
-        final url =
-            '$base/feeds/posts/default?alt=json&q=$encoded&start-index=$startIndex&max-results=$pageSize';
+        final query = StringBuffer(
+          '$base/feeds/posts/default?alt=json&start-index=$startIndex&max-results=$pageSize',
+        );
+        if (trimmedKeyword.isNotEmpty) query.write('&q=$encoded');
         final response = await _dio.get<String>(
-          url,
+          query.toString(),
           options: Options(
             responseType: ResponseType.plain,
             validateStatus: (status) =>
@@ -137,6 +140,7 @@ class EroVoiceSourceAdapter implements UnifiedSourceAdapter {
         id: SourceHtmlParser.stableNegativeId('erovoice:$localId'),
         title: effectiveTitle,
         name: circle,
+        age: 'R18',
         release: release,
         vas: voiceActor == null
             ? null
@@ -186,6 +190,7 @@ class EroVoiceSourceAdapter implements UnifiedSourceAdapter {
       ),
       title: title,
       name: circle,
+      age: 'R18',
       release: release,
       vas: voiceActor == null
           ? null
