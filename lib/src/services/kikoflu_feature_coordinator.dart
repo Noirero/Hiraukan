@@ -4,6 +4,7 @@ import 'dart:io';
 import 'audio_conversion_service.dart';
 import 'audio_player_service.dart';
 import 'download_path_service.dart';
+import 'download_service.dart';
 import 'hi_res_audio_service.dart';
 import 'kikoflu_feature_settings.dart';
 import 'kikoflu_notification_service.dart';
@@ -61,6 +62,8 @@ class KikoFluFeatureCoordinator {
   Future<void> refreshDownloadWatcher() async {
     await _downloadWatch?.cancel();
     _downloadWatch = null;
+    _convertDebounce?.cancel();
+    _convertDebounce = null;
     if (!_settings.autoConvertWav) return;
 
     try {
@@ -97,6 +100,14 @@ class KikoFluFeatureCoordinator {
       if (first <= 0 || first != second) return;
 
       final format = WavConversionFormat.fromValue(_settings.conversionFormat);
+      if (!AudioConversionService.instance.isSupported(format)) {
+        _log.warning(
+          'Selected conversion format is unavailable on this platform: ${format.displayName}',
+          tag: 'AudioConv',
+        );
+        return;
+      }
+
       final converted = await AudioConversionService.instance.convert(
         path,
         format,
@@ -111,6 +122,17 @@ class KikoFluFeatureCoordinator {
         },
       );
       if (converted != null) {
+        // KikoFlu updated its own download metadata directly. Hiraukan has a
+        // richer local/offline metadata pipeline, so rescan through that
+        // existing authority instead of duplicating or rewriting its schema.
+        try {
+          await DownloadService.instance.reloadMetadataFromDisk();
+        } catch (error) {
+          _log.warning(
+            'Converted audio is ready but download metadata resync failed: $error',
+            tag: 'AudioConv',
+          );
+        }
         await KikoFluNotificationService.instance.showMessage(
           id: path.hashCode,
           title: 'Audio conversion complete',
@@ -143,7 +165,9 @@ class KikoFluFeatureCoordinator {
     try {
       for (var i = 1; i <= steps; i++) {
         if (!_settings.crossfadeEnabled) break;
-        await Future<void>.delayed(Duration(milliseconds: duration.inMilliseconds ~/ steps));
+        await Future<void>.delayed(
+          Duration(milliseconds: duration.inMilliseconds ~/ steps),
+        );
         await _player.setVolume(
           (_transitionBaseVolume * (1 - i / steps)).clamp(0.0, 1.0),
         );
@@ -163,7 +187,9 @@ class KikoFluFeatureCoordinator {
       await _player.setVolume(0);
       for (var i = 1; i <= steps; i++) {
         if (!_settings.crossfadeEnabled) break;
-        await Future<void>.delayed(Duration(milliseconds: duration.inMilliseconds ~/ steps));
+        await Future<void>.delayed(
+          Duration(milliseconds: duration.inMilliseconds ~/ steps),
+        );
         await _player.setVolume((target * i / steps).clamp(0.0, 1.0));
       }
       await _player.setVolume(target);
