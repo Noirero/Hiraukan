@@ -32,7 +32,10 @@ class FloatingLyricEnhancementService {
   }
 
   Future<void> setTransparencyMode(int value) async {
-    await StorageService.setInt('${_prefix}transparency_mode', value.clamp(0, 2));
+    await StorageService.setInt(
+      '${_prefix}transparency_mode',
+      value.clamp(0, 2).toInt(),
+    );
     await apply();
   }
 
@@ -47,7 +50,10 @@ class FloatingLyricEnhancementService {
   }
 
   Future<void> setFontWeight(int value) async {
-    await StorageService.setInt('${_prefix}font_weight', value.clamp(0, 8));
+    await StorageService.setInt(
+      '${_prefix}font_weight',
+      value.clamp(0, 8).toInt(),
+    );
     await apply();
   }
 
