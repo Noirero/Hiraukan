@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 
 import 'log_service.dart';
+import 'windows_usb_dac_service.dart';
 
 final _log = LogService.instance;
 
@@ -22,8 +23,13 @@ class HiResAudioCapabilities {
   static const unsupported = HiResAudioCapabilities(supported: false);
 }
 
-/// Optional native bridge for Hi-Res output. Missing platform channels are a
-/// supported state: normal Hiraukan playback continues unchanged.
+/// Optional Hi-Res output bridge.
+///
+/// Windows uses Hiraukan's real media_kit/mpv path: active WASAPI devices are
+/// enumerated natively and the chosen endpoint is routed in exclusive mode on
+/// the next player initialization. Other platforms keep the existing optional
+/// MethodChannel contract and safely fall back to normal playback when no
+/// native implementation is present.
 class HiResAudioService {
   HiResAudioService._();
   static final instance = HiResAudioService._();
@@ -34,7 +40,27 @@ class HiResAudioService {
   bool get enabled => _enabled;
 
   Future<HiResAudioCapabilities> capabilities() async {
-    if (!(Platform.isAndroid || Platform.isWindows || Platform.isMacOS)) {
+    if (Platform.isWindows) {
+      final service = WindowsUsbDacService.instance;
+      final devices = service.devices;
+      if (devices.isEmpty) return HiResAudioCapabilities.unsupported;
+      final settings = await service.load();
+      final selected = devices.cast<dynamic?>().firstWhere(
+            (device) => device?.id == settings.deviceId,
+            orElse: () => null,
+          );
+      final device = selected ?? devices.firstWhere(
+        (candidate) => candidate.isDefault,
+        orElse: () => devices.first,
+      );
+      _enabled = settings.enabled && settings.hasDevice;
+      return HiResAudioCapabilities(
+        supported: true,
+        deviceName: device.name as String?,
+      );
+    }
+
+    if (!(Platform.isAndroid || Platform.isMacOS)) {
       return HiResAudioCapabilities.unsupported;
     }
     try {
@@ -44,8 +70,16 @@ class HiResAudioService {
       if (data == null) return HiResAudioCapabilities.unsupported;
       return HiResAudioCapabilities(
         supported: data['supported'] == true,
-        sampleRates: (data['sampleRates'] as List?)?.whereType<num>().map((v) => v.toInt()).toList() ?? const [],
-        bitDepths: (data['bitDepths'] as List?)?.whereType<num>().map((v) => v.toInt()).toList() ?? const [],
+        sampleRates: (data['sampleRates'] as List?)
+                ?.whereType<num>()
+                .map((value) => value.toInt())
+                .toList() ??
+            const [],
+        bitDepths: (data['bitDepths'] as List?)
+                ?.whereType<num>()
+                .map((value) => value.toInt())
+                .toList() ??
+            const [],
         deviceName: data['deviceName']?.toString(),
       );
     } on MissingPluginException {
@@ -57,6 +91,23 @@ class HiResAudioService {
   }
 
   Future<bool> setEnabled(bool enabled) async {
+    if (Platform.isWindows) {
+      final service = WindowsUsbDacService.instance;
+      if (!enabled) {
+        await service.setEnabled(false);
+        _enabled = false;
+        return false;
+      }
+      final device = await service.selectRecommendedIfNeeded();
+      if (device == null) {
+        _enabled = false;
+        return false;
+      }
+      await service.setEnabled(true);
+      _enabled = true;
+      return true;
+    }
+
     try {
       final result = await _channel.invokeMethod<bool>(
         enabled ? 'enableHiRes' : 'disableHiRes',
@@ -78,6 +129,11 @@ class HiResAudioService {
     required int bitDepth,
   }) async {
     if (!_enabled) return false;
+    if (Platform.isWindows) {
+      // WASAPI exclusive/mpv negotiates the stream format with the selected
+      // endpoint. Do not report made-up sample-rate/bit-depth capabilities.
+      return true;
+    }
     try {
       return await _channel.invokeMethod<bool>('configureFormat', {
             'sampleRate': sampleRate,
