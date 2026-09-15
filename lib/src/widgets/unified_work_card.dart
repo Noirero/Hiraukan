@@ -28,11 +28,14 @@ class UnifiedWorkCard extends ConsumerWidget {
       authProvider.select((value) => (host: value.host ?? '', token: value.token ?? '')),
     );
     final cover = _coverUrl(bundle, auth.host, auth.token);
-    final onTap = () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => UnifiedWorkDetailScreen(work: work),
-          ),
-        );
+
+    void onTap() {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => UnifiedWorkDetailScreen(work: work),
+        ),
+      );
+    }
 
     if (isListLayout) {
       return Card(

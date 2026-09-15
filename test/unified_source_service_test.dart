@@ -4,6 +4,7 @@ import 'package:kikoeru_flutter/src/sources/source_adapter.dart';
 import 'package:kikoeru_flutter/src/sources/unified_source_models.dart';
 import 'package:kikoeru_flutter/src/sources/unified_source_registry.dart';
 import 'package:kikoeru_flutter/src/sources/unified_source_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeAdapter implements UnifiedSourceAdapter {
   @override
@@ -82,8 +83,13 @@ SourceWorkCandidate _candidate({
 }
 
 void main() {
-  test('same canonical id merges into one logical work', () async {
-    final registry = UnifiedSourceRegistry.instance..clear();
+  setUp(() {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    UnifiedSourceRegistry.instance.clear();
+  });
+
+  test('same canonical id merges into one logical work with stable id', () async {
+    final registry = UnifiedSourceRegistry.instance;
     final asmr = _candidate(
       source: UnifiedSourceKind.asmrOne,
       id: 101,
@@ -111,12 +117,12 @@ void main() {
 
     final result = await service.search(keyword: 'rain', page: 1, pageSize: 20);
     expect(result.works, hasLength(1));
-    expect(result.works.single.id, 101);
-    expect(registry.bundleFor(101)!.sources, hasLength(2));
+    expect(result.works.single.id, 123456);
+    expect(registry.bundleFor(123456)!.sources, hasLength(2));
   });
 
   test('canonical ids with different zero padding still merge', () async {
-    final registry = UnifiedSourceRegistry.instance..clear();
+    final registry = UnifiedSourceRegistry.instance;
     final asmr = _candidate(
       source: UnifiedSourceKind.asmrOne,
       id: 303,
@@ -144,12 +150,58 @@ void main() {
 
     final result = await service.search(keyword: 'padded', page: 1, pageSize: 20);
     expect(result.works, hasLength(1));
+    expect(result.works.single.id, 1655238);
     expect(result.works.single.sourceId, 'RJ01655238');
-    expect(registry.bundleFor(303)!.sources, hasLength(2));
+    expect(registry.bundleFor(1655238)!.sources, hasLength(2));
+  });
+
+  test('same RJ keeps the same id when ASMR.one is temporarily absent', () async {
+    final registry = UnifiedSourceRegistry.instance;
+    final mirror = _candidate(
+      source: UnifiedSourceKind.hentaiAsmr,
+      id: -8,
+      localId: 'RJ123456',
+      title: 'Stable Work',
+      canonical: 'RJ123456',
+    );
+    final mirrorOnly = UnifiedSourceService(
+      adapters: [
+        _FakeAdapter(kind: UnifiedSourceKind.hentaiAsmr, candidates: [mirror]),
+      ],
+      registry: registry,
+    );
+    final first = await mirrorOnly.search(
+      keyword: 'stable',
+      page: 1,
+      pageSize: 20,
+    );
+    expect(first.works.single.id, 123456);
+
+    registry.clear();
+    final asmr = _candidate(
+      source: UnifiedSourceKind.asmrOne,
+      id: 999,
+      localId: '999',
+      title: 'Stable Work',
+      canonical: 'RJ123456',
+    );
+    final withAsmr = UnifiedSourceService(
+      adapters: [
+        _FakeAdapter(kind: UnifiedSourceKind.asmrOne, candidates: [asmr]),
+        _FakeAdapter(kind: UnifiedSourceKind.hentaiAsmr, candidates: [mirror]),
+      ],
+      registry: registry,
+    );
+    final second = await withAsmr.search(
+      keyword: 'stable',
+      page: 1,
+      pageSize: 20,
+    );
+    expect(second.works.single.id, 123456);
   });
 
   test('unknown works without creator are not fuzzily merged by title', () async {
-    final registry = UnifiedSourceRegistry.instance..clear();
+    final registry = UnifiedSourceRegistry.instance;
     final first = _candidate(
       source: UnifiedSourceKind.hentaiAsmr,
       id: -1,
@@ -176,7 +228,7 @@ void main() {
   });
 
   test('one broken source does not fail federated search', () async {
-    final registry = UnifiedSourceRegistry.instance..clear();
+    final registry = UnifiedSourceRegistry.instance;
     final candidate = _candidate(
       source: UnifiedSourceKind.asmrOne,
       id: 42,
@@ -199,7 +251,7 @@ void main() {
   });
 
   test('preferred source failure falls back to next source', () async {
-    final registry = UnifiedSourceRegistry.instance..clear();
+    final registry = UnifiedSourceRegistry.instance;
     final primary = _candidate(
       source: UnifiedSourceKind.asmrOne,
       id: 88,
@@ -253,5 +305,65 @@ void main() {
     );
     expect(tracks, hasLength(1));
     expect(tracks.single.url, 'https://cdn.example/01.mp3');
+  });
+
+  test('multi-source fallback bundle survives a registry restart', () async {
+    final registry = UnifiedSourceRegistry.instance;
+    final primary = _candidate(
+      source: UnifiedSourceKind.asmrOne,
+      id: 10,
+      localId: '10',
+      title: 'Persisted Work',
+      canonical: 'RJ888888',
+    );
+    final fallback = _candidate(
+      source: UnifiedSourceKind.hentaiAsmr,
+      id: -11,
+      localId: 'RJ888888',
+      title: 'Persisted Work',
+      canonical: 'RJ888888',
+    );
+    final firstService = UnifiedSourceService(
+      adapters: [
+        _FakeAdapter(kind: UnifiedSourceKind.asmrOne, candidates: [primary]),
+        _FakeAdapter(kind: UnifiedSourceKind.hentaiAsmr, candidates: [fallback]),
+      ],
+      registry: registry,
+    );
+    final result = await firstService.search(
+      keyword: 'persisted',
+      page: 1,
+      pageSize: 20,
+    );
+    final work = result.works.single;
+    await firstService.hydrateWork(work);
+
+    registry.clear();
+    final secondService = UnifiedSourceService(
+      adapters: [
+        _FakeAdapter(
+          kind: UnifiedSourceKind.asmrOne,
+          failTracks: true,
+        ),
+        _FakeAdapter(
+          kind: UnifiedSourceKind.hentaiAsmr,
+          tracks: const [
+            {
+              'title': 'saved.mp3',
+              'type': 'audio',
+              'mediaStreamUrl': 'https://cdn.example/saved.mp3',
+            }
+          ],
+        ),
+      ],
+      registry: registry,
+    );
+
+    final resolved = await secondService.resolveTracks(
+      work,
+      preferredSource: UnifiedSourceKind.asmrOne,
+    );
+    expect(resolved.source.source, UnifiedSourceKind.hentaiAsmr);
+    expect(registry.bundleFor(work.id)!.sources, hasLength(2));
   });
 }

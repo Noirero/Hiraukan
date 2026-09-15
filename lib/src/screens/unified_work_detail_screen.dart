@@ -26,6 +26,7 @@ class UnifiedWorkDetailScreen extends ConsumerStatefulWidget {
 class _UnifiedWorkDetailScreenState
     extends ConsumerState<UnifiedWorkDetailScreen> {
   Work? _detail;
+  UnifiedWorkBundle? _hydratedBundle;
   ResolvedSourceTracks? _resolved;
   List<AudioTrack> _tracks = const [];
   Map<UnifiedSourceKind, UnifiedSourceHealth> _health = const {};
@@ -35,7 +36,7 @@ class _UnifiedWorkDetailScreenState
   String? _detailError;
   String? _trackError;
 
-  UnifiedWorkBundle? get _bundle =>
+  UnifiedWorkBundle? get _bundle => _hydratedBundle ??
       UnifiedSourceRegistry.instance.bundleFor(widget.work.id) ??
       UnifiedSourceRegistry.instance.ensureFromWork(widget.work);
 
@@ -47,10 +48,14 @@ class _UnifiedWorkDetailScreenState
   }
 
   Future<void> _restorePreferenceAndLoad() async {
+    final service = ref.read(unifiedSourceServiceProvider);
+    final bundle = await service.hydrateWork(widget.work);
     final preferred = await UnifiedSourcePreferences.loadPreferredSource();
-    if (mounted) {
-      setState(() => _preferredSource = preferred);
-    }
+    if (!mounted) return;
+    setState(() {
+      _hydratedBundle = bundle;
+      _preferredSource = preferred;
+    });
     await _loadContent();
   }
 
@@ -76,6 +81,9 @@ class _UnifiedWorkDetailScreenState
       if (!mounted) return;
       setState(() {
         _detail = detail;
+        _hydratedBundle =
+            UnifiedSourceRegistry.instance.bundleFor(widget.work.id) ??
+                _hydratedBundle;
         _loadingDetail = false;
       });
     } catch (error) {
@@ -116,6 +124,9 @@ class _UnifiedWorkDetailScreenState
       if (!mounted) return;
       setState(() {
         _resolved = resolved;
+        _hydratedBundle =
+            UnifiedSourceRegistry.instance.bundleFor(widget.work.id) ??
+                _hydratedBundle;
         _tracks = tracks;
         _loadingTracks = false;
       });

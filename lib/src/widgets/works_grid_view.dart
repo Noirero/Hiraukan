@@ -41,6 +41,7 @@ class WorksGridView extends ConsumerWidget {
     this.fillEmptyViewport = true,
     this.physics,
     this.showInlineLoadingIndicator = false,
+    this.unifiedSourcesEnabled = false,
   });
 
   final List<Work> works;
@@ -69,13 +70,18 @@ class WorksGridView extends ConsumerWidget {
   final ScrollPhysics? physics;
   final bool showInlineLoadingIndicator;
 
+  /// Unified-source rendering is opt-in. Normal All/Popular/Recommended views
+  /// must never change merely because the process-wide registry saw the same id
+  /// during an earlier federated search.
+  final bool unifiedSourcesEnabled;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final displaySettings = ref.watch(workCardDisplayProvider);
     final auth = ref.watch(
       authProvider.select((state) => (state.host ?? '', state.token ?? '')),
     );
-    final hasUnifiedWorks =
+    final hasUnifiedWorks = unifiedSourcesEnabled &&
         works.any((work) => UnifiedSourceRegistry.instance.contains(work.id));
     final effectiveSliversBefore = <Widget>[
       ...sliversBefore,
@@ -128,7 +134,8 @@ class WorksGridView extends ConsumerWidget {
         items: works,
         itemId: (work) => work.id,
         itemBuilder: (context, work, index) {
-          if (UnifiedSourceRegistry.instance.contains(work.id)) {
+          if (unifiedSourcesEnabled &&
+              UnifiedSourceRegistry.instance.contains(work.id)) {
             return UnifiedWorkCard(
               key: ValueKey('unified_${work.id}'),
               work: work,
@@ -168,9 +175,14 @@ class WorksGridView extends ConsumerWidget {
         ),
         onRetry: onRetry,
         onPrefetch: (items) {
-          final normalItems = items
-              .where((work) => !UnifiedSourceRegistry.instance.contains(work.id))
-              .toList(growable: false);
+          final normalItems = unifiedSourcesEnabled
+              ? items
+                  .where(
+                    (work) =>
+                        !UnifiedSourceRegistry.instance.contains(work.id),
+                  )
+                  .toList(growable: false)
+              : items;
           if (normalItems.isNotEmpty) {
             prefetchWorkCovers(
               context,
