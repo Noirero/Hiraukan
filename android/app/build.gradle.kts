@@ -63,7 +63,9 @@ android {
 
     flavorDimensions += "distribution"
     productFlavors {
-        create("test") {
+        // AGP reserves flavor names beginning with "test". Keep the user-facing
+        // identity as Hiraukan Test while using a neutral internal flavor name.
+        create("qa") {
             dimension = "distribution"
             applicationIdSuffix = ".test"
             versionNameSuffix = "-test"
@@ -81,7 +83,7 @@ android {
 
     buildTypes {
         release {
-            // Signing is selected by flavor. Test uses the committed test-only key;
+            // Signing is selected by flavor. QA uses the committed test-only key;
             // prod is signed only when the permanent release key is provided.
         }
         debug {
