@@ -2,7 +2,7 @@ package com.meteor.kikoeruflutter
 
 import android.content.Intent
 import android.view.WindowManager
-import com.ryanheise.audioservice.AudioServiceActivity
+import com.ryanheise.audioservice.AudioServiceFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.net.InetSocketAddress
@@ -10,7 +10,7 @@ import java.net.Proxy
 import java.net.ProxySelector
 import java.net.URI
 
-class MainActivity : AudioServiceActivity() {
+class MainActivity : AudioServiceFragmentActivity() {
     private var floatingLyricPlugin: FloatingLyricPlugin? = null
     private var audioHapticsBridge: AudioHapticsBridge? = null
     private var subtitleDirectoryPicker: SubtitleDirectoryPicker? = null
