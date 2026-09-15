@@ -307,6 +307,48 @@ void main() {
     expect(tracks.single.url, 'https://cdn.example/01.mp3');
   });
 
+  test('provider interstitial detail falls back without replacing canonical metadata',
+      () async {
+    final registry = UnifiedSourceRegistry.instance;
+    final canonical = _candidate(
+      source: UnifiedSourceKind.asmrOne,
+      id: 45192,
+      localId: '45192',
+      title: 'Canonical Work Title',
+      canonical: 'RJ01645192',
+      circle: 'ichinoya',
+    );
+    final warning = _candidate(
+      source: UnifiedSourceKind.eroVoice,
+      id: -45192,
+      localId: 'RJ01645192',
+      title: 'Sensitive Content Warning',
+      canonical: 'RJ01645192',
+      circle: 'ichinoya',
+    );
+    final service = UnifiedSourceService(
+      adapters: [
+        _FakeAdapter(kind: UnifiedSourceKind.asmrOne, candidates: [canonical]),
+        _FakeAdapter(kind: UnifiedSourceKind.eroVoice, candidates: [warning]),
+      ],
+      registry: registry,
+    );
+
+    final search = await service.search(
+      keyword: 'RJ01645192',
+      page: 1,
+      pageSize: 20,
+    );
+    final work = search.works.single;
+    final detail = await service.resolveDetail(
+      work,
+      preferredSource: UnifiedSourceKind.eroVoice,
+    );
+
+    expect(detail.title, 'Canonical Work Title');
+    expect(detail.sourceUrl, canonical.ref.detailUrl);
+  });
+
   test('multi-source fallback bundle survives a registry restart', () async {
     final registry = UnifiedSourceRegistry.instance;
     final primary = _candidate(
