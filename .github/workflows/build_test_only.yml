@@ -1,4 +1,4 @@
-name: Android APK test
+name: Android APK Beta
 
 on:
   push:
@@ -8,21 +8,21 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-apk-test-${{ github.ref }}
+  group: android-apk-beta-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   android:
-    name: Android ARM64 APK
+    name: Android ARM64 Beta APK
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
-      - name: Prepare stable test signing key
+      - name: Prepare stable beta signing key
         run: |
           set -euo pipefail
-          base64 --decode .github/test-signing/hiraukan-test-key.jks.b64 > android/hiraukan-test-key.jks
-          chmod 600 android/hiraukan-test-key.jks
+          base64 --decode .github/test-signing/hiraukan-test-key.jks.b64 > android/hiraukan-beta-key.jks
+          chmod 600 android/hiraukan-beta-key.jks
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -34,36 +34,36 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.44.7'
-          channel: 'stable'
+          channel: stable
           cache: true
 
       - name: Get Dependencies
         run: flutter pub get
 
-      - name: Build Android ARM64 APK
+      - name: Build Android ARM64 Beta APK
         run: |
           set -euo pipefail
           mkdir -p dist
           build_number=$((4000000 + GITHUB_RUN_NUMBER))
           flutter build apk \
             --release \
-            --flavor qa \
+            --flavor beta \
             --target-platform android-arm64 \
             --split-per-abi \
             --build-number="$build_number"
-          mv build/app/outputs/flutter-apk/app-qa-arm64-v8a-release.apk \
-            dist/Hiraukan-android-arm64-v8a-test.apk
+          mv build/app/outputs/flutter-apk/app-arm64-v8a-beta-release.apk \
+            dist/Hiraukan-android-arm64-v8a-beta.apk
 
-      - name: Verify Android identity and signing
+      - name: Verify Android Beta identity and signing
         env:
-          EXPECTED_PACKAGE: com.noirero.hiraukan.test
+          EXPECTED_PACKAGE: com.noirero.hiraukan.beta
           EXPECTED_CERT_SHA256: c078bbb5af0d981625e1f05b52e0618c1111002c4ff2b2f11dc08a7bab702505
         run: |
           set -euo pipefail
           build_tools_dir="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
           aapt="$build_tools_dir/aapt"
           apksigner="$build_tools_dir/apksigner"
-          apk="dist/Hiraukan-android-arm64-v8a-test.apk"
+          apk="dist/Hiraukan-android-arm64-v8a-beta.apk"
 
           badging="$("$aapt" dump badging "$apk")"
           package_name="$(sed -n "s/.*package: name='\([^']*\)'.*/\1/p" <<< "$badging" | head -n1)"
@@ -73,7 +73,7 @@ jobs:
             echo "::error::Unexpected package: $package_name"
             exit 1
           fi
-          if [ "$app_label" != "Hiraukan Test" ]; then
+          if [ "$app_label" != "Hiraukan Beta" ]; then
             echo "::error::Unexpected app label: $app_label"
             exit 1
           fi
@@ -94,10 +94,10 @@ jobs:
             exit 1
           fi
 
-      - name: Upload Android APK
+      - name: Upload Android Beta APK
         uses: actions/upload-artifact@v6
         with:
-          name: Hiraukan-android-arm64-test
-          path: dist/Hiraukan-android-arm64-v8a-test.apk
+          name: Hiraukan-android-arm64-beta
+          path: dist/Hiraukan-android-arm64-v8a-beta.apk
           if-no-files-found: error
           retention-days: 7
