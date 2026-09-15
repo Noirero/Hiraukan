@@ -3,9 +3,23 @@ import 'package:kikoeru_flutter/src/sources/source_html_parser.dart';
 
 void main() {
   group('SourceHtmlParser', () {
-    test('normalizes canonical DLsite ids for matching', () {
-      expect(SourceHtmlParser.extractCanonicalId('Work RJ01655238'), 'RJ1655238');
-      expect(SourceHtmlParser.extractCanonicalId('bj00012345'), 'BJ12345');
+    test('preserves product id while normalizing the matching key', () {
+      expect(
+        SourceHtmlParser.extractCanonicalId('Work RJ01655238'),
+        'RJ01655238',
+      );
+      expect(
+        SourceHtmlParser.extractCanonicalId('bj00012345'),
+        'BJ00012345',
+      );
+      expect(
+        SourceHtmlParser.canonicalMatchKey('RJ01655238'),
+        'RJ1655238',
+      );
+      expect(
+        SourceHtmlParser.canonicalMatchKey('RJ1655238'),
+        'RJ1655238',
+      );
       expect(SourceHtmlParser.extractCanonicalId('nothing here'), isNull);
     });
 
