@@ -9,8 +9,12 @@ class SourceHtmlParser {
   static String? extractCanonicalId(String? text) {
     if (text == null) return null;
     final match = _rjPattern.firstMatch(text);
-    if (match == null) return null;
-    final raw = match.group(0)!.toUpperCase();
+    return match?.group(0)?.toUpperCase();
+  }
+
+  static String? canonicalMatchKey(String? text) {
+    final raw = extractCanonicalId(text);
+    if (raw == null) return null;
     final prefix = raw.substring(0, 2);
     final digits = raw.substring(2).replaceFirst(RegExp(r'^0+(?=\d)'), '');
     return '$prefix$digits';
