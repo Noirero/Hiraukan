@@ -77,6 +77,11 @@ flutter {
 // artifacts aligned on 1.6.1, which contains the 32-bit FLAC extractor fix,
 // while retaining Android's native AudioTrack playback backend.
 dependencies {
+    // local_auth's biometric prompt requires an AppCompat-compatible Activity
+    // theme. Declare it explicitly instead of relying on a transitive AndroidX
+    // dependency so the theme resources stay deterministic across plugin updates.
+    implementation("androidx.appcompat:appcompat:1.8.0")
+
     val media3Version = "1.6.1"
     implementation("androidx.media3:media3-exoplayer:$media3Version")
     implementation("androidx.media3:media3-exoplayer-dash:$media3Version")
