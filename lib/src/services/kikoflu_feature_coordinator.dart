@@ -129,7 +129,10 @@ class KikoFluFeatureCoordinator {
     final fade = Duration(milliseconds: _settings.crossfadeMs);
     final remaining = duration - position;
     if (remaining <= Duration.zero || remaining > fade) return;
-    _transitionBaseVolume = _player.volume.clamp(0.0, 1.0);
+    // Hiraukan currently keeps the logical user volume private inside the
+    // player service. Imported crossfade therefore uses unity only while the
+    // user explicitly opts in; normal playback is never modified by default.
+    _transitionBaseVolume = 1;
     unawaited(_fadeOut(fade));
   }
 
