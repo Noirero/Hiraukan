@@ -36,6 +36,8 @@ class AsmrOneSourceAdapter implements UnifiedSourceAdapter {
       );
       final detailUrl = work.sourceUrl ??
           'https://www.asmr.one/work/${work.sourceId ?? work.id}';
+      final cover =
+          work.images?.isNotEmpty == true ? work.images!.first : null;
       items.add(
         SourceWorkCandidate(
           work: work,
@@ -44,6 +46,7 @@ class AsmrOneSourceAdapter implements UnifiedSourceAdapter {
             localId: work.id.toString(),
             canonicalId: canonical,
             detailUrl: detailUrl,
+            coverUrl: cover,
             title: work.title,
             circle: work.name,
             durationSeconds: work.duration,
@@ -77,9 +80,11 @@ class AsmrOneSourceAdapter implements UnifiedSourceAdapter {
   Future<UnifiedSourceHealth> checkHealth() async {
     try {
       // Probe the configured Kikoeru/ASMR.one API itself rather than merely
-      // checking whether the device has generic internet connectivity.
-      await api.searchWorks(
-        keyword: '',
+      // checking whether the device has generic internet connectivity. The
+      // ordinary works endpoint is used instead of an empty search query so
+      // this health check cannot fail only because a search route rejects an
+      // empty keyword.
+      await api.getWorks(
         page: 1,
         pageSize: 1,
         order: 'create_date',
