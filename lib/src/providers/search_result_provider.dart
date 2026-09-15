@@ -294,10 +294,10 @@ class SearchResultNotifier extends StateNotifier<SearchResultState> {
       if (!_requestGate.isCurrent(requestToken)) return;
 
       final rawWorks = mergePagedItems<Work, int>(
-        existing: const [],
+        existing: append ? state.rawWorks : const [],
         incoming: pageWorks,
         idOf: (work) => work.id,
-        replace: true,
+        replace: !append,
       );
       final blockedItems = _ref.read(blockedItemsProvider);
       final filteredWorks = _filterWorks(rawWorks, blockedItems);
@@ -425,7 +425,10 @@ class SearchResultNotifier extends StateNotifier<SearchResultState> {
 
   Future<void> loadMore() async {
     if (state.isLoading || !state.hasMore) return;
-    await loadResults(targetPage: state.currentPage + 1);
+    await loadResults(
+      targetPage: state.currentPage + 1,
+      append: true,
+    );
   }
 
   void toggleLayoutType() {
