@@ -8,6 +8,7 @@ import '../models/work.dart';
 import '../providers/audio_provider.dart';
 import '../providers/auth_provider.dart';
 import '../sources/unified_source_models.dart';
+import '../sources/unified_source_preferences.dart';
 import '../sources/unified_source_provider.dart';
 import '../sources/unified_source_registry.dart';
 import '../widgets/global_audio_player_wrapper.dart';
@@ -35,13 +36,22 @@ class _UnifiedWorkDetailScreenState
   String? _trackError;
 
   UnifiedWorkBundle? get _bundle =>
-      UnifiedSourceRegistry.instance.bundleFor(widget.work.id);
+      UnifiedSourceRegistry.instance.bundleFor(widget.work.id) ??
+      UnifiedSourceRegistry.instance.ensureFromWork(widget.work);
 
   @override
   void initState() {
     super.initState();
-    _loadContent();
+    _restorePreferenceAndLoad();
     _refreshHealth();
+  }
+
+  Future<void> _restorePreferenceAndLoad() async {
+    final preferred = await UnifiedSourcePreferences.loadPreferredSource();
+    if (mounted) {
+      setState(() => _preferredSource = preferred);
+    }
+    await _loadContent();
   }
 
   Future<void> _loadContent() async {
@@ -98,6 +108,11 @@ class _UnifiedWorkDetailScreenState
         host: auth.host ?? '',
         token: auth.token ?? '',
       );
+      if (tracks.isEmpty) {
+        throw StateError(
+          '${resolved.source.source.label} returned no playable audio tracks',
+        );
+      }
       if (!mounted) return;
       setState(() {
         _resolved = resolved;
@@ -125,24 +140,25 @@ class _UnifiedWorkDetailScreenState
   Future<void> _setPreferredSource(UnifiedSourceKind? source) async {
     if (_preferredSource == source) return;
     setState(() => _preferredSource = source);
+    await UnifiedSourcePreferences.savePreferredSource(source);
     await Future.wait<void>([_loadDetail(), _loadTracks()]);
   }
 
   Future<void> _playTrack(int index) async {
     if (index < 0 || index >= _tracks.length) return;
     await ref.read(audioPlayerControllerProvider.notifier).playTracks(
-      _tracks,
-      startIndex: index,
-      work: _detail ?? widget.work,
-    );
+          _tracks,
+          startIndex: index,
+          work: _detail ?? widget.work,
+        );
   }
 
   Future<void> _playAll() async {
     if (_tracks.isEmpty) return;
     await ref.read(audioPlayerControllerProvider.notifier).playTracks(
-      _tracks,
-      work: _detail ?? widget.work,
-    );
+          _tracks,
+          work: _detail ?? widget.work,
+        );
   }
 
   Future<void> _openSource(UnifiedSourceRef source) async {
@@ -158,7 +174,9 @@ class _UnifiedWorkDetailScreenState
     if (bundle == null) {
       return Scaffold(
         appBar: AppBar(title: Text(widget.work.displayId)),
-        body: const Center(child: Text('Unified source metadata is unavailable.')),
+        body: const Center(
+          child: Text('Unified source metadata is unavailable.'),
+        ),
       );
     }
 
@@ -169,7 +187,11 @@ class _UnifiedWorkDetailScreenState
           actions: [
             IconButton(
               onPressed: () async {
-                await Future.wait<void>([_loadDetail(), _loadTracks(), _refreshHealth()]);
+                await Future.wait<void>([
+                  _loadDetail(),
+                  _loadTracks(),
+                  _refreshHealth(),
+                ]);
               },
               icon: const Icon(Icons.refresh),
               tooltip: 'Refresh all sources',
@@ -178,7 +200,11 @@ class _UnifiedWorkDetailScreenState
         ),
         body: RefreshIndicator(
           onRefresh: () async {
-            await Future.wait<void>([_loadDetail(), _loadTracks(), _refreshHealth()]);
+            await Future.wait<void>([
+              _loadDetail(),
+              _loadTracks(),
+              _refreshHealth(),
+            ]);
           },
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
@@ -243,7 +269,10 @@ class _UnifiedWorkDetailScreenState
               ],
               if (work.description?.trim().isNotEmpty == true) ...[
                 const SizedBox(height: 24),
-                Text('Description', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  'Description',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 const SizedBox(height: 8),
                 Text(work.description!),
               ],
@@ -293,13 +322,19 @@ class _UnifiedWorkDetailScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Available Sources', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'Available Sources',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
             ...bundle.sources.map((source) {
-              final health = _health[source.source] ?? UnifiedSourceHealth.unknown;
+              final health =
+                  _health[source.source] ?? UnifiedSourceHealth.unknown;
               return ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: CircleAvatar(child: Text(source.source.label.characters.first)),
+                leading: CircleAvatar(
+                  child: Text(source.source.label.substring(0, 1)),
+                ),
                 title: Text(source.source.label),
                 subtitle: Text(_healthLabel(health)),
                 trailing: IconButton(
@@ -319,7 +354,10 @@ class _UnifiedWorkDetailScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Preferred Source', style: Theme.of(context).textTheme.titleMedium),
+        Text(
+          'Preferred Source',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
@@ -342,10 +380,16 @@ class _UnifiedWorkDetailScreenState
         const SizedBox(height: 8),
         Row(
           children: [
-            Icon(Icons.autorenew, size: 18, color: Theme.of(context).colorScheme.primary),
+            Icon(
+              Icons.autorenew,
+              size: 18,
+              color: Theme.of(context).colorScheme.primary,
+            ),
             const SizedBox(width: 6),
             const Expanded(
-              child: Text('Fallback is automatic when the preferred source cannot provide playable tracks.'),
+              child: Text(
+                'Fallback is automatic when the preferred source cannot provide playable tracks.',
+              ),
             ),
           ],
         ),
@@ -391,7 +435,11 @@ class _TrackTile extends StatelessWidget {
   final AudioTrack track;
   final VoidCallback onTap;
 
-  const _TrackTile({required this.index, required this.track, required this.onTap});
+  const _TrackTile({
+    required this.index,
+    required this.track,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -400,8 +448,13 @@ class _TrackTile extends StatelessWidget {
       child: ListTile(
         onTap: onTap,
         leading: CircleAvatar(child: Text('${index + 1}')),
-        title: Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-        subtitle: track.duration == null ? null : Text(_duration(track.duration!)),
+        title: Text(
+          track.title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle:
+            track.duration == null ? null : Text(_duration(track.duration!)),
         trailing: const Icon(Icons.play_arrow),
       ),
     );
@@ -409,8 +462,10 @@ class _TrackTile extends StatelessWidget {
 
   String _duration(Duration duration) {
     final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    final minutes =
+        duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds =
+        duration.inSeconds.remainder(60).toString().padLeft(2, '0');
     return hours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
   }
 }
@@ -429,12 +484,17 @@ class _ErrorCard extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            Icon(Icons.error_outline, color: Theme.of(context).colorScheme.onErrorContainer),
+            Icon(
+              Icons.error_outline,
+              color: Theme.of(context).colorScheme.onErrorContainer,
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
                 message,
-                style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onErrorContainer,
+                ),
               ),
             ),
             if (action != null) action!,
