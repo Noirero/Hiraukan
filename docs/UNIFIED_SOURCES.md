@@ -18,11 +18,11 @@ Results are normalized into `SourceWorkCandidate` and grouped into one logical `
 
 Deduplication rules are deliberately conservative:
 
-1. DLsite-style RJ/BJ/VJ identity when available.
-2. Otherwise normalized title + creator/circle when both are known.
-3. Otherwise keep items separate. Title-only fuzzy matching is intentionally not used.
+1. Merge only when an exact DLsite-style RJ/BJ/VJ identity can be extracted and normalized.
+2. Zero-padding differences in the same RJ/BJ/VJ identity are treated as the same work.
+3. If no canonical identity is available, keep results namespaced to their provider/local id even when title and creator/circle match.
 
-This avoids merging unrelated works that happen to share a title.
+False merges are more damaging than duplicates, so title/creator similarity is never sufficient by itself to combine works.
 
 ## Playback flow
 
@@ -40,7 +40,7 @@ Fallback currently happens while resolving/loading a work. Mid-track network fai
 
 ## State and identity
 
-Unified identity is provider-order independent. Exact RJ identity maps to the numeric RJ id used by legacy Kikoeru/ASMR.one state, so History/Favorites/playlists that already key by `Work.id` keep the same identity in the normal RJ case. BJ/VJ and metadata-only logical works use deterministic namespaced negative ids to avoid collisions and source-order changes.
+Unified identity is provider-order independent. Exact RJ identity maps to the numeric RJ id used by legacy Kikoeru/ASMR.one state, so History/Favorites/playlists that already key by `Work.id` keep the same identity in the normal RJ case. BJ/VJ and provider-local works use deterministic namespaced negative ids to avoid collisions and source-order changes.
 
 `UnifiedSourceRegistry` is keyed by both stable `Work.id` and canonical key. Old development ids are retained as in-memory aliases when encountered. Normal All/Popular/Recommended grids opt out of unified rendering, so a prior federated search cannot accidentally turn a normal Kikoeru card into a unified card merely because an integer id is present in the registry.
 
@@ -74,4 +74,4 @@ Do not merge this branch to `main` merely because source parsing compiles. Befor
 - playback test from each currently reachable provider;
 - confirmation that existing ASMR.one-only search/player behavior still works.
 
-The original full multi-platform `Build test` workflow must remain present. The focused Unified Sources workflow is additive and must not replace release/build validation.
+The original full multi-platform `Build test` workflow must remain present. Development-only focused/test-signing workflows must not be promoted into `main` unless explicitly adopted as a permanent CI policy.

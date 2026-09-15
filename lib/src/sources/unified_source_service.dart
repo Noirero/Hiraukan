@@ -372,12 +372,10 @@ class UnifiedSourceService {
     );
     if (canonical != null) return 'id:$canonical';
 
-    final title = _normalize(candidate.work.title);
-    final circle = _normalize(candidate.work.name ?? candidate.ref.circle ?? '');
-    if (title.isNotEmpty && circle.isNotEmpty) {
-      return 'meta:$title|$circle';
-    }
-
+    // False merges are more damaging than duplicates. If a provider does not
+    // expose an exact RJ/BJ/VJ identity, keep that result namespaced to the
+    // provider/local id even when title and creator happen to match another
+    // source. The work can be merged later only after a canonical id is known.
     return 'source:${candidate.ref.source.id}:${candidate.ref.localId}';
   }
 
@@ -441,12 +439,4 @@ class UnifiedSourceService {
       sources: refs,
     );
   }
-
-  String _normalize(String value) => value
-      .toLowerCase()
-      .replaceAll(
-        RegExp(r'[^a-z0-9\u3040-\u30ff\u3400-\u9fff]+'),
-        '',
-      )
-      .trim();
 }

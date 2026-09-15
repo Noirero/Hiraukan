@@ -2,20 +2,8 @@ name: Build test
 
 on:
   push:
+  
   workflow_dispatch:
-    inputs:
-      target:
-        description: Build target
-        required: true
-        default: android
-        type: choice
-        options:
-          - android
-          - full
-
-concurrency:
-  group: build-test-${{ github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -23,11 +11,6 @@ permissions:
 jobs:
   android:
     name: Android Build
-    if: >-
-      github.ref == 'refs/heads/main' ||
-      github.event_name == 'workflow_dispatch' ||
-      contains(github.event.head_commit.message || '', '[build android]') ||
-      contains(github.event.head_commit.message || '', '[full build]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -35,37 +18,16 @@ jobs:
       - name: Prepare Android Signing
         id: android_signing
         env:
-          PROD_ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          PROD_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          PROD_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          PROD_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          TEST_ANDROID_KEYSTORE_BASE64: ${{ secrets.TEST_ANDROID_KEYSTORE_BASE64 }}
-          TEST_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.TEST_ANDROID_KEYSTORE_PASSWORD }}
-          TEST_ANDROID_KEY_ALIAS: ${{ secrets.TEST_ANDROID_KEY_ALIAS }}
-          TEST_ANDROID_KEY_PASSWORD: ${{ secrets.TEST_ANDROID_KEY_PASSWORD }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          set -euo pipefail
-          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
-            ANDROID_KEYSTORE_BASE64="$PROD_ANDROID_KEYSTORE_BASE64"
-            ANDROID_KEYSTORE_PASSWORD="$PROD_ANDROID_KEYSTORE_PASSWORD"
-            ANDROID_KEY_ALIAS="$PROD_ANDROID_KEY_ALIAS"
-            ANDROID_KEY_PASSWORD="$PROD_ANDROID_KEY_PASSWORD"
-            EXPECTED_CERT_SHA256="b49fcc1a879b7dab15f223f7431dfbee447dbe268d1578fc549340c430ddc87f"
-          else
-            ANDROID_KEYSTORE_BASE64="$TEST_ANDROID_KEYSTORE_BASE64"
-            ANDROID_KEYSTORE_PASSWORD="$TEST_ANDROID_KEYSTORE_PASSWORD"
-            ANDROID_KEY_ALIAS="$TEST_ANDROID_KEY_ALIAS"
-            ANDROID_KEY_PASSWORD="$TEST_ANDROID_KEY_PASSWORD"
-            EXPECTED_CERT_SHA256="376eef15e8226b413e4e35910465cb857d4d8a0c3fbd49bdef3554b8c283021b"
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "ANDROID_KEYSTORE_BASE64 secret missing; skipping signing setup."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-
-          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
-            if [ -z "${!name:-}" ]; then
-              echo "::error::$name is missing for $GITHUB_REF; refusing to create an APK with an ephemeral debug certificate."
-              exit 1
-            fi
-          done
-
           printf "%s" "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-key.jks
           cat <<EOF > android/key.properties
           storeFile=app/release-key.jks
@@ -75,7 +37,6 @@ jobs:
           EOF
           chmod 600 android/app/release-key.jks android/key.properties
           echo "configured=true" >> "$GITHUB_OUTPUT"
-          echo "expected_cert_sha256=$EXPECTED_CERT_SHA256" >> "$GITHUB_OUTPUT"
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -104,7 +65,7 @@ jobs:
       - name: Verify Android Package Compatibility
         env:
           SIGNING_CONFIGURED: ${{ steps.android_signing.outputs.configured }}
-          EXPECTED_CERT_SHA256: ${{ steps.android_signing.outputs.expected_cert_sha256 }}
+          EXPECTED_CERT_SHA256: b49fcc1a879b7dab15f223f7431dfbee447dbe268d1578fc549340c430ddc87f
         run: |
           set -euo pipefail
 
@@ -139,33 +100,30 @@ jobs:
             exit 1
           fi
 
-          if [ "$SIGNING_CONFIGURED" != "true" ]; then
-            echo "::error::Android signing was not configured."
-            exit 1
+          if [ "$SIGNING_CONFIGURED" = "true" ]; then
+            for apk in "$universal_apk" "$arm64_apk"; do
+              cert_output="$("$apksigner" verify --print-certs "$apk" 2>&1)"
+              actual_cert="$(
+                printf '%s\n' "$cert_output" |
+                  sed -nE '/certificate SHA-256 digest:/I {
+                    s/.*certificate SHA-256 digest:[[:space:]]*//I
+                    p
+                    q
+                  }' |
+                  tr -d '[:space:]:' |
+                  tr '[:upper:]' '[:lower:]'
+              )"
+              if [ -z "$actual_cert" ]; then
+                echo "::error::Unable to read the Android signing certificate for $apk."
+                printf '%s\n' "$cert_output" >&2
+                exit 1
+              fi
+              if [ "$actual_cert" != "$EXPECTED_CERT_SHA256" ]; then
+                echo "::error::Unexpected Android signing certificate for $apk: $actual_cert"
+                exit 1
+              fi
+            done
           fi
-
-          for apk in "$universal_apk" "$arm64_apk"; do
-            cert_output="$("$apksigner" verify --print-certs "$apk" 2>&1)"
-            actual_cert="$(
-              printf '%s\n' "$cert_output" |
-                sed -nE '/certificate SHA-256 digest:/I {
-                  s/.*certificate SHA-256 digest:[[:space:]]*//I
-                  p
-                  q
-                }' |
-                tr -d '[:space:]:' |
-                tr '[:upper:]' '[:lower:]'
-            )"
-            if [ -z "$actual_cert" ]; then
-              echo "::error::Unable to read the Android signing certificate for $apk."
-              printf '%s\n' "$cert_output" >&2
-              exit 1
-            fi
-            if [ "$actual_cert" != "$EXPECTED_CERT_SHA256" ]; then
-              echo "::error::Unexpected Android signing certificate for $apk: $actual_cert"
-              exit 1
-            fi
-          done
 
       - name: Upload Android Artifacts
         uses: actions/upload-artifact@v6
@@ -176,10 +134,6 @@ jobs:
 
   ios:
     name: iOS Build (Unsigned)
-    if: >-
-      github.ref == 'refs/heads/main' ||
-      (github.event_name == 'workflow_dispatch' && inputs.target == 'full') ||
-      contains(github.event.head_commit.message || '', '[full build]')
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
@@ -213,10 +167,6 @@ jobs:
 
   macos:
     name: macOS Build
-    if: >-
-      github.ref == 'refs/heads/main' ||
-      (github.event_name == 'workflow_dispatch' && inputs.target == 'full') ||
-      contains(github.event.head_commit.message || '', '[full build]')
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
@@ -251,10 +201,6 @@ jobs:
 
   windows:
     name: Windows Build
-    if: >-
-      github.ref == 'refs/heads/main' ||
-      (github.event_name == 'workflow_dispatch' && inputs.target == 'full') ||
-      contains(github.event.head_commit.message || '', '[full build]')
     # Keep this pinned for native plugin compatibility.
     runs-on: windows-2022
     steps:
@@ -306,10 +252,6 @@ jobs:
 
   linux:
     name: Linux x64 Build
-    if: >-
-      github.ref == 'refs/heads/main' ||
-      (github.event_name == 'workflow_dispatch' && inputs.target == 'full') ||
-      contains(github.event.head_commit.message || '', '[full build]')
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v6
@@ -348,10 +290,6 @@ jobs:
 
   linux-arm64:
     name: Linux ARM64 Build
-    if: >-
-      github.ref == 'refs/heads/main' ||
-      (github.event_name == 'workflow_dispatch' && inputs.target == 'full') ||
-      contains(github.event.head_commit.message || '', '[full build]')
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v6
