@@ -167,7 +167,7 @@ class AiTranscriptionService {
         lang: 'ja',
         withTimestamps: true,
         splitOnWord: splitOnWord,
-        threads: threads.clamp(1, 16),
+        threads: threads.clamp(1, 16).toInt(),
       );
       if (result == null || result.transcription.text.trim().isEmpty) return null;
 
