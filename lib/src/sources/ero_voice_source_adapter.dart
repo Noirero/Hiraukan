@@ -40,12 +40,14 @@ class EroVoiceSourceAdapter implements UnifiedSourceAdapter {
 
     for (final base in _orderedBases) {
       try {
-        final url = '$base/feeds/posts/default?alt=json&q=$encoded&start-index=$startIndex&max-results=$pageSize';
+        final url =
+            '$base/feeds/posts/default?alt=json&q=$encoded&start-index=$startIndex&max-results=$pageSize';
         final response = await _dio.get<String>(
           url,
           options: Options(
             responseType: ResponseType.plain,
-            validateStatus: (status) => status != null && status >= 200 && status < 400,
+            validateStatus: (status) =>
+                status != null && status >= 200 && status < 400,
           ),
         );
         decoded = jsonDecode(response.data ?? '{}');
@@ -63,11 +65,15 @@ class EroVoiceSourceAdapter implements UnifiedSourceAdapter {
 
     final feed = decoded['feed'];
     if (feed is! Map) {
-      return const SourceSearchPage(items: [], totalCount: 0, hasMore: false);
+      return const SourceSearchPage(
+        items: [],
+        totalCount: 0,
+        hasMore: false,
+      );
     }
 
     final entries = (feed['entry'] as List?) ?? const [];
-    final totalRaw = feed['openSearch\$totalResults'];
+    final totalRaw = feed[r'openSearch$totalResults'];
     final totalText = totalRaw is Map ? totalRaw[r'$t']?.toString() : null;
     final totalCount = int.tryParse(totalText ?? '') ?? entries.length;
     final items = <SourceWorkCandidate>[];
@@ -79,8 +85,10 @@ class EroVoiceSourceAdapter implements UnifiedSourceAdapter {
           ? SourceHtmlParser.stripTags(titleMap[r'$t']?.toString() ?? '')
           : '';
       final contentMap = raw['content'] ?? raw['summary'];
-      final content = contentMap is Map ? contentMap[r'$t']?.toString() ?? '' : '';
-      final canonical = SourceHtmlParser.extractCanonicalId('$title $content');
+      final content =
+          contentMap is Map ? contentMap[r'$t']?.toString() ?? '' : '';
+      final canonical =
+          SourceHtmlParser.extractCanonicalId('$title $content');
       final links = (raw['link'] as List?) ?? const [];
       String? detailUrl;
       for (final link in links) {
@@ -89,7 +97,9 @@ class EroVoiceSourceAdapter implements UnifiedSourceAdapter {
           if (detailUrl != null) break;
         }
       }
-      detailUrl ??= raw['id'] is Map ? (raw['id'] as Map)[r'$t']?.toString() : null;
+      detailUrl ??= raw['id'] is Map
+          ? (raw['id'] as Map)[r'$t']?.toString()
+          : null;
       if (detailUrl == null || detailUrl.isEmpty) continue;
 
       final localId = canonical ?? detailUrl;
@@ -126,19 +136,24 @@ class EroVoiceSourceAdapter implements UnifiedSourceAdapter {
   @override
   Future<Work> loadDetail(UnifiedSourceRef ref) async {
     final html = await _getHtml(ref.detailUrl);
-    final title = SourceHtmlParser.extractTitle(html) ?? ref.title ?? ref.localId;
-    final canonical = ref.canonicalId ?? SourceHtmlParser.extractCanonicalId('$title $html');
+    final title =
+        SourceHtmlParser.extractTitle(html) ?? ref.title ?? ref.localId;
+    final canonical = ref.canonicalId ??
+        SourceHtmlParser.extractCanonicalId('$title $html');
     final cover = SourceHtmlParser.extractFirstImage(
-      html,
-      base: Uri.tryParse(ref.detailUrl),
-    ) ?? ref.coverUrl;
+          html,
+          base: Uri.tryParse(ref.detailUrl),
+        ) ??
+        ref.coverUrl;
     final audioUrls = SourceHtmlParser.extractAudioUrls(
       html,
       base: Uri.tryParse(ref.detailUrl),
     );
 
     return Work(
-      id: SourceHtmlParser.stableNegativeId('erovoice:${canonical ?? ref.localId}'),
+      id: SourceHtmlParser.stableNegativeId(
+        'erovoice:${canonical ?? ref.localId}',
+      ),
       title: title,
       images: cover == null ? null : [cover],
       sourceUrl: ref.detailUrl,
@@ -149,7 +164,10 @@ class EroVoiceSourceAdapter implements UnifiedSourceAdapter {
           .entries
           .map(
             (entry) => AudioFile(
-              title: SourceHtmlParser.basenameFromUrl(entry.value, entry.key),
+              title: SourceHtmlParser.basenameFromUrl(
+                entry.value,
+                entry.key,
+              ),
               type: 'audio',
               mediaDownloadUrl: entry.value,
             ),
@@ -222,7 +240,8 @@ class EroVoiceSourceAdapter implements UnifiedSourceAdapter {
           candidate,
           options: Options(
             responseType: ResponseType.plain,
-            validateStatus: (status) => status != null && status >= 200 && status < 400,
+            validateStatus: (status) =>
+                status != null && status >= 200 && status < 400,
           ),
         );
         if (Uri.tryParse(candidate)?.host == 'e.erovoice.us') {
