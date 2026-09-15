@@ -14,6 +14,10 @@ on:
       - '.github/workflows/unified_sources_check.yml'
   workflow_dispatch:
 
+concurrency:
+  group: unified-sources-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
