@@ -23,6 +23,8 @@ class KikoFluNotificationService {
   final FlutterLocalNotificationsPlugin _local =
       FlutterLocalNotificationsPlugin();
   bool _localReady = false;
+  bool _permissionResolved = false;
+  bool _permissionGranted = false;
   bool _firebaseReady = false;
   StreamSubscription<RemoteMessage>? _foregroundSubscription;
 
@@ -53,16 +55,21 @@ class KikoFluNotificationService {
 
   Future<bool> requestLocalPermission() async {
     if (!Platform.isAndroid) return false;
+    if (_permissionResolved) return _permissionGranted;
     await initialize();
     if (!_localReady) return false;
     try {
-      return await _local
+      _permissionGranted = await _local
               .resolvePlatformSpecificImplementation<
                   AndroidFlutterLocalNotificationsPlugin>()
               ?.requestNotificationsPermission() ??
           true;
+      _permissionResolved = true;
+      return _permissionGranted;
     } catch (error) {
       _log.warning('Notification permission request failed: $error', tag: 'Notify');
+      _permissionResolved = true;
+      _permissionGranted = false;
       return false;
     }
   }
@@ -106,12 +113,14 @@ class KikoFluNotificationService {
     }
   }
 
-  /// Returns the effective enabled state after applying the request.
+  /// Returns the effective enabled state after applying the request and keeps
+  /// the persisted setting aligned with that effective state.
   Future<bool> setFcmEnabled(bool enabled) async {
     if (!enabled) {
       await _foregroundSubscription?.cancel();
       _foregroundSubscription = null;
       _firebaseReady = false;
+      await KikoFluFeatureSettings.instance.setFcmEnabled(false);
       try {
         if (Firebase.apps.isNotEmpty) {
           await FirebaseMessaging.instance.deleteToken();
@@ -123,6 +132,7 @@ class KikoFluNotificationService {
     }
 
     final ready = await initializeFirebaseIfConfigured();
+    await KikoFluFeatureSettings.instance.setFcmEnabled(ready);
     if (!ready) {
       await _foregroundSubscription?.cancel();
       _foregroundSubscription = null;
@@ -150,8 +160,7 @@ class KikoFluNotificationService {
         !KikoFluFeatureSettings.instance.notificationsEnabled) {
       return;
     }
-    await initialize();
-    if (!_localReady) return;
+    if (!await requestLocalPermission()) return;
     await _local.show(
       id,
       title,
@@ -179,8 +188,7 @@ class KikoFluNotificationService {
         !KikoFluFeatureSettings.instance.notificationsEnabled) {
       return;
     }
-    await initialize();
-    if (!_localReady) return;
+    if (!await requestLocalPermission()) return;
     final safeMax = maxProgress <= 0 ? 100 : maxProgress;
     await _local.show(
       id,
