@@ -1,0 +1,34 @@
+name: Unified Sources Check
+
+on:
+  push:
+    branches:
+      - feature/unified-sources
+    paths:
+      - 'lib/src/sources/**'
+      - 'lib/src/screens/unified_work_detail_screen.dart'
+      - 'lib/src/widgets/unified_*.dart'
+      - 'lib/src/providers/search_result_provider.dart'
+      - 'test/source_html_parser_test.dart'
+      - 'test/unified_source_service_test.dart'
+      - '.github/workflows/unified_sources_check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.7'
+          channel: 'stable'
+      - name: Get dependencies
+        run: flutter pub get
+      - name: Analyze unified source changes
+        run: flutter analyze lib/src/sources lib/src/screens/unified_work_detail_screen.dart lib/src/widgets/unified_source_filter_bar.dart lib/src/widgets/unified_work_card.dart lib/src/widgets/works_grid_view.dart lib/src/providers/search_result_provider.dart test/source_html_parser_test.dart test/unified_source_service_test.dart
+      - name: Run unified source unit tests
+        run: flutter test test/source_html_parser_test.dart test/unified_source_service_test.dart
