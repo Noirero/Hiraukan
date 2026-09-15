@@ -13,6 +13,8 @@ import 'subtitle_library_provider.dart';
 import '../utils/subtitle_filter.dart';
 import '../utils/paged_collection.dart';
 import '../utils/persistent_enum_preference.dart';
+import '../sources/unified_source_models.dart';
+import '../sources/unified_source_provider.dart';
 
 // Layout types for search results
 enum SearchLayoutType {
@@ -21,7 +23,6 @@ enum SearchLayoutType {
   bigGrid,
 }
 
-// Extension to convert SearchLayoutType to LayoutType
 extension SearchLayoutTypeExtension on SearchLayoutType {
   LayoutType toWorksLayoutType() {
     switch (this) {
@@ -35,7 +36,6 @@ extension SearchLayoutTypeExtension on SearchLayoutType {
   }
 }
 
-// Search result state
 class SearchResultState extends Equatable {
   final List<Work> works;
   final List<Work> rawWorks;
@@ -51,11 +51,12 @@ class SearchResultState extends Equatable {
   final SortOrder sortOption;
   final SortDirection sortDirection;
   final int subtitleFilter;
-  final int basePageSize; // 用户设置的基础分页大小
+  final int basePageSize;
   final String keyword;
   final Map<String, dynamic>? searchParams;
+  final Set<UnifiedSourceKind> enabledSources;
+  final Map<UnifiedSourceKind, UnifiedSourceHealth> sourceHealth;
 
-  // 实际使用的分页大小（字幕筛选时翻倍）
   int get pageSize => SubtitleFilterMode.fromValue(subtitleFilter).isActive
       ? basePageSize * 2
       : basePageSize;
@@ -78,6 +79,12 @@ class SearchResultState extends Equatable {
     this.basePageSize = 40,
     this.keyword = '',
     this.searchParams,
+    this.enabledSources = const {
+      UnifiedSourceKind.asmrOne,
+      UnifiedSourceKind.hentaiAsmr,
+      UnifiedSourceKind.eroVoice,
+    },
+    this.sourceHealth = const {},
   });
 
   SearchResultState copyWith({
@@ -98,6 +105,8 @@ class SearchResultState extends Equatable {
     int? basePageSize,
     String? keyword,
     Map<String, dynamic>? searchParams,
+    Set<UnifiedSourceKind>? enabledSources,
+    Map<UnifiedSourceKind, UnifiedSourceHealth>? sourceHealth,
   }) {
     return SearchResultState(
       works: works ?? this.works,
@@ -117,6 +126,8 @@ class SearchResultState extends Equatable {
       basePageSize: basePageSize ?? this.basePageSize,
       keyword: keyword ?? this.keyword,
       searchParams: searchParams ?? this.searchParams,
+      enabledSources: enabledSources ?? this.enabledSources,
+      sourceHealth: sourceHealth ?? this.sourceHealth,
     );
   }
 
@@ -139,10 +150,11 @@ class SearchResultState extends Equatable {
         basePageSize,
         keyword,
         searchParams,
+        enabledSources,
+        sourceHealth,
       ];
 }
 
-// Search result notifier
 class SearchResultNotifier extends StateNotifier<SearchResultState> {
   static const String layoutPreferenceKey = 'search_result_layout_type';
 
@@ -162,9 +174,7 @@ class SearchResultNotifier extends StateNotifier<SearchResultState> {
 
   Future<void> _loadLayoutPreference() async {
     final layoutType = await _layoutPreference.load();
-    if (!mounted || layoutType == null || layoutType == state.layoutType) {
-      return;
-    }
+    if (!mounted || layoutType == null || layoutType == state.layoutType) return;
     state = state.copyWith(
       layoutType: layoutType,
       error: state.error,
@@ -189,10 +199,7 @@ class SearchResultNotifier extends StateNotifier<SearchResultState> {
   void updatePageSize(int newSize) {
     if (state.basePageSize == newSize) return;
     state = state.copyWith(basePageSize: newSize);
-    // 如果当前有搜索内容，刷新列表
-    if (state.keyword.isNotEmpty || state.searchParams != null) {
-      refresh();
-    }
+    if (state.keyword.isNotEmpty || state.searchParams != null) refresh();
   }
 
   Future<void> loadResults({
@@ -213,11 +220,14 @@ class SearchResultNotifier extends StateNotifier<SearchResultState> {
     );
 
     try {
-      Map<String, dynamic> result;
+      List<Work> pageWorks;
+      int totalCount;
+      bool hasMore;
+      var health = state.sourceHealth;
       const serverSubtitleParam = 0;
 
       if (state.searchParams?.containsKey('vaId') == true) {
-        result = await _apiService.getWorksByVa(
+        final result = await _apiService.getWorksByVa(
           vaId: state.searchParams!['vaId'],
           page: page,
           pageSize: state.pageSize,
@@ -225,8 +235,11 @@ class SearchResultNotifier extends StateNotifier<SearchResultState> {
           sort: state.sortDirection.value,
           subtitle: serverSubtitleParam,
         );
+        pageWorks = _parseWorks(result['works']);
+        totalCount = _totalCount(result, pageWorks.length);
+        hasMore = _hasMoreFromTotal(page, totalCount);
       } else if (state.searchParams?.containsKey('tagId') == true) {
-        result = await _apiService.getWorksByTag(
+        final result = await _apiService.getWorksByTag(
           tagId: state.searchParams!['tagId'],
           page: page,
           pageSize: state.pageSize,
@@ -234,8 +247,22 @@ class SearchResultNotifier extends StateNotifier<SearchResultState> {
           sort: state.sortDirection.value,
           subtitle: serverSubtitleParam,
         );
+        pageWorks = _parseWorks(result['works']);
+        totalCount = _totalCount(result, pageWorks.length);
+        hasMore = _hasMoreFromTotal(page, totalCount);
+      } else if (_supportsFederatedSearch(state.keyword)) {
+        final result = await _ref.read(unifiedSourceServiceProvider).search(
+              keyword: state.keyword,
+              page: page,
+              pageSize: state.pageSize,
+              enabledSources: state.enabledSources,
+            );
+        pageWorks = result.works;
+        totalCount = result.totalCount;
+        hasMore = result.hasMore;
+        health = result.health;
       } else {
-        result = await _apiService.searchWorks(
+        final result = await _apiService.searchWorks(
           keyword: state.keyword,
           page: page,
           pageSize: state.pageSize,
@@ -243,12 +270,13 @@ class SearchResultNotifier extends StateNotifier<SearchResultState> {
           sort: state.sortDirection.value,
           subtitle: serverSubtitleParam,
         );
+        pageWorks = _parseWorks(result['works']);
+        totalCount = _totalCount(result, pageWorks.length);
+        hasMore = _hasMoreFromTotal(page, totalCount);
       }
 
       if (!_requestGate.isCurrent(requestToken)) return;
 
-      final pageWorks =
-          (result['works'] as List).map((json) => Work.fromJson(json)).toList();
       final rawWorks = mergePagedItems<Work, int>(
         existing: const [],
         incoming: pageWorks,
@@ -257,22 +285,19 @@ class SearchResultNotifier extends StateNotifier<SearchResultState> {
       );
       final blockedItems = _ref.read(blockedItemsProvider);
       final filteredWorks = _filterWorks(rawWorks, blockedItems);
-      final pagination = result['pagination'] as Map<String, dynamic>?;
-      final totalCount = pagination?['totalCount'] ?? pageWorks.length;
-      final totalPages =
-          totalCount > 0 ? (totalCount / state.pageSize).ceil() : 1;
 
       state = state.copyWith(
         works: filteredWorks,
         rawWorks: rawWorks,
         currentPage: page,
         totalCount: totalCount,
-        hasMore: page < totalPages,
+        hasMore: hasMore,
         isLoading: false,
         isRefreshing: false,
         isLoadingMore: false,
         error: null,
         loadMoreError: null,
+        sourceHealth: health,
       );
     } catch (e) {
       if (!_requestGate.isCurrent(requestToken)) return;
@@ -289,37 +314,79 @@ class SearchResultNotifier extends StateNotifier<SearchResultState> {
     }
   }
 
+  List<Work> _parseWorks(Object? raw) {
+    final list = raw is List ? raw : const [];
+    return list.map((item) {
+      if (item is Work) return item;
+      return Work.fromJson(Map<String, dynamic>.from(item as Map));
+    }).toList(growable: false);
+  }
+
+  int _totalCount(Map<String, dynamic> result, int fallback) {
+    final pagination = result['pagination'] as Map<String, dynamic>?;
+    return (pagination?['totalCount'] as num?)?.toInt() ?? fallback;
+  }
+
+  bool _hasMoreFromTotal(int page, int totalCount) {
+    final totalPages = totalCount > 0 ? (totalCount / state.pageSize).ceil() : 1;
+    return page < totalPages;
+  }
+
+  bool _supportsFederatedSearch(String keyword) {
+    final value = keyword.trim();
+    if (value.isEmpty) return false;
+    // Advanced Kikoeru syntax (tag/circle/VA/rating exclusions) remains on the
+    // Kikoeru backend because the external sources do not share that grammar.
+    return !value.contains(r'$');
+  }
+
+  void setSourceEnabled(UnifiedSourceKind source, bool enabled) {
+    final next = {...state.enabledSources};
+    if (enabled) {
+      next.add(source);
+    } else if (next.length > 1) {
+      next.remove(source);
+    }
+    if (next.length == state.enabledSources.length &&
+        next.containsAll(state.enabledSources)) return;
+    state = state.copyWith(enabledSources: next, currentPage: 1, works: [], rawWorks: []);
+    refresh();
+  }
+
+  void enableAllSources() {
+    state = state.copyWith(
+      enabledSources: UnifiedSourceKind.values.toSet(),
+      currentPage: 1,
+      works: [],
+      rawWorks: [],
+    );
+    refresh();
+  }
+
   void reapplyFilters() {
     final blockedItems = _ref.read(blockedItemsProvider);
-    final filteredWorks = _filterWorks(state.rawWorks, blockedItems);
-    state = state.copyWith(works: filteredWorks);
+    state = state.copyWith(works: _filterWorks(state.rawWorks, blockedItems));
   }
 
   List<Work> _filterWorks(List<Work> works, BlockedItemsState blockedItems) {
-    // 获取本地字幕库的作品ID
     final localSubtitleIds = _ref.read(subtitleLibraryProvider);
-    final subtitleFilter = state.subtitleFilter;
-
     final subtitleFilteredWorks = filterWorksBySubtitleMode(
       works,
       localSubtitleIds,
-      subtitleFilter,
+      state.subtitleFilter,
     );
 
     return subtitleFilteredWorks.where((work) {
-      // Check tags
       if (work.tags != null) {
         for (final tag in work.tags!) {
           if (blockedItems.tags.contains(tag.name)) return false;
         }
       }
-      // Check CVs
       if (work.vas != null) {
         for (final va in work.vas!) {
           if (blockedItems.cvs.contains(va.name)) return false;
         }
       }
-      // Check Circle
       if (work.name != null && blockedItems.circles.contains(work.name)) {
         return false;
       }
@@ -327,13 +394,10 @@ class SearchResultNotifier extends StateNotifier<SearchResultState> {
     }).toList();
   }
 
-  Future<void> goToPage(int page) async {
-    await loadResults(targetPage: page);
-  }
+  Future<void> goToPage(int page) async => loadResults(targetPage: page);
 
-  Future<void> refresh() async {
-    await loadResults(targetPage: state.currentPage, supersede: true);
-  }
+  Future<void> refresh() async =>
+      loadResults(targetPage: state.currentPage, supersede: true);
 
   Future<void> loadMore() async {
     if (state.isLoading || !state.hasMore) return;
@@ -391,28 +455,20 @@ class SearchResultNotifier extends StateNotifier<SearchResultState> {
   }
 }
 
-// Provider
 final searchResultProvider =
     StateNotifierProvider<SearchResultNotifier, SearchResultState>((ref) {
   final apiService = ref.watch(kikoeruApiServiceProvider);
   final pageSize = ref.read(pageSizeProvider);
-  final notifier =
-      SearchResultNotifier(apiService, ref, initialPageSize: pageSize);
+  final notifier = SearchResultNotifier(apiService, ref, initialPageSize: pageSize);
 
   ref.listen(pageSizeProvider, (previous, next) {
-    if (previous != next) {
-      notifier.updatePageSize(next);
-    }
+    if (previous != next) notifier.updatePageSize(next);
   });
 
-  // 监听屏蔽列表变化，重新过滤
   ref.listen(blockedItemsProvider, (previous, next) {
-    if (previous != next) {
-      notifier.reapplyFilters();
-    }
+    if (previous != next) notifier.reapplyFilters();
   });
 
-  // 监听本地字幕库变化，当字幕筛选开启时重新过滤
   ref.listen(subtitleLibraryProvider, (previous, next) {
     if (previous != next && notifier.isSubtitleFilterActive) {
       notifier.reapplyFilters();
