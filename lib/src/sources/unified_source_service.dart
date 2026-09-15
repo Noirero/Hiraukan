@@ -124,6 +124,12 @@ class UnifiedSourceService {
       if (adapter == null) continue;
       try {
         final detail = await adapter.loadDetail(ref);
+        if (_looksLikeProviderInterstitial(detail)) {
+          lastError = StateError(
+            '${ref.source.label} returned a provider interstitial instead of work metadata',
+          );
+          continue;
+        }
         final cover = detail.images?.isNotEmpty == true
             ? detail.images
             : bundle.coverUrl == null
@@ -342,6 +348,20 @@ class UnifiedSourceService {
     for (final ref in copy) {
       if (ref.source != preferred) yield ref;
     }
+  }
+
+  bool _looksLikeProviderInterstitial(Work detail) {
+    final title = SourceHtmlParser.stripTags(detail.title)
+        .toLowerCase()
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (title.isEmpty) return false;
+    return title == 'sensitive content warning' ||
+        title == 'content warning' ||
+        title == 'blogger' ||
+        title.contains('sensitive content warning') ||
+        title.contains('this blog may contain sensitive content') ||
+        title.contains('before you continue');
   }
 
   String _canonicalKey(SourceWorkCandidate candidate) {
