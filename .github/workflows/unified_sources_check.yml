@@ -8,6 +8,7 @@ on:
       - 'lib/src/sources/**'
       - 'lib/src/screens/unified_work_detail_screen.dart'
       - 'lib/src/widgets/unified_*.dart'
+      - 'lib/src/widgets/history_work_card.dart'
       - 'lib/src/providers/search_result_provider.dart'
       - 'test/source_html_parser_test.dart'
       - 'test/unified_source_service_test.dart'
@@ -33,6 +34,6 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
       - name: Analyze unified source changes
-        run: flutter analyze lib/src/sources lib/src/screens/unified_work_detail_screen.dart lib/src/widgets/unified_source_filter_bar.dart lib/src/widgets/unified_work_card.dart lib/src/widgets/works_grid_view.dart lib/src/providers/search_result_provider.dart test/source_html_parser_test.dart test/unified_source_service_test.dart
+        run: flutter analyze lib/src/sources lib/src/screens/unified_work_detail_screen.dart lib/src/widgets/unified_source_filter_bar.dart lib/src/widgets/unified_work_card.dart lib/src/widgets/works_grid_view.dart lib/src/widgets/history_work_card.dart lib/src/providers/search_result_provider.dart test/source_html_parser_test.dart test/unified_source_service_test.dart
       - name: Run unified source unit tests
         run: flutter test test/source_html_parser_test.dart test/unified_source_service_test.dart
