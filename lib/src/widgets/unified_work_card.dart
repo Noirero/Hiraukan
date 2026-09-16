@@ -25,7 +25,9 @@ class UnifiedWorkCard extends ConsumerWidget {
     final bundle = UnifiedSourceRegistry.instance.bundleFor(work.id);
     if (bundle == null) return const SizedBox.shrink();
     final auth = ref.watch(
-      authProvider.select((value) => (host: value.host ?? '', token: value.token ?? '')),
+      authProvider.select(
+        (value) => (host: value.host ?? '', token: value.token ?? ''),
+      ),
     );
     final cover = _coverUrl(bundle, auth.host, auth.token);
 
@@ -54,7 +56,9 @@ class UnifiedWorkCard extends ConsumerWidget {
                   child: _Cover(url: cover),
                 ),
                 const SizedBox(width: 12),
-                Expanded(child: _Info(work: work, bundle: bundle, compact: false)),
+                Expanded(
+                  child: _Info(work: work, bundle: bundle, compact: false),
+                ),
                 const Icon(Icons.chevron_right),
               ],
             ),
@@ -82,7 +86,7 @@ class UnifiedWorkCard extends ConsumerWidget {
                   Positioned(
                     top: 6,
                     right: 6,
-                    child: _SourceCountBadge(count: bundle.sources.length),
+                    child: _CapabilityBadge(bundle: bundle),
                   ),
                 ],
               ),
@@ -144,7 +148,11 @@ class _Info extends StatelessWidget {
   final UnifiedWorkBundle bundle;
   final bool compact;
 
-  const _Info({required this.work, required this.bundle, required this.compact});
+  const _Info({
+    required this.work,
+    required this.bundle,
+    required this.compact,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -194,7 +202,10 @@ class _Info extends StatelessWidget {
           spacing: 4,
           runSpacing: 4,
           children: bundle.sources
-              .map((source) => _SourceChip(source: source.source, compact: compact))
+              .map(
+                (source) =>
+                    _SourceChip(source: source.source, compact: compact),
+              )
               .toList(growable: false),
         ),
       ],
@@ -204,7 +215,8 @@ class _Info extends StatelessWidget {
   static String _duration(int seconds) {
     final duration = Duration(seconds: seconds);
     final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final minutes =
+        duration.inMinutes.remainder(60).toString().padLeft(2, '0');
     final secs = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
     return hours > 0 ? '$hours:$minutes:$secs' : '$minutes:$secs';
   }
@@ -218,40 +230,76 @@ class _SourceChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: EdgeInsets.symmetric(horizontal: compact ? 5 : 7, vertical: 3),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.secondaryContainer,
+        color: source.canPlay
+            ? scheme.primaryContainer
+            : scheme.secondaryContainer,
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(
-        source.label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              fontSize: compact ? 9 : null,
-              color: Theme.of(context).colorScheme.onSecondaryContainer,
-            ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            source.canPlay ? Icons.play_arrow_rounded : Icons.download_rounded,
+            size: compact ? 11 : 13,
+            color: source.canPlay
+                ? scheme.onPrimaryContainer
+                : scheme.onSecondaryContainer,
+          ),
+          const SizedBox(width: 3),
+          Text(
+            source.label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  fontSize: compact ? 9 : null,
+                  color: source.canPlay
+                      ? scheme.onPrimaryContainer
+                      : scheme.onSecondaryContainer,
+                ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _SourceCountBadge extends StatelessWidget {
-  final int count;
+class _CapabilityBadge extends StatelessWidget {
+  final UnifiedWorkBundle bundle;
 
-  const _SourceCountBadge({required this.count});
+  const _CapabilityBadge({required this.bundle});
 
   @override
   Widget build(BuildContext context) {
+    final canPlay = bundle.canPlay;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.88),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.90),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-        child: Text(
-          '$count source${count == 1 ? '' : 's'}',
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              canPlay ? Icons.play_arrow_rounded : Icons.download_rounded,
+              size: 13,
+            ),
+            const SizedBox(width: 3),
+            Text(
+              canPlay
+                  ? (bundle.sources.length > 1
+                      ? '${bundle.sources.length} sumber'
+                      : 'Bisa diputar')
+                  : 'Unduhan',
+              style: Theme.of(context)
+                  .textTheme
+                  .labelSmall
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ],
         ),
       ),
     );
