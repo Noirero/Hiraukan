@@ -57,10 +57,22 @@ class HentaiAsmrSourceAdapter
     );
     final firstItems = _parseCatalogPage(firstHtml);
 
-    var lastSitePage = _lastSitePageCache[cacheKey] ??
+    final discoveredLastSitePage =
         _parseLastSitePage(firstHtml, fallback: firstSitePage);
-    if (lastSitePage < firstSitePage) lastSitePage = firstSitePage;
-    _lastSitePageCache[cacheKey] = lastSitePage;
+    int lastSitePage;
+    if (logicalPage == 1) {
+      // Page one contains the provider's "last" navigation link. Refresh it
+      // instead of keeping an old session count forever, because HentaiASMR's
+      // archive grows independently from Hiraukan releases.
+      lastSitePage = discoveredLastSitePage;
+      _lastSitePageCache[cacheKey] = lastSitePage;
+      _totalCountCache.remove(cacheKey);
+    } else {
+      lastSitePage =
+          _lastSitePageCache[cacheKey] ?? discoveredLastSitePage;
+      if (lastSitePage < firstSitePage) lastSitePage = firstSitePage;
+      _lastSitePageCache[cacheKey] = lastSitePage;
+    }
 
     final requestedEndIndex = startIndex + logicalPageSize - 1;
     var finalSitePage = (requestedEndIndex ~/ _sitePageSize) + 1;
@@ -76,10 +88,10 @@ class HentaiAsmrSourceAdapter
       pagesToFetch.add(sitePage);
     }
 
-    // Resolve the exact catalog size once per query by reading the final site
-    // page. HentaiASMR currently serves 15 works per site page while Hiraukan
-    // commonly asks for 40/80 items, so one logical Hiraukan page spans several
-    // website pages.
+    // Resolve the provider-authoritative archive size by also reading its last
+    // page. HentaiASMR serves 15 entries per catalog page. The final page can
+    // contain fewer entries, so reading it prevents the Hiraukan pager from
+    // truncating the archive.
     final needsTotalCount = !_totalCountCache.containsKey(cacheKey);
     if (needsTotalCount && lastSitePage != firstSitePage) {
       pagesToFetch.add(lastSitePage);
@@ -99,8 +111,15 @@ class HentaiAsmrSourceAdapter
 
     var totalCount = _totalCountCache[cacheKey];
     if (totalCount == null) {
-      final lastItems = parsedPages[lastSitePage] ?? const <SourceWorkCandidate>[];
-      totalCount = (lastSitePage - 1) * _sitePageSize + lastItems.length;
+      final lastItems =
+          parsedPages[lastSitePage] ?? const <SourceWorkCandidate>[];
+      // If the provider changes the markup on an old final page, prefer a
+      // conservative upper bound over hiding that page completely. Once the
+      // page is parseable again the exact count replaces this value.
+      final lastPageCount =
+          lastItems.isEmpty ? _sitePageSize : lastItems.length;
+      totalCount =
+          ((lastSitePage - 1) * _sitePageSize) + lastPageCount;
       _totalCountCache[cacheKey] = totalCount;
     }
 
@@ -115,7 +134,8 @@ class HentaiAsmrSourceAdapter
         .skip(offsetInFirstSitePage)
         .take(logicalPageSize)
         .toList(growable: false);
-    final hasMore = startIndex + items.length < totalCount;
+    final hasMore = finalSitePage < lastSitePage ||
+        startIndex + items.length < totalCount;
 
     return SourceSearchPage(
       items: items,
@@ -137,7 +157,7 @@ class HentaiAsmrSourceAdapter
   int _parseLastSitePage(String html, {required int fallback}) {
     var lastPage = fallback;
     final pagePattern = RegExp(
-      r'''/page/(\d+)(?:/|[?"'])''',
+      r'''/page/(\d+)(?=[/?#"'<\s]|$)''',
       caseSensitive: false,
     );
     for (final match in pagePattern.allMatches(html)) {
@@ -149,65 +169,114 @@ class HentaiAsmrSourceAdapter
 
   List<SourceWorkCandidate> _parseCatalogPage(String html) {
     final base = Uri.parse(baseUrl);
-    final linkPattern = RegExp(
-      r'''<a\b[^>]*href=["']([^"']*((?:rj|bj|vj)\d+)\.html(?:\?[^"']*)?)["'][^>]*>(.*?)</a>''',
+    final anchorPattern = RegExp(
+      r'''<a\b[^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>''',
       caseSensitive: false,
       dotAll: true,
     );
 
-    final seen = <String>{};
-    final items = <SourceWorkCandidate>[];
-    for (final match in linkPattern.allMatches(html)) {
-      final rawUrl = match.group(1)!;
-      final rawId = match.group(2)!;
-      final body = match.group(3)!;
-      final canonical = SourceHtmlParser.extractCanonicalId(rawId) ??
+    // HentaiASMR has used more than one permalink shape over its lifetime:
+    // current entries commonly use /RJxxxx.html while older archive entries
+    // can use /RJxxxx/. Parsing every work anchor by canonical ID keeps both
+    // generations visible instead of silently dropping the older archive.
+    final entries = <String, _CatalogEntryBuilder>{};
+    final order = <String>[];
+    for (final match in anchorPattern.allMatches(html)) {
+      final rawUrl = SourceHtmlParser.decodeEntities(match.group(1)!.trim());
+      final body = match.group(2)!;
+      final canonical = SourceHtmlParser.extractCanonicalId(rawUrl) ??
           SourceHtmlParser.extractCanonicalId(body);
-      final localId = canonical ?? rawId.toUpperCase();
-      if (!seen.add(localId)) continue;
-
-      final detailUrl = SourceHtmlParser.resolveUrl(rawUrl, base: base) ?? rawUrl;
-      final plain = SourceHtmlParser.stripTags(body);
-      var title = plain;
-      if (canonical != null) {
-        title = title.replaceAll(
-          RegExp(RegExp.escape(canonical), caseSensitive: false),
-          '',
-        );
+      if (canonical == null ||
+          !_looksLikeWorkDetailUrl(rawUrl, canonical, base: base)) {
+        continue;
       }
-      title = title
-          .replaceFirst(
-            RegExp(
-              r'^\s*\d+\s+(?:(?:\d{1,2}:)?\d{1,2}:\d{2})\s+\d+\s+',
-            ),
-            '',
-          )
-          .trim();
-      if (title.isEmpty) title = canonical ?? localId;
 
+      final localId = canonical.toUpperCase();
+      final detailUrl =
+          SourceHtmlParser.resolveUrl(rawUrl, base: base) ?? rawUrl;
+      final plain = SourceHtmlParser.stripTags(body);
+      final candidateTitle = _cleanCatalogTitle(plain, canonical);
       final duration = SourceHtmlParser.parseDurationSeconds(plain);
       final cover = SourceHtmlParser.extractFirstImage(body, base: base);
+
+      final existing = entries[localId];
+      if (existing == null) {
+        order.add(localId);
+        entries[localId] = _CatalogEntryBuilder(
+          localId: localId,
+          canonicalId: canonical,
+          detailUrl: detailUrl,
+          title: candidateTitle,
+          durationSeconds: duration,
+          coverUrl: cover,
+        );
+      } else {
+        existing.absorb(
+          title: candidateTitle,
+          durationSeconds: duration,
+          coverUrl: cover,
+        );
+      }
+    }
+
+    return order.map((localId) {
+      final entry = entries[localId]!;
+      final title = entry.title.isEmpty ? entry.canonicalId : entry.title;
       final ref = UnifiedSourceRef(
         source: kind,
-        localId: localId,
-        canonicalId: canonical,
-        detailUrl: detailUrl,
-        coverUrl: cover,
+        localId: entry.localId,
+        canonicalId: entry.canonicalId,
+        detailUrl: entry.detailUrl,
+        coverUrl: entry.coverUrl,
         title: title,
-        durationSeconds: duration,
+        durationSeconds: entry.durationSeconds,
       );
       final work = Work(
-        id: SourceHtmlParser.stableNegativeId('hentai:$localId'),
+        id: SourceHtmlParser.stableNegativeId('hentai:${entry.localId}'),
         title: title,
         age: 'R18',
-        duration: duration,
-        images: cover == null ? null : [cover],
-        sourceUrl: detailUrl,
-        sourceId: canonical,
+        duration: entry.durationSeconds,
+        images: entry.coverUrl == null ? null : [entry.coverUrl!],
+        sourceUrl: entry.detailUrl,
+        sourceId: entry.canonicalId,
       );
-      items.add(SourceWorkCandidate(work: work, ref: ref));
-    }
-    return items;
+      return SourceWorkCandidate(work: work, ref: ref);
+    }).toList(growable: false);
+  }
+
+  bool _looksLikeWorkDetailUrl(
+    String rawUrl,
+    String canonical, {
+    required Uri base,
+  }) {
+    final resolved = SourceHtmlParser.resolveUrl(rawUrl, base: base);
+    final uri = Uri.tryParse(resolved ?? rawUrl);
+    if (uri == null) return false;
+
+    final host = uri.host.toLowerCase().replaceFirst('www.', '');
+    if (host.isNotEmpty && host != 'hentaiasmr.moe') return false;
+
+    // Requiring the ID in the path rejects search links such as /?s=RJxxxx
+    // while accepting both /RJxxxx.html and the legacy /RJxxxx/ permalink.
+    return uri.path.toUpperCase().contains(canonical.toUpperCase());
+  }
+
+  String _cleanCatalogTitle(String plain, String canonical) {
+    var title = plain;
+    title = title.replaceAll(
+      RegExp(RegExp.escape(canonical), caseSensitive: false),
+      ' ',
+    );
+    title = title
+        .replaceFirst(
+          RegExp(
+            r'^\s*\d+\s+(?:(?:\d{1,2}:)?\d{1,2}:\d{2})\s+\d+\s+',
+          ),
+          '',
+        )
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return title;
   }
 
   @override
@@ -326,5 +395,35 @@ class HentaiAsmrSourceAdapter
       ),
     );
     return response.data ?? '';
+  }
+}
+
+class _CatalogEntryBuilder {
+  _CatalogEntryBuilder({
+    required this.localId,
+    required this.canonicalId,
+    required this.detailUrl,
+    required this.title,
+    required this.durationSeconds,
+    required this.coverUrl,
+  });
+
+  final String localId;
+  final String canonicalId;
+  final String detailUrl;
+  String title;
+  int? durationSeconds;
+  String? coverUrl;
+
+  void absorb({
+    required String title,
+    required int? durationSeconds,
+    required String? coverUrl,
+  }) {
+    if (title.isNotEmpty && title.length > this.title.length) {
+      this.title = title;
+    }
+    this.durationSeconds ??= durationSeconds;
+    this.coverUrl ??= coverUrl;
   }
 }
