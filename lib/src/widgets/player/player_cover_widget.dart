@@ -34,7 +34,18 @@ class PlayerCoverWidget extends StatelessWidget {
     final scheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
     const radius = 24.0;
-    final artworkUrl = workCoverUrl ?? track.artworkUrl;
+
+    // Unified sources already attach their provider artwork to the AudioTrack.
+    // Prefer it over the legacy ASMR.one cover fallback passed by the player;
+    // otherwise HentaiASMR tracks can be shadowed by a non-existent
+    // /api/cover/<id> URL and render the placeholder despite having artwork.
+    final trackArtwork = track.artworkUrl?.trim();
+    final fallbackArtwork = workCoverUrl?.trim();
+    final artworkUrl = trackArtwork?.isNotEmpty == true
+        ? trackArtwork
+        : fallbackArtwork?.isNotEmpty == true
+            ? fallbackArtwork
+            : null;
 
     return GestureDetector(
       onTap: onTap,
@@ -89,7 +100,7 @@ class PlayerCoverWidget extends StatelessWidget {
     if (_isLocalFile(artworkUrl)) {
       return Image.file(
         File(_getLocalPath(artworkUrl)),
-        fit: BoxFit.contain,
+        fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) => _buildPlaceholder(context),
       );
     }
@@ -97,7 +108,7 @@ class PlayerCoverWidget extends StatelessWidget {
     return CachedNetworkImage(
       imageUrl: artworkUrl,
       cacheKey: track.workId != null ? 'work_cover_${track.workId}' : null,
-      fit: BoxFit.contain,
+      fit: BoxFit.cover,
       errorWidget: (context, url, error) => _buildPlaceholder(context),
       placeholder: (context, url) => _buildPlaceholder(context),
     );
