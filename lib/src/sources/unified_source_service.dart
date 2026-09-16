@@ -71,9 +71,6 @@ class UnifiedSourceService {
     registry.registerAll(bundles);
 
     final hasMore = pages.any((item) => item.hasMore);
-    // Provider totals overlap heavily after canonical deduplication. Reporting
-    // their sum makes the UI claim many duplicate works. Use an intentionally
-    // conservative page estimate based on unique bundles instead.
     final totalCount = (page - 1) * pageSize +
         bundles.length +
         (hasMore ? pageSize : 0);
@@ -93,7 +90,9 @@ class UnifiedSourceService {
     if (cached != null) registry.register(cached);
 
     final merged = registry.bundleFor(work.id) ??
-        (cached == null ? null : registry.bundleForCanonical(cached.canonicalKey));
+        (cached == null
+            ? null
+            : registry.bundleForCanonical(cached.canonicalKey));
     if (merged != null) {
       await UnifiedSourcePreferences.saveBundle(merged);
       return merged;
@@ -119,7 +118,10 @@ class UnifiedSourceService {
     if (bundle == null) return work;
 
     Object? lastError;
-    for (final ref in _orderedRefs(bundle.sources, preferredSource)) {
+    final preferredMetadata =
+        preferredSource?.canLoadMetadata == true ? preferredSource : null;
+    for (final ref in _orderedRefs(bundle.sources, preferredMetadata)) {
+      if (!ref.source.canLoadMetadata) continue;
       final adapter = _adapterFor(ref.source);
       if (adapter == null) continue;
       try {
@@ -148,6 +150,13 @@ class UnifiedSourceService {
         lastError = error;
       }
     }
+
+    // A catalog result is still useful even when a provider's detail page is
+    // blocked by an interstitial. Download-only providers such as EroVoice
+    // must not turn the whole detail screen into a fatal error.
+    if (bundle.sources.isNotEmpty) {
+      return _catalogFallbackDetail(work, bundle);
+    }
     throw StateError('No source could load work detail: $lastError');
   }
 
@@ -162,9 +171,17 @@ class UnifiedSourceService {
       );
     }
 
+    final playable = bundle.playableSources;
+    if (playable.isEmpty) {
+      throw StateError('This work has no in-app playback source');
+    }
+
+    final playablePreferred = preferredSource?.canPlay == true
+        ? preferredSource
+        : null;
     Object? lastError;
     var attempted = 0;
-    for (final ref in _orderedRefs(bundle.sources, preferredSource)) {
+    for (final ref in _orderedRefs(playable, playablePreferred)) {
       attempted++;
       final adapter = _adapterFor(ref.source);
       if (adapter == null) continue;
@@ -180,7 +197,7 @@ class UnifiedSourceService {
           source: ref,
           files: files,
           usedFallback:
-              (preferredSource != null && ref.source != preferredSource) ||
+              (playablePreferred != null && ref.source != playablePreferred) ||
                   attempted > 1,
         );
       } catch (error) {
@@ -192,12 +209,58 @@ class UnifiedSourceService {
     );
   }
 
+  /// Resolves raw downloadable files independently from playback. This is used
+  /// by download-only providers (currently EroVoice) without ever adding them
+  /// to the audio fallback chain.
+  Future<ResolvedSourceDownloads> resolveDownloads(
+    Work work, {
+    UnifiedSourceKind? preferredSource,
+  }) async {
+    final bundle = await hydrateWork(work);
+    if (bundle == null) {
+      throw StateError(
+        'Unified source metadata is missing for ${work.displayId}',
+      );
+    }
+
+    final downloadable = bundle.downloadSources;
+    if (downloadable.isEmpty) {
+      throw StateError('This work has no downloadable source');
+    }
+
+    final downloadPreferred = preferredSource?.canDownload == true
+        ? preferredSource
+        : null;
+    Object? lastError;
+    for (final ref in _orderedRefs(downloadable, downloadPreferred)) {
+      final adapter = _adapterFor(ref.source);
+      if (adapter == null) continue;
+      try {
+        final files = await adapter.loadTracks(ref);
+        if (files.isEmpty) {
+          lastError = StateError(
+            '${ref.source.label} returned no downloadable files',
+          );
+          continue;
+        }
+        return ResolvedSourceDownloads(source: ref, files: files);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw StateError(
+      'No downloadable files are currently available: $lastError',
+    );
+  }
+
   List<AudioTrack> buildAudioTracks({
     required Work work,
     required ResolvedSourceTracks resolved,
     required String host,
     required String token,
   }) {
+    if (!resolved.source.source.canPlay) return const [];
+
     final flattened = <Map<String, dynamic>>[];
 
     void visit(List<dynamic> files) {
@@ -350,6 +413,16 @@ class UnifiedSourceService {
     }
   }
 
+  Work _catalogFallbackDetail(Work work, UnifiedWorkBundle bundle) {
+    final primary = bundle.sources.isEmpty ? null : bundle.sources.first;
+    final images = bundle.coverUrl == null ? work.images : [bundle.coverUrl!];
+    return work.copyWith(
+      images: images,
+      sourceId: work.sourceId ?? primary?.canonicalId,
+      sourceUrl: primary?.detailUrl ?? work.sourceUrl,
+    );
+  }
+
   bool _looksLikeProviderInterstitial(Work detail) {
     final title = SourceHtmlParser.stripTags(detail.title)
         .toLowerCase()
@@ -372,10 +445,6 @@ class UnifiedSourceService {
     );
     if (canonical != null) return 'id:$canonical';
 
-    // False merges are more damaging than duplicates. If a provider does not
-    // expose an exact RJ/BJ/VJ identity, keep that result namespaced to the
-    // provider/local id even when title and creator happen to match another
-    // source. The work can be merged later only after a canonical id is known.
     return 'source:${candidate.ref.source.id}:${candidate.ref.localId}';
   }
 
