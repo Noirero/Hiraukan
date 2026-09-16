@@ -12,6 +12,7 @@ import '../utils/ui_tokens.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/download_fab.dart';
 import '../widgets/floating_feed_toolbar.dart';
+import '../widgets/home_feed_toolbar.dart';
 import '../widgets/home_source_filter_bar.dart';
 import '../widgets/sort_dialog.dart';
 import '../widgets/virtualized_sliver_collection.dart';
@@ -188,9 +189,9 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
     final horizontalPadding = FloatingToolbarLayout.horizontalPadding(context);
     final topPadding = MediaQuery.paddingOf(context).top;
     final headerTop = topPadding + 10;
-    const headerHeight = 50.0;
-    final toolbarTop = headerTop + headerHeight + 4;
-    final contentTopPadding = toolbarTop + 56;
+    const headerHeight = 66.0;
+    final toolbarTop = headerTop + headerHeight + 8;
+    final contentTopPadding = toolbarTop + 60;
     final systemOverlayStyle =
         transparentSystemBarsForBrightness(theme.brightness);
 
@@ -209,12 +210,15 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
                       end: Alignment.bottomCenter,
                       colors: [
                         scheme.primary.withValues(
-                          alpha: isDark ? 0.085 : 0.045,
+                          alpha: isDark ? 0.13 : 0.07,
+                        ),
+                        scheme.tertiary.withValues(
+                          alpha: isDark ? 0.045 : 0.028,
                         ),
                         scheme.surface.withValues(alpha: 0),
                         scheme.surface,
                       ],
-                      stops: const [0, 0.34, 1],
+                      stops: const [0, 0.18, 0.42, 1],
                     ),
                   ),
                 ),
@@ -258,12 +262,12 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
               top: 0,
               left: 0,
               right: 0,
-              child: ProgressiveTopScrim(height: toolbarTop + 52),
+              child: ProgressiveTopScrim(height: toolbarTop + 58),
             ),
             Positioned(
               top: headerTop,
-              left: horizontalPadding + 4,
-              right: horizontalPadding + 4,
+              left: horizontalPadding,
+              right: horizontalPadding,
               height: headerHeight,
               child: _HiraukanHomeHeader(
                 primary: scheme.primary,
@@ -275,8 +279,7 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
               top: toolbarTop,
               left: horizontalPadding,
               right: horizontalPadding,
-              child: FloatingFeedToolbar(
-                collapseModesWhenNeeded: false,
+              child: HomeFeedToolbar(
                 modeActions: _buildModeActions(context, worksState),
                 toolActions: _buildToolActions(
                   context,
@@ -542,50 +545,129 @@ class _HiraukanHomeHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color: primary.withValues(alpha: 0.13),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: primary.withValues(alpha: 0.22)),
-          ),
-          child: Icon(Icons.graphic_eq_rounded, color: primary, size: 22),
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            scheme.surfaceContainerHigh.withValues(
+              alpha: isDark ? 0.76 : 0.90,
+            ),
+            scheme.primaryContainer.withValues(
+              alpha: isDark ? 0.18 : 0.28,
+            ),
+          ],
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Hiraukan',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: foreground,
-                      fontSize: 23,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.2,
-                    ),
+        border: Border.all(
+          color: primary.withValues(alpha: isDark ? 0.18 : 0.13),
+          width: 0.8,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.shadow.withValues(alpha: isDark ? 0.17 : 0.05),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+        child: Row(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    primary.withValues(alpha: isDark ? 0.26 : 0.17),
+                    scheme.tertiary.withValues(alpha: isDark ? 0.14 : 0.09),
+                  ],
+                ),
+                border: Border.all(
+                  color: primary.withValues(alpha: 0.24),
+                  width: 0.8,
+                ),
               ),
-              const SizedBox(height: 1),
-              Text(
-                'Lebih dari sekadar suara.',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              child: Icon(Icons.graphic_eq_rounded, color: primary, size: 26),
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Hiraukan',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      color: foreground,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.45,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    'Lebih dari sekadar suara.',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
                       color: secondary,
                       fontSize: 11.5,
-                      letterSpacing: 0.15,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0.05,
                     ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+              decoration: BoxDecoration(
+                color: scheme.surface.withValues(alpha: isDark ? 0.34 : 0.56),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: scheme.outlineVariant.withValues(
+                    alpha: isDark ? 0.26 : 0.42,
+                  ),
+                  width: 0.7,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.nights_stay_rounded,
+                    size: 15,
+                    color: primary,
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    'BETA',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: primary,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
