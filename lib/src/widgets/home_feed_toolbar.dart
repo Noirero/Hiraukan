@@ -21,6 +21,32 @@ class HomeFeedToolbar extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           const gap = 8.0;
+          final showModeSelector = modeActions.length > 1;
+
+          final tools = toolActions.isEmpty
+              ? null
+              : _HomeToolbarSurface(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final action in toolActions)
+                        _HomeToolButton(action: action),
+                    ],
+                  ),
+                );
+
+          // When a source does not support Popular/Recommended there is only
+          // one possible mode: All. Showing a large selected "All" capsule in
+          // that state looks interactive even though it cannot switch to
+          // anything. Keep only the actual tools and align them conventionally
+          // to the right.
+          if (!showModeSelector) {
+            return Align(
+              alignment: Alignment.centerRight,
+              child: tools ?? const SizedBox.shrink(),
+            );
+          }
+
           final toolWidth = toolActions.isEmpty
               ? 0.0
               : 8 + (toolActions.length * 40.0);
@@ -53,17 +79,9 @@ class HomeFeedToolbar extends StatelessWidget {
                   ),
                 ),
               ),
-              if (toolActions.isNotEmpty) ...[
+              if (tools != null) ...[
                 const SizedBox(width: gap),
-                _HomeToolbarSurface(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (final action in toolActions)
-                        _HomeToolButton(action: action),
-                    ],
-                  ),
-                ),
+                tools,
               ],
             ],
           );
