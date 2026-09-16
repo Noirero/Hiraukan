@@ -132,7 +132,7 @@ class HentaiAsmrSourceAdapter implements UnifiedSourceAdapter {
   int _parseLastSitePage(String html, {required int fallback}) {
     var lastPage = fallback;
     final pagePattern = RegExp(
-      r'/page/(\d+)(?:/|[?"\'])',
+      r'''/page/(\d+)(?:/|[?"'])''',
       caseSensitive: false,
     );
     for (final match in pagePattern.allMatches(html)) {
