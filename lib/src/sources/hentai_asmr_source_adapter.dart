@@ -214,9 +214,11 @@ class HentaiAsmrSourceAdapter
   Future<Work> loadDetail(UnifiedSourceRef ref) async {
     final html = await _getHtml(ref.detailUrl);
     final base = Uri.parse(ref.detailUrl);
-    final title = SourceHtmlParser.extractTitle(html) ?? ref.title ?? ref.localId;
+    final rawTitle =
+        SourceHtmlParser.extractTitle(html) ?? ref.title ?? ref.localId;
     final canonical =
-        ref.canonicalId ?? SourceHtmlParser.extractCanonicalId('$title $html');
+        ref.canonicalId ?? SourceHtmlParser.extractCanonicalId('$rawTitle $html');
+    final title = _cleanDetailTitle(rawTitle, canonical);
     final cover =
         SourceHtmlParser.extractFirstImage(html, base: base) ?? ref.coverUrl;
     final audioUrls = SourceHtmlParser.extractAudioUrls(html, base: base);
@@ -244,6 +246,38 @@ class HentaiAsmrSourceAdapter
           )
           .toList(growable: false),
     );
+  }
+
+  String _cleanDetailTitle(String rawTitle, String? canonical) {
+    var title = SourceHtmlParser.stripTags(rawTitle).trim();
+    if (canonical != null && canonical.isNotEmpty) {
+      final escaped = RegExp.escape(canonical);
+      title = title
+          .replaceFirst(
+            RegExp(
+              '^\\s*[\\[（(]?\\s*$escaped\\s*[\\]）)]?\\s*[-:：|]?\\s*',
+              caseSensitive: false,
+            ),
+            '',
+          )
+          .trim();
+    }
+
+    // WordPress page titles may append the provider name. It is useful as a
+    // browser title but noisy in Hiraukan where the source is already shown.
+    title = title
+        .replaceFirst(
+          RegExp(r'\s*[-|｜]\s*HentaiASMR.*$', caseSensitive: false),
+          '',
+        )
+        .trim();
+
+    return title.isEmpty ? (canonical ?? refallback(rawTitle)) : title;
+  }
+
+  String refallback(String value) {
+    final cleaned = SourceHtmlParser.stripTags(value).trim();
+    return cleaned.isEmpty ? 'HentaiASMR' : cleaned;
   }
 
   @override
