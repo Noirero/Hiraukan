@@ -1,4 +1,4 @@
-name: Build and Release Android
+name: Main Android Release
 
 on:
   workflow_dispatch:
@@ -21,7 +21,8 @@ concurrency:
 
 jobs:
   prepare:
-    name: Prepare Release Metadata
+    name: Prepare Main Release Metadata
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -76,7 +77,7 @@ jobs:
           echo "build_number=$build_number" >> "$GITHUB_OUTPUT"
 
   android:
-    name: Android ARM64 Release APK
+    name: Android ARM64 Main Release APK
     needs: prepare
     runs-on: ubuntu-latest
     steps:
