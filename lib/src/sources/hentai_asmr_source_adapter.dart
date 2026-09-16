@@ -7,8 +7,11 @@ import 'unified_source_models.dart';
 
 class HentaiAsmrSourceAdapter implements UnifiedSourceAdapter {
   static const String baseUrl = 'https://hentaiasmr.moe';
+  static const int _sitePageSize = 15;
 
   final Dio _dio;
+  final Map<String, int> _lastSitePageCache = <String, int>{};
+  final Map<String, int> _totalCountCache = <String, int>{};
 
   HentaiAsmrSourceAdapter({Dio? dio}) : _dio = dio ?? Dio() {
     _dio.options
@@ -28,17 +31,121 @@ class HentaiAsmrSourceAdapter implements UnifiedSourceAdapter {
     required int pageSize,
   }) async {
     final trimmedKeyword = keyword.trim();
-    final encoded = Uri.encodeQueryComponent(trimmedKeyword);
-    final url = trimmedKeyword.isEmpty
-        ? (page <= 1 ? '$baseUrl/' : '$baseUrl/page/$page/')
-        : (page <= 1
-            ? '$baseUrl/?s=$encoded'
-            : '$baseUrl/page/$page/?s=$encoded');
-    final html = await _getHtml(url);
-    final base = Uri.parse(baseUrl);
+    final cacheKey = trimmedKeyword.toLowerCase();
+    final logicalPage = page < 1 ? 1 : page;
+    final logicalPageSize = pageSize < 1 ? 1 : pageSize;
+    final startIndex = (logicalPage - 1) * logicalPageSize;
 
+    final cachedTotal = _totalCountCache[cacheKey];
+    if (cachedTotal != null && startIndex >= cachedTotal) {
+      return SourceSearchPage(
+        items: const [],
+        totalCount: cachedTotal,
+        hasMore: false,
+      );
+    }
+
+    final firstSitePage = (startIndex ~/ _sitePageSize) + 1;
+    final offsetInFirstSitePage = startIndex % _sitePageSize;
+    final firstHtml = await _getHtml(
+      _catalogUrl(trimmedKeyword, firstSitePage),
+    );
+    final firstItems = _parseCatalogPage(firstHtml);
+
+    var lastSitePage = _lastSitePageCache[cacheKey] ??
+        _parseLastSitePage(firstHtml, fallback: firstSitePage);
+    if (lastSitePage < firstSitePage) lastSitePage = firstSitePage;
+    _lastSitePageCache[cacheKey] = lastSitePage;
+
+    final requestedEndIndex = startIndex + logicalPageSize - 1;
+    var finalSitePage = (requestedEndIndex ~/ _sitePageSize) + 1;
+    if (finalSitePage > lastSitePage) finalSitePage = lastSitePage;
+
+    final parsedPages = <int, List<SourceWorkCandidate>>{
+      firstSitePage: firstItems,
+    };
+    final pagesToFetch = <int>{};
+    for (var sitePage = firstSitePage + 1;
+        sitePage <= finalSitePage;
+        sitePage++) {
+      pagesToFetch.add(sitePage);
+    }
+
+    // Resolve the exact catalog size once per query by reading the final site
+    // page. HentaiASMR currently serves 15 works per site page while Hiraukan
+    // commonly asks for 40/80 items, so one logical Hiraukan page spans several
+    // website pages.
+    final needsTotalCount = !_totalCountCache.containsKey(cacheKey);
+    if (needsTotalCount && lastSitePage != firstSitePage) {
+      pagesToFetch.add(lastSitePage);
+    }
+
+    if (pagesToFetch.isNotEmpty) {
+      final pageNumbers = pagesToFetch.toList()..sort();
+      final htmlPages = await Future.wait(
+        pageNumbers.map(
+          (sitePage) => _getHtml(_catalogUrl(trimmedKeyword, sitePage)),
+        ),
+      );
+      for (var index = 0; index < pageNumbers.length; index++) {
+        parsedPages[pageNumbers[index]] = _parseCatalogPage(htmlPages[index]);
+      }
+    }
+
+    var totalCount = _totalCountCache[cacheKey];
+    if (totalCount == null) {
+      final lastItems = parsedPages[lastSitePage] ?? const <SourceWorkCandidate>[];
+      totalCount = (lastSitePage - 1) * _sitePageSize + lastItems.length;
+      _totalCountCache[cacheKey] = totalCount;
+    }
+
+    final combined = <SourceWorkCandidate>[];
+    for (var sitePage = firstSitePage;
+        sitePage <= finalSitePage;
+        sitePage++) {
+      combined.addAll(parsedPages[sitePage] ?? const <SourceWorkCandidate>[]);
+    }
+
+    final items = combined
+        .skip(offsetInFirstSitePage)
+        .take(logicalPageSize)
+        .toList(growable: false);
+    final hasMore = startIndex + items.length < totalCount;
+
+    return SourceSearchPage(
+      items: items,
+      totalCount: totalCount,
+      hasMore: hasMore,
+    );
+  }
+
+  String _catalogUrl(String keyword, int sitePage) {
+    final encoded = Uri.encodeQueryComponent(keyword);
+    if (keyword.isEmpty) {
+      return sitePage <= 1 ? '$baseUrl/' : '$baseUrl/page/$sitePage/';
+    }
+    return sitePage <= 1
+        ? '$baseUrl/?s=$encoded'
+        : '$baseUrl/page/$sitePage/?s=$encoded';
+  }
+
+  int _parseLastSitePage(String html, {required int fallback}) {
+    var lastPage = fallback;
+    final pagePattern = RegExp(
+      r'/page/(\d+)(?:/|[?"\'])',
+      caseSensitive: false,
+    );
+    for (final match in pagePattern.allMatches(html)) {
+      final value = int.tryParse(match.group(1)!);
+      if (value != null && value > lastPage) lastPage = value;
+    }
+    return lastPage;
+  }
+
+  List<SourceWorkCandidate> _parseCatalogPage(String html) {
+    final base = Uri.parse(baseUrl);
     final linkPattern = RegExp(
-      r'''<a\b[^>]*href=["']([^"']*/(rj\d+)\.html(?:\?[^"']*)?)["'][^>]*>(.*?)</a>''',
+      r'''<a\b[^>]*href=["']([^"']*((?:rj|bj|vj)\d+)\.html(?:\?[^"']*)?)["'][^>]*>(.*?)</a>''',
       caseSensitive: false,
       dotAll: true,
     );
@@ -95,20 +202,7 @@ class HentaiAsmrSourceAdapter implements UnifiedSourceAdapter {
       );
       items.add(SourceWorkCandidate(work: work, ref: ref));
     }
-
-    final nextPageHint = RegExp(
-      page <= 1 ? r'/page/2/' : '/page/${page + 1}/',
-      caseSensitive: false,
-    ).hasMatch(html);
-    final hasMore = nextPageHint || items.length >= pageSize;
-    final estimatedTotal =
-        (page - 1) * pageSize + items.length + (hasMore ? pageSize : 0);
-
-    return SourceSearchPage(
-      items: items,
-      totalCount: estimatedTotal,
-      hasMore: hasMore,
-    );
+    return items;
   }
 
   @override
