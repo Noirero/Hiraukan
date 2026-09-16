@@ -55,7 +55,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "suffix=$suffix" >> "$GITHUB_OUTPUT"
-          echo "Building release $tag with filename suffix $suffix"
+          echo "Building Android release $tag with filename suffix $suffix"
 
   android:
     name: Android Build
@@ -116,8 +116,8 @@ jobs:
           mv build/app/outputs/flutter-apk/app-release.apk \
             "dist/KikoFlu-android-universe_${{ needs.prepare.outputs.suffix }}.apk"
 
-          # Preserve the legacy split APK versionCode scheme so existing
-          # arm64 installations can be upgraded in place.
+          # Preserve the existing split APK versionCode scheme so existing
+          # arm64 installations can still upgrade in place.
           flutter build apk --release --split-per-abi
           mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
             "dist/KikoFlu-android-arm64-v8a_${{ needs.prepare.outputs.suffix }}.apk"
@@ -194,284 +194,22 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
-  windows:
-    name: Windows Build
-    needs: prepare
-    # windows-latest currently ships newer VS/CMake versions that break
-    # older native Flutter plugins used by this project.
-    runs-on: windows-2022
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set Application Version
-        shell: pwsh
-        run: |
-          $content = Get-Content pubspec.yaml -Raw
-          $content = [Regex]::Replace($content, '(?m)^version:\s+.*$', 'version: ${{ needs.prepare.outputs.version }}', 1)
-          Set-Content -Path pubspec.yaml -Value $content -NoNewline
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.44.7'
-          channel: 'stable'
-
-      - name: Get Dependencies
-        run: flutter pub get
-
-      - name: Build Windows Release
-        run: flutter build windows --release
-
-      - name: Install Inno Setup
-        run: |
-          choco install innosetup --no-progress
-          echo "C:\Program Files (x86)\Inno Setup 6" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Build Windows Installer
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          iscc /DMyAppVersion="${{ needs.prepare.outputs.version }}" installer_script.iss
-          Copy-Item -Path 'Output/KikoFlu-windows-setup.exe' -Destination "dist/KikoFlu-windows-setup_${{ needs.prepare.outputs.suffix }}.exe"
-
-      # Keep the legacy archive implementation and unsigned Windows outputs.
-      - name: Create Windows Portable Archive
-        uses: thedoctor0/zip-release@0.7.6
-        with:
-          type: 'zip'
-          filename: 'KikoFlu-windows.zip'
-          directory: 'build/windows/x64/runner/Release'
-
-      - name: Rename Windows Portable Archive
-        shell: pwsh
-        run: |
-          Move-Item -Path 'build/windows/x64/runner/Release/KikoFlu-windows.zip' -Destination "dist/KikoFlu-windows_${{ needs.prepare.outputs.suffix }}.zip"
-
-      - name: Upload Windows Artifacts
-        uses: actions/upload-artifact@v6
-        with:
-          name: release-assets-windows
-          path: dist/*
-          if-no-files-found: error
-
-  ios:
-    name: iOS Build (Unsigned)
-    needs: prepare
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set Application Version
-        run: |
-          sed -i.bak -E 's/^version: .*/version: ${{ needs.prepare.outputs.version }}/' pubspec.yaml
-          rm pubspec.yaml.bak
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.44.7'
-          channel: 'stable'
-
-      - name: Get Dependencies
-        run: flutter pub get
-
-      - name: Build iOS App (Unsigned)
-        run: flutter build ios --release --no-codesign
-
-      - name: Package IPA
-        run: |
-          set -euo pipefail
-          rm -rf build/Payload dist
-          mkdir -p build/Payload dist
-          cp -R build/ios/iphoneos/Runner.app build/Payload/
-          (cd build && zip -qr \
-            "$GITHUB_WORKSPACE/dist/KikoFlu-ios-unsigned_${{ needs.prepare.outputs.suffix }}.ipa" \
-            Payload)
-
-      - name: Upload iOS Artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: release-assets-ios
-          path: dist/*
-          if-no-files-found: error
-
-  macos:
-    name: macOS Build
-    needs: prepare
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set Application Version
-        run: |
-          sed -i.bak -E 's/^version: .*/version: ${{ needs.prepare.outputs.version }}/' pubspec.yaml
-          rm pubspec.yaml.bak
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.44.7'
-          channel: 'stable'
-
-      - name: Get Dependencies
-        run: flutter pub get
-
-      - name: Build macOS Release
-        run: flutter build macos --release
-
-      - name: Create DMG
-        run: |
-          set -euo pipefail
-          rm -rf build/dmg dist
-          mkdir -p build/dmg dist
-          cp -R build/macos/Build/Products/Release/KikoFlu.app build/dmg/
-          hdiutil create -volname "KikoFlu" \
-            -srcfolder build/dmg \
-            -ov -format UDZO \
-            "dist/KikoFlu-macos_${{ needs.prepare.outputs.suffix }}.dmg"
-
-      - name: Upload macOS Artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: release-assets-macos
-          path: dist/*
-          if-no-files-found: error
-
-  linux:
-    name: Linux x64 Build
-    needs: prepare
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set Application Version
-        run: |
-          sed -i.bak -E 's/^version: .*/version: ${{ needs.prepare.outputs.version }}/' pubspec.yaml
-          rm pubspec.yaml.bak
-
-      - name: Install Linux Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            clang cmake ninja-build pkg-config \
-            libgtk-3-dev \
-            libmpv-dev \
-            libsqlite3-dev
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.44.7'
-          channel: 'stable'
-
-      - name: Get Dependencies
-        run: flutter pub get
-
-      - name: Build Linux Release
-        run: flutter build linux --release
-
-      - name: Create Archive
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          (cd build/linux/x64/release/bundle && tar -czf \
-            "$GITHUB_WORKSPACE/dist/KikoFlu-linux-x64_${{ needs.prepare.outputs.suffix }}.tar.gz" .)
-
-      - name: Upload Linux Artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: release-assets-linux-x64
-          path: dist/*
-          if-no-files-found: error
-
-  linux-arm64:
-    name: Linux ARM64 Build
-    needs: prepare
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
-      - name: Build in ARM64 Container
-        uses: uraimo/run-on-arch-action@v2
-        with:
-          arch: aarch64
-          distro: ubuntu22.04
-          githubToken: ${{ github.token }}
-          install: |
-            apt-get update
-            apt-get install -y \
-              curl git unzip xz-utils \
-              clang cmake ninja-build pkg-config \
-              libgtk-3-dev \
-              libmpv-dev \
-              libsqlite3-dev
-            git clone https://github.com/flutter/flutter.git -b 3.44.7 /opt/flutter --depth 1
-            /opt/flutter/bin/flutter --version
-          run: |
-            set -e
-            export PATH="/opt/flutter/bin:$PATH"
-            export CC=clang
-            export CXX=clang++
-            export CMAKE_BUILD_PARALLEL_LEVEL=1
-            export MAKEFLAGS="-j1"
-            sed -i.bak -E 's/^version: .*/version: ${{ needs.prepare.outputs.version }}/' pubspec.yaml
-            rm pubspec.yaml.bak
-            flutter pub get
-
-            for attempt in 1 2; do
-              echo "Linux ARM64 release build attempt ${attempt}/2"
-              if flutter build linux --release; then
-                break
-              fi
-
-              if [ "$attempt" -eq 2 ]; then
-                exit 1
-              fi
-
-              echo "Build failed in ARM64 emulation; cleaning and retrying once..."
-              flutter clean
-              flutter pub get
-            done
-
-            mkdir -p "$GITHUB_WORKSPACE/dist"
-            (cd build/linux/arm64/release/bundle && tar -czf \
-              "$GITHUB_WORKSPACE/dist/KikoFlu-linux-arm64_${{ needs.prepare.outputs.suffix }}.tar.gz" .)
-
-      - name: Upload Linux ARM64 Artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: release-assets-linux-arm64
-          path: dist/*
-          if-no-files-found: error
-
   release:
     name: Create GitHub Release
     needs:
       - prepare
       - android
-      - windows
-      - ios
-      - macos
-      - linux
-      - linux-arm64
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download release artifacts
+      - name: Download Android release artifacts
         uses: actions/download-artifact@v6
         with:
-          pattern: release-assets-*
+          name: release-assets-android
           path: release-assets
-          merge-multiple: true
 
-      - name: Verify and publish release atomically
+      - name: Verify and publish Android release atomically
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -483,12 +221,6 @@ jobs:
           expected=(
             "KikoFlu-android-arm64-v8a_${{ needs.prepare.outputs.suffix }}.apk"
             "KikoFlu-android-universe_${{ needs.prepare.outputs.suffix }}.apk"
-            "KikoFlu-ios-unsigned_${{ needs.prepare.outputs.suffix }}.ipa"
-            "KikoFlu-linux-arm64_${{ needs.prepare.outputs.suffix }}.tar.gz"
-            "KikoFlu-linux-x64_${{ needs.prepare.outputs.suffix }}.tar.gz"
-            "KikoFlu-macos_${{ needs.prepare.outputs.suffix }}.dmg"
-            "KikoFlu-windows-setup_${{ needs.prepare.outputs.suffix }}.exe"
-            "KikoFlu-windows_${{ needs.prepare.outputs.suffix }}.zip"
           )
 
           assets=()
