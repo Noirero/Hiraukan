@@ -294,23 +294,45 @@ class _UnifiedWorkDetailScreenState
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
+  String _displayTitle(Work work) {
+    var title = work.title.trim();
+    final id = work.displayId.trim();
+    if (id.isNotEmpty) {
+      final escaped = RegExp.escape(id);
+      title = title
+          .replaceFirst(
+            RegExp(
+              '^\\s*[\\[]?\\s*$escaped\\s*[\\]]?\\s*[-:：|]?\\s*',
+              caseSensitive: false,
+            ),
+            '',
+          )
+          .trim();
+    }
+    return title.isEmpty ? work.title : title;
+  }
+
   @override
   Widget build(BuildContext context) {
     final bundle = _bundle;
     final work = _detail ?? widget.work;
     if (bundle == null) {
       return Scaffold(
-        appBar: AppBar(title: Text(widget.work.displayId)),
+        appBar: const AppBar(title: Text('Detail karya')),
         body: const Center(
           child: Text('Unified source metadata is unavailable.'),
         ),
       );
     }
 
+    final scheme = Theme.of(context).colorScheme;
+    final showSourcePreference = bundle.playableSources.length > 1;
+    final showPlaybackStatus = bundle.hasPlaybackFallback || _resolved?.usedFallback == true;
+
     return GlobalAudioPlayerWrapper(
       child: Scaffold(
         appBar: AppBar(
-          title: Text(work.displayId),
+          title: const Text('Detail karya'),
           actions: [
             IconButton(
               onPressed: () async {
@@ -325,107 +347,179 @@ class _UnifiedWorkDetailScreenState
                 await Future.wait<void>(futures);
               },
               icon: const Icon(Icons.refresh),
-              tooltip: 'Refresh all sources',
+              tooltip: 'Refresh semua sumber',
             ),
           ],
         ),
-        body: RefreshIndicator(
-          onRefresh: () async {
-            final futures = <Future<void>>[
-              _loadDetail(),
-              _loadTracks(),
-              _refreshHealth(),
-            ];
-            if (bundle.downloadOnlySources.isNotEmpty) {
-              futures.add(_loadDownloads());
-            }
-            await Future.wait<void>(futures);
-          },
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
-            children: [
-              _buildHero(work, bundle),
-              const SizedBox(height: 18),
-              Text(
-                work.title,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
+        body: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                scheme.primary.withValues(alpha: 0.06),
+                scheme.surface.withValues(alpha: 0),
+              ],
+              stops: const [0, 0.30],
+            ),
+          ),
+          child: RefreshIndicator(
+            onRefresh: () async {
+              final futures = <Future<void>>[
+                _loadDetail(),
+                _loadTracks(),
+                _refreshHealth(),
+              ];
+              if (bundle.downloadOnlySources.isNotEmpty) {
+                futures.add(_loadDownloads());
+              }
+              await Future.wait<void>(futures);
+            },
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+              children: [
+                _buildHero(work, bundle),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: scheme.primaryContainer.withValues(alpha: 0.72),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        work.displayId,
+                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                              color: scheme.onPrimaryContainer,
+                              fontWeight: FontWeight.w800,
+                            ),
+                      ),
                     ),
-              ),
-              if (work.name?.trim().isNotEmpty == true) ...[
-                const SizedBox(height: 5),
-                Text(work.name!, style: Theme.of(context).textTheme.bodyLarge),
-              ],
-              if (_detailError != null) ...[
-                const SizedBox(height: 12),
-                _ErrorCard(message: _detailError!),
-              ],
-              const SizedBox(height: 18),
-              _buildSources(bundle),
-              if (bundle.canPlay) ...[
-                const SizedBox(height: 18),
-                _buildSourcePreference(bundle),
-                const SizedBox(height: 18),
-                _buildPlaybackStatus(bundle),
+                    const SizedBox(width: 8),
+                    Icon(
+                      bundle.canPlay
+                          ? Icons.play_circle_fill_rounded
+                          : Icons.download_for_offline_rounded,
+                      size: 18,
+                      color: scheme.primary,
+                    ),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        bundle.canPlay
+                            ? '${bundle.playableSources.length} sumber pemutaran'
+                            : 'Tersedia untuk unduhan',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 10),
-                if (_loadingTracks)
-                  const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: CircularProgressIndicator(),
+                Text(
+                  _displayTitle(work),
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontSize: 24,
+                        height: 1.18,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.35,
+                      ),
+                ),
+                if (work.name?.trim().isNotEmpty == true) ...[
+                  const SizedBox(height: 5),
+                  Text(
+                    work.name!,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                  ),
+                ],
+                if (_detailError != null) ...[
+                  const SizedBox(height: 12),
+                  _ErrorCard(message: _detailError!),
+                ],
+                const SizedBox(height: 18),
+                _buildSources(bundle),
+                if (bundle.canPlay) ...[
+                  if (showSourcePreference) ...[
+                    const SizedBox(height: 18),
+                    _buildSourcePreference(bundle),
+                  ],
+                  if (showPlaybackStatus) ...[
+                    const SizedBox(height: 14),
+                    _buildPlaybackStatus(bundle),
+                  ],
+                  const SizedBox(height: 14),
+                  if (_loadingTracks)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  else if (_trackError != null)
+                    _ErrorCard(
+                      message: _trackError!,
+                      action: TextButton.icon(
+                        onPressed: _loadTracks,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Coba lagi'),
+                      ),
+                    )
+                  else ...[
+                    SizedBox(
+                      height: 52,
+                      child: FilledButton.icon(
+                        onPressed: _tracks.isEmpty ? null : _playAll,
+                        icon: const Icon(Icons.play_arrow_rounded),
+                        label: Text('Putar semua (${_tracks.length})'),
+                      ),
                     ),
-                  )
-                else if (_trackError != null)
-                  _ErrorCard(
-                    message: _trackError!,
-                    action: TextButton.icon(
-                      onPressed: _loadTracks,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Retry'),
-                    ),
-                  )
-                else ...[
-                  FilledButton.icon(
-                    onPressed: _tracks.isEmpty ? null : _playAll,
-                    icon: const Icon(Icons.play_arrow),
-                    label: Text('Play all (${_tracks.length})'),
+                    const SizedBox(height: 10),
+                    ..._tracks.asMap().entries.map(
+                          (entry) => _TrackTile(
+                            index: entry.key,
+                            track: entry.value,
+                            onTap: () => _playTrack(entry.key),
+                          ),
+                        ),
+                  ],
+                ] else ...[
+                  const SizedBox(height: 18),
+                  _InfoCard(
+                    icon: Icons.download_for_offline_outlined,
+                    title: 'Khusus unduhan',
+                    message:
+                        'Karya ini tersedia melalui EroVoice sebagai sumber unduhan.',
+                  ),
+                ],
+                if (bundle.downloadOnlySources.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  _buildDownloadFiles(bundle),
+                ],
+                if (_loadingDetail) ...[
+                  const SizedBox(height: 18),
+                  const LinearProgressIndicator(),
+                ],
+                if (work.description?.trim().isNotEmpty == true) ...[
+                  const SizedBox(height: 24),
+                  Text(
+                    'Deskripsi',
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
-                  ..._tracks.asMap().entries.map(
-                        (entry) => _TrackTile(
-                          index: entry.key,
-                          track: entry.value,
-                          onTap: () => _playTrack(entry.key),
-                        ),
-                      ),
+                  Text(work.description!),
                 ],
-              ] else ...[
-                const SizedBox(height: 18),
-                _InfoCard(
-                  icon: Icons.download_for_offline_outlined,
-                  title: 'Khusus unduhan',
-                  message:
-                      'Karya ini tidak memiliki sumber pemutaran dalam aplikasi. EroVoice tetap tersedia untuk melihat dan mengunduh file.',
-                ),
               ],
-              if (bundle.downloadOnlySources.isNotEmpty) ...[
-                const SizedBox(height: 18),
-                _buildDownloadFiles(bundle),
-              ],
-              if (_loadingDetail) ...[
-                const SizedBox(height: 18),
-                const LinearProgressIndicator(),
-              ],
-              if (work.description?.trim().isNotEmpty == true) ...[
-                const SizedBox(height: 24),
-                Text(
-                  'Description',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                Text(work.description!),
-              ],
-            ],
+            ),
           ),
         ),
       ),
@@ -434,6 +528,9 @@ class _UnifiedWorkDetailScreenState
 
   Widget _buildHero(Work work, UnifiedWorkBundle bundle) {
     final auth = ref.watch(authProvider);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     String? cover;
     if (work.images?.isNotEmpty == true) cover = work.images!.first;
     cover ??= bundle.coverUrl;
@@ -443,23 +540,39 @@ class _UnifiedWorkDetailScreenState
       cover = work.getCoverImageUrl(auth.host!, token: auth.token ?? '');
     }
 
-    return AspectRatio(
-      aspectRatio: 16 / 9,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: cover == null
-            ? ColoredBox(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                child: const Center(child: Icon(Icons.graphic_eq, size: 72)),
-              )
-            : CachedNetworkImage(
-                imageUrl: cover,
-                fit: BoxFit.cover,
-                errorWidget: (_, __, ___) => ColoredBox(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: scheme.primary.withValues(alpha: isDark ? 0.20 : 0.13),
+          width: 0.8,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.shadow.withValues(alpha: isDark ? 0.28 : 0.10),
+            blurRadius: 26,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: AspectRatio(
+        aspectRatio: 16 / 9,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: cover == null
+              ? ColoredBox(
+                  color: scheme.surfaceContainerHighest,
                   child: const Center(child: Icon(Icons.graphic_eq, size: 72)),
+                )
+              : CachedNetworkImage(
+                  imageUrl: cover,
+                  fit: BoxFit.cover,
+                  errorWidget: (_, __, ___) => ColoredBox(
+                    color: scheme.surfaceContainerHighest,
+                    child: const Center(child: Icon(Icons.graphic_eq, size: 72)),
+                  ),
                 ),
-              ),
+        ),
       ),
     );
   }
@@ -499,14 +612,16 @@ class _UnifiedWorkDetailScreenState
 
   Widget _buildSourcePreference(UnifiedWorkBundle bundle) {
     final playable = bundle.playableSources;
-    if (playable.isEmpty) return const SizedBox.shrink();
+    if (playable.length <= 1) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Sumber Pemutaran Pilihan',
-          style: Theme.of(context).textTheme.titleMedium,
+          'Pilih sumber pemutaran',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
         ),
         const SizedBox(height: 8),
         Wrap(
@@ -514,7 +629,7 @@ class _UnifiedWorkDetailScreenState
           runSpacing: 8,
           children: [
             ChoiceChip(
-              label: const Text('Auto'),
+              label: const Text('Otomatis'),
               selected: _preferredSource == null,
               onSelected: (_) => _setPreferredSource(null),
             ),
@@ -664,7 +779,17 @@ class _SourceSectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(
+          color: scheme.outlineVariant.withValues(alpha: 0.55),
+          width: 0.8,
+        ),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -672,9 +797,14 @@ class _SourceSectionCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(icon, size: 20),
+                Icon(icon, size: 20, color: scheme.primary),
                 const SizedBox(width: 8),
-                Text(title, style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -684,9 +814,14 @@ class _SourceSectionCard extends StatelessWidget {
               return ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: CircleAvatar(
+                  backgroundColor: scheme.primaryContainer.withValues(alpha: 0.70),
+                  foregroundColor: scheme.onPrimaryContainer,
                   child: Text(source.source.label.substring(0, 1)),
                 ),
-                title: Text(source.source.label),
+                title: Text(
+                  source.source.label,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
                 subtitle: Text(subtitleFor(source, sourceHealth)),
                 trailing: IconButton(
                   onPressed: () => onOpen(source),
@@ -767,11 +902,24 @@ class _TrackTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Card(
-      margin: const EdgeInsets.only(bottom: 6),
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(
+          color: scheme.outlineVariant.withValues(alpha: 0.48),
+          width: 0.7,
+        ),
+      ),
       child: ListTile(
         onTap: onTap,
-        leading: CircleAvatar(child: Text('${index + 1}')),
+        leading: CircleAvatar(
+          backgroundColor: scheme.primaryContainer.withValues(alpha: 0.72),
+          foregroundColor: scheme.onPrimaryContainer,
+          child: Text('${index + 1}'),
+        ),
         title: Text(
           track.title,
           maxLines: 2,
@@ -779,7 +927,7 @@ class _TrackTile extends StatelessWidget {
         ),
         subtitle:
             track.duration == null ? null : Text(_duration(track.duration!)),
-        trailing: const Icon(Icons.play_arrow),
+        trailing: const Icon(Icons.play_arrow_rounded),
       ),
     );
   }
