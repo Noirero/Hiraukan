@@ -2,6 +2,8 @@ name: Android APK Beta
 
 on:
   push:
+    branches:
+      - beta
   workflow_dispatch:
 
 permissions:
@@ -14,6 +16,7 @@ concurrency:
 jobs:
   android:
     name: Android ARM64 Beta APK
+    if: github.ref == 'refs/heads/beta'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
