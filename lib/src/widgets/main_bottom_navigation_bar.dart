@@ -16,7 +16,7 @@ class MainBottomNavigationBar extends StatelessWidget {
     this.onLayoutExtentChanged,
   });
 
-  static const double navigationBarHeight = 64;
+  static const double navigationBarHeight = 70;
 
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
@@ -51,51 +51,161 @@ class MainBottomNavigationBar extends StatelessWidget {
         miniPlayer,
         SafeArea(
           top: false,
-          minimum: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+          minimum: const EdgeInsets.fromLTRB(14, 6, 14, 10),
           child: DecoratedBox(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(28),
               border: Border.all(
-                color: scheme.outlineVariant.withValues(
-                  alpha: isDark ? 0.34 : 0.52,
+                color: scheme.primary.withValues(
+                  alpha: isDark ? 0.22 : 0.18,
                 ),
-                width: 0.7,
+                width: 0.8,
               ),
               boxShadow: [
                 BoxShadow(
                   color: scheme.shadow.withValues(
-                    alpha: isDark ? 0.28 : 0.10,
+                    alpha: isDark ? 0.34 : 0.12,
                   ),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
+                  blurRadius: 30,
+                  offset: const Offset(0, 12),
                 ),
                 BoxShadow(
                   color: scheme.primary.withValues(
-                    alpha: isDark ? 0.10 : 0.06,
+                    alpha: isDark ? 0.14 : 0.09,
                   ),
-                  blurRadius: 20,
+                  blurRadius: 28,
+                  spreadRadius: -8,
                 ),
               ],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(24),
-              child: NavigationBar(
-                height: navigationBarHeight,
-                backgroundColor: scheme.surfaceContainer.withValues(
-                  alpha: isDark ? 0.96 : 0.98,
+              borderRadius: BorderRadius.circular(28),
+              child: Material(
+                color: scheme.surfaceContainer.withValues(
+                  alpha: isDark ? 0.97 : 0.985,
                 ),
-                elevation: 0,
-                shadowColor: Colors.transparent,
-                surfaceTintColor: Colors.transparent,
-                labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-                selectedIndex: selectedIndex,
-                onDestinationSelected: onDestinationSelected,
-                destinations: destinations,
+                child: SizedBox(
+                  height: navigationBarHeight,
+                  child: Row(
+                    children: [
+                      for (var index = 0;
+                          index < destinations.length;
+                          index++)
+                        Expanded(
+                          child: _PremiumNavigationItem(
+                            destination: destinations[index],
+                            selected: selectedIndex == index,
+                            onTap: () => onDestinationSelected(index),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _PremiumNavigationItem extends StatelessWidget {
+  const _PremiumNavigationItem({
+    required this.destination,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final NavigationDestination destination;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 7),
+      child: Semantics(
+        selected: selected,
+        button: true,
+        label: destination.label,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(21),
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(21),
+              gradient: selected
+                  ? LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        scheme.primary.withValues(
+                          alpha: isDark ? 0.24 : 0.18,
+                        ),
+                        scheme.secondaryContainer.withValues(
+                          alpha: isDark ? 0.40 : 0.56,
+                        ),
+                      ],
+                    )
+                  : null,
+              border: selected
+                  ? Border.all(
+                      color: scheme.primary.withValues(
+                        alpha: isDark ? 0.34 : 0.24,
+                      ),
+                      width: 0.8,
+                    )
+                  : null,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedScale(
+                  scale: selected ? 1.06 : 1,
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  child: IconTheme(
+                    data: IconThemeData(
+                      color: selected
+                          ? scheme.primary
+                          : scheme.onSurfaceVariant,
+                      size: selected ? 23 : 21,
+                    ),
+                    child: selected
+                        ? destination.selectedIcon
+                        : destination.icon,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  destination.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: selected
+                        ? scheme.primary
+                        : scheme.onSurfaceVariant,
+                    fontSize: 10.5,
+                    height: 1.05,
+                    fontWeight:
+                        selected ? FontWeight.w700 : FontWeight.w500,
+                    letterSpacing: selected ? 0.1 : 0,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
