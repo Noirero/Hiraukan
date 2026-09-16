@@ -25,6 +25,10 @@ class HomeSourceFilterBar extends ConsumerWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
+    final knownTotal = state.totalCount > 0 ? state.totalCount : null;
+    final countLabel = knownTotal != null && knownTotal > state.works.length
+        ? '$knownTotal tersedia'
+        : '${state.works.length} tampil';
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(28),
@@ -117,7 +121,7 @@ class HomeSourceFilterBar extends ConsumerWidget {
                     state: state,
                     isDark: isDark,
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   Row(
                     children: [
                       Expanded(
@@ -268,7 +272,7 @@ class HomeSourceFilterBar extends ConsumerWidget {
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
-                          '${state.works.length} tampil',
+                          countLabel,
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: scheme.primary,
                             fontWeight: FontWeight.w800,
@@ -356,7 +360,7 @@ class _DiscoveryHero extends StatelessWidget {
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
-                  curated ? 'KURASI HIRauKAN'.toUpperCase() : 'DISCOVER',
+                  curated ? 'KURASI HIRAUKAN' : 'DISCOVER',
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: scheme.primary,
                     fontSize: 9.5,
@@ -382,79 +386,17 @@ class _DiscoveryHero extends StatelessWidget {
               Text(
                 curated
                     ? 'Kurasi ringan untuk membantu kamu masuk ke pengalaman dengar tanpa banyak mencari.'
-                    : 'Gabungkan beberapa katalog, pindah sumber seketika, lalu biarkan artwork memimpin penjelajahan.',
+                    : 'Pilih katalog di bawah, lalu biarkan artwork memimpin penjelajahan.',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: scheme.onSurfaceVariant,
                   fontSize: 12,
                   height: 1.45,
                 ),
               ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 7,
-                runSpacing: 7,
-                children: const [
-                  _HeroPill(
-                    icon: Icons.layers_outlined,
-                    label: 'Multi-katalog',
-                  ),
-                  _HeroPill(
-                    icon: Icons.health_and_safety_outlined,
-                    label: 'Status sumber',
-                  ),
-                  _HeroPill(
-                    icon: Icons.tune_rounded,
-                    label: 'Filter cepat',
-                  ),
-                ],
-              ),
             ],
           ),
         ),
       ],
-    );
-  }
-}
-
-class _HeroPill extends StatelessWidget {
-  const _HeroPill({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-      decoration: BoxDecoration(
-        color: scheme.surface.withValues(alpha: isDark ? 0.30 : 0.50),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(
-            alpha: isDark ? 0.24 : 0.38,
-          ),
-          width: 0.7,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: scheme.onSurfaceVariant),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
