@@ -182,12 +182,17 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
     final worksState = ref.watch(worksProvider);
     final isRecommendMode = worksState.displayMode == DisplayMode.popular ||
         worksState.displayMode == DisplayMode.recommended;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final horizontalPadding = FloatingToolbarLayout.horizontalPadding(context);
     final topPadding = MediaQuery.paddingOf(context).top;
-    final toolbarTop = topPadding + 8;
+    final headerTop = topPadding + 10;
+    const headerHeight = 50.0;
+    final toolbarTop = headerTop + headerHeight + 4;
     final contentTopPadding = toolbarTop + 56;
     final systemOverlayStyle =
-        transparentSystemBarsForBrightness(Theme.of(context).brightness);
+        transparentSystemBarsForBrightness(theme.brightness);
 
     return AnnotatedRegion(
       value: systemOverlayStyle,
@@ -195,6 +200,26 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
         floatingActionButton: const DownloadFab(),
         body: Stack(
           children: [
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        scheme.primary.withValues(
+                          alpha: isDark ? 0.085 : 0.045,
+                        ),
+                        scheme.surface.withValues(alpha: 0),
+                        scheme.surface,
+                      ],
+                      stops: const [0, 0.34, 1],
+                    ),
+                  ),
+                ),
+              ),
+            ),
             Positioned.fill(
               child: GestureDetector(
                 onHorizontalDragEnd: _handleSwipe,
@@ -233,7 +258,18 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
               top: 0,
               left: 0,
               right: 0,
-              child: ProgressiveTopScrim(height: topPadding + 72),
+              child: ProgressiveTopScrim(height: toolbarTop + 52),
+            ),
+            Positioned(
+              top: headerTop,
+              left: horizontalPadding + 4,
+              right: horizontalPadding + 4,
+              height: headerHeight,
+              child: _HiraukanHomeHeader(
+                primary: scheme.primary,
+                foreground: scheme.onSurface,
+                secondary: scheme.onSurfaceVariant,
+              ),
             ),
             Positioned(
               top: toolbarTop,
@@ -343,7 +379,7 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
       scrollController: _scrollController,
       padding: EdgeInsets.fromLTRB(
         horizontalPadding,
-        8,
+        12,
         horizontalPadding,
         horizontalPadding,
       ),
@@ -354,7 +390,7 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
               horizontalPadding,
               contentTopPadding,
               horizontalPadding,
-              4,
+              8,
             ),
             child: const HomeSourceFilterBar(),
           ),
@@ -489,6 +525,67 @@ class _WorksScreenState extends ConsumerState<WorksScreen>
           ],
         ),
       ),
+    );
+  }
+}
+
+class _HiraukanHomeHeader extends StatelessWidget {
+  const _HiraukanHomeHeader({
+    required this.primary,
+    required this.foreground,
+    required this.secondary,
+  });
+
+  final Color primary;
+  final Color foreground;
+  final Color secondary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: primary.withValues(alpha: 0.13),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: primary.withValues(alpha: 0.22)),
+          ),
+          child: Icon(Icons.graphic_eq_rounded, color: primary, size: 22),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Hiraukan',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: foreground,
+                      fontSize: 23,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.2,
+                    ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                'Lebih dari sekadar suara.',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: secondary,
+                      fontSize: 11.5,
+                      letterSpacing: 0.15,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
