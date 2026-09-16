@@ -181,7 +181,7 @@ class _PremiumNavigationItem extends StatelessWidget {
                       size: selected ? 23 : 21,
                     ),
                     child: selected
-                        ? destination.selectedIcon
+                        ? (destination.selectedIcon ?? destination.icon)
                         : destination.icon,
                   ),
                 ),
