@@ -16,3 +16,9 @@ abstract class UnifiedSourceAdapter {
 
   Future<UnifiedSourceHealth> checkHealth();
 }
+
+/// Optional catalog metadata exposed by sources that can discover an exact or
+/// provider-authoritative result count while paging their own site/API.
+abstract interface class CatalogCountAwareSourceAdapter {
+  int? knownTotalCount(String keyword);
+}

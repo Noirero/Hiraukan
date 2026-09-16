@@ -5,7 +5,8 @@ import 'source_adapter.dart';
 import 'source_html_parser.dart';
 import 'unified_source_models.dart';
 
-class HentaiAsmrSourceAdapter implements UnifiedSourceAdapter {
+class HentaiAsmrSourceAdapter
+    implements UnifiedSourceAdapter, CatalogCountAwareSourceAdapter {
   static const String baseUrl = 'https://hentaiasmr.moe';
   static const int _sitePageSize = 15;
 
@@ -23,6 +24,10 @@ class HentaiAsmrSourceAdapter implements UnifiedSourceAdapter {
 
   @override
   UnifiedSourceKind get kind => UnifiedSourceKind.hentaiAsmr;
+
+  @override
+  int? knownTotalCount(String keyword) =>
+      _totalCountCache[keyword.trim().toLowerCase()];
 
   @override
   Future<SourceSearchPage> search({
