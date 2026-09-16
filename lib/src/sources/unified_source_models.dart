@@ -8,6 +8,12 @@ enum UnifiedSourceKind {
   eroVoice,
 }
 
+enum UnifiedSourceCapability {
+  metadata,
+  playback,
+  download,
+}
+
 extension UnifiedSourceKindX on UnifiedSourceKind {
   String get id => switch (this) {
         UnifiedSourceKind.asmrOne => 'asmr_one',
@@ -26,6 +32,33 @@ extension UnifiedSourceKindX on UnifiedSourceKind {
         UnifiedSourceKind.hentaiAsmr => 1,
         UnifiedSourceKind.eroVoice => 2,
       };
+
+  Set<UnifiedSourceCapability> get capabilities => switch (this) {
+        UnifiedSourceKind.asmrOne => const {
+            UnifiedSourceCapability.metadata,
+            UnifiedSourceCapability.playback,
+            UnifiedSourceCapability.download,
+          },
+        UnifiedSourceKind.hentaiAsmr => const {
+            UnifiedSourceCapability.metadata,
+            UnifiedSourceCapability.playback,
+            UnifiedSourceCapability.download,
+          },
+        UnifiedSourceKind.eroVoice => const {
+            UnifiedSourceCapability.metadata,
+            UnifiedSourceCapability.download,
+          },
+      };
+
+  bool get canLoadMetadata =>
+      capabilities.contains(UnifiedSourceCapability.metadata);
+
+  bool get canPlay => capabilities.contains(UnifiedSourceCapability.playback);
+
+  bool get canDownload =>
+      capabilities.contains(UnifiedSourceCapability.download);
+
+  bool get isDownloadOnly => canDownload && !canPlay;
 }
 
 enum UnifiedSourceHealth {
@@ -127,7 +160,26 @@ class UnifiedWorkBundle {
     return null;
   }
 
+  /// Kept for existing callers that care about any mirrored source.
   bool get hasFallback => sources.length > 1;
+
+  List<UnifiedSourceRef> get playableSources => sources
+      .where((ref) => ref.source.canPlay)
+      .toList(growable: false);
+
+  List<UnifiedSourceRef> get downloadSources => sources
+      .where((ref) => ref.source.canDownload)
+      .toList(growable: false);
+
+  List<UnifiedSourceRef> get downloadOnlySources => sources
+      .where((ref) => ref.source.isDownloadOnly)
+      .toList(growable: false);
+
+  bool get canPlay => playableSources.isNotEmpty;
+
+  bool get canDownload => downloadSources.isNotEmpty;
+
+  bool get hasPlaybackFallback => playableSources.length > 1;
 
   bool hasSource(UnifiedSourceKind source) =>
       sources.any((ref) => ref.source == source);
@@ -156,5 +208,15 @@ class ResolvedSourceTracks {
     required this.source,
     required this.files,
     required this.usedFallback,
+  });
+}
+
+class ResolvedSourceDownloads {
+  final UnifiedSourceRef source;
+  final List<dynamic> files;
+
+  const ResolvedSourceDownloads({
+    required this.source,
+    required this.files,
   });
 }
