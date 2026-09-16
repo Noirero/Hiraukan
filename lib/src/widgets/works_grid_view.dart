@@ -9,6 +9,7 @@ import '../sources/unified_source_registry.dart';
 import '../utils/responsive_grid_helper.dart';
 import '../utils/work_cover_prefetch.dart';
 import 'enhanced_work_card.dart';
+import 'home_artwork_work_card.dart';
 import 'unified_source_filter_bar.dart';
 import 'unified_work_card.dart';
 import 'virtualized_sliver_collection.dart';
@@ -76,8 +77,9 @@ class WorksGridView extends ConsumerWidget {
   /// during an earlier federated search.
   final bool unifiedSourcesEnabled;
 
-  /// Search owns the multi-source filter bar. Home supplies its own single-
-  /// source + SFW/NSFW selector, so it disables this automatic search bar.
+  /// Search owns the multi-source filter bar. Home supplies its own source
+  /// discovery surface, so it disables this automatic search bar. Home also
+  /// uses this distinction to opt into the artwork-first card treatment.
   final bool showUnifiedSourceFilterBar;
 
   @override
@@ -93,6 +95,7 @@ class WorksGridView extends ConsumerWidget {
       if (showUnifiedSourceFilterBar && hasUnifiedWorks)
         const SliverToBoxAdapter(child: UnifiedSourceFilterBar()),
     ];
+    final useHomeArtworkCards = !showUnifiedSourceFilterBar;
 
     return LayoutBuilder(builder: (context, constraints) {
       final mediaSize = MediaQuery.sizeOf(context);
@@ -143,6 +146,14 @@ class WorksGridView extends ConsumerWidget {
               UnifiedSourceRegistry.instance.contains(work.id)) {
             return UnifiedWorkCard(
               key: ValueKey('unified_${work.id}'),
+              work: work,
+              crossAxisCount: crossAxisCount,
+              isListLayout: layoutType == LayoutType.list,
+            );
+          }
+          if (useHomeArtworkCards) {
+            return HomeArtworkWorkCard(
+              key: ValueKey('home_${work.id}'),
               work: work,
               crossAxisCount: crossAxisCount,
               isListLayout: layoutType == LayoutType.list,
