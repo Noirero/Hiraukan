@@ -36,7 +36,8 @@ class _CatalogAwareUnifiedSourceService extends UnifiedSourceService {
           adapter is! CatalogCountAwareSourceAdapter) {
         continue;
       }
-      final providerTotal = adapter.knownTotalCount(keyword);
+      final countAware = adapter as CatalogCountAwareSourceAdapter;
+      final providerTotal = countAware.knownTotalCount(keyword);
       if (providerTotal != null && providerTotal > totalCount) {
         totalCount = providerTotal;
       }
