@@ -318,7 +318,7 @@ class _UnifiedWorkDetailScreenState
     final work = _detail ?? widget.work;
     if (bundle == null) {
       return Scaffold(
-        appBar: const AppBar(title: Text('Detail karya')),
+        appBar: AppBar(title: const Text('Detail karya')),
         body: const Center(
           child: Text('Unified source metadata is unavailable.'),
         ),
