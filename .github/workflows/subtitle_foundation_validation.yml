@@ -26,20 +26,18 @@ jobs:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
 
           if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] && \
              [ -n "${ANDROID_KEYSTORE_PASSWORD:-}" ] && \
-             [ -n "${ANDROID_KEY_ALIAS:-}" ] && \
-             [ -n "${ANDROID_KEY_PASSWORD:-}" ]; then
+             [ -n "${ANDROID_KEY_ALIAS:-}" ]; then
             printf "%s" "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-key.jks
             cat <<EOF > android/key.properties
           storeFile=app/release-key.jks
           storePassword=$ANDROID_KEYSTORE_PASSWORD
           keyAlias=$ANDROID_KEY_ALIAS
-          keyPassword=$ANDROID_KEY_PASSWORD
+          keyPassword=$ANDROID_KEYSTORE_PASSWORD
           EOF
             chmod 600 android/app/release-key.jks android/key.properties
 
