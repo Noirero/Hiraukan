@@ -8,6 +8,25 @@ enum UnifiedSourceKind {
   eroVoice,
 }
 
+class SourceCapabilities extends Equatable {
+  final bool catalog;
+  final bool detail;
+  final bool playback;
+  final bool download;
+  final bool subtitle;
+
+  const SourceCapabilities({
+    required this.catalog,
+    required this.detail,
+    required this.playback,
+    required this.download,
+    required this.subtitle,
+  });
+
+  @override
+  List<Object?> get props => [catalog, detail, playback, download, subtitle];
+}
+
 extension UnifiedSourceKindX on UnifiedSourceKind {
   String get id => switch (this) {
         UnifiedSourceKind.asmrOne => 'asmr_one',
@@ -25,6 +44,30 @@ extension UnifiedSourceKindX on UnifiedSourceKind {
         UnifiedSourceKind.asmrOne => 0,
         UnifiedSourceKind.hentaiAsmr => 1,
         UnifiedSourceKind.eroVoice => 2,
+      };
+
+  SourceCapabilities get capabilities => switch (this) {
+        UnifiedSourceKind.asmrOne => const SourceCapabilities(
+            catalog: true,
+            detail: true,
+            playback: true,
+            download: true,
+            subtitle: true,
+          ),
+        UnifiedSourceKind.hentaiAsmr => const SourceCapabilities(
+            catalog: true,
+            detail: true,
+            playback: true,
+            download: true,
+            subtitle: true,
+          ),
+        UnifiedSourceKind.eroVoice => const SourceCapabilities(
+            catalog: true,
+            detail: true,
+            playback: false,
+            download: true,
+            subtitle: false,
+          ),
       };
 }
 
