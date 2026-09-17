@@ -18,6 +18,13 @@ class AudioTrack extends Equatable {
   final String? sourcePath;
   final String? subtitleWorkDirPath;
 
+  /// Stable provider identity used by subtitle/AI caches. These fields are
+  /// optional so playlists persisted before multi-source support stay valid.
+  final String? sourceKind;
+  final String? sourceLocalWorkId;
+  final String? canonicalWorkId;
+  final String? sourceTrackId;
+
   const AudioTrack({
     required this.id,
     required this.title,
@@ -31,6 +38,10 @@ class AudioTrack extends Equatable {
     this.hash,
     this.sourcePath,
     this.subtitleWorkDirPath,
+    this.sourceKind,
+    this.sourceLocalWorkId,
+    this.canonicalWorkId,
+    this.sourceTrackId,
   });
 
   factory AudioTrack.fromJson(Map<String, dynamic> json) =>
@@ -51,6 +62,10 @@ class AudioTrack extends Equatable {
     String? hash,
     String? sourcePath,
     String? subtitleWorkDirPath,
+    String? sourceKind,
+    String? sourceLocalWorkId,
+    String? canonicalWorkId,
+    String? sourceTrackId,
   }) {
     return AudioTrack(
       id: id ?? this.id,
@@ -66,6 +81,10 @@ class AudioTrack extends Equatable {
       sourcePath: sourcePath ?? this.sourcePath,
       subtitleWorkDirPath:
           subtitleWorkDirPath ?? this.subtitleWorkDirPath,
+      sourceKind: sourceKind ?? this.sourceKind,
+      sourceLocalWorkId: sourceLocalWorkId ?? this.sourceLocalWorkId,
+      canonicalWorkId: canonicalWorkId ?? this.canonicalWorkId,
+      sourceTrackId: sourceTrackId ?? this.sourceTrackId,
     );
   }
 
@@ -83,6 +102,10 @@ class AudioTrack extends Equatable {
         hash,
         sourcePath,
         subtitleWorkDirPath,
+        sourceKind,
+        sourceLocalWorkId,
+        canonicalWorkId,
+        sourceTrackId,
       ];
 }
 
