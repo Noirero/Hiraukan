@@ -121,7 +121,7 @@ class UnifiedSourceService {
     Object? lastError;
     for (final ref in _orderedRefs(bundle.sources, preferredSource)) {
       final adapter = _adapterFor(ref.source);
-      if (adapter == null) continue;
+      if (adapter == null || !adapter.capabilities.detail) continue;
       try {
         final detail = await adapter.loadDetail(ref);
         if (_looksLikeProviderInterstitial(detail)) {
@@ -163,11 +163,14 @@ class UnifiedSourceService {
     }
 
     Object? lastError;
-    var attempted = 0;
+    var attemptedPlayable = 0;
+    var hasPlaybackCapableSource = false;
     for (final ref in _orderedRefs(bundle.sources, preferredSource)) {
-      attempted++;
       final adapter = _adapterFor(ref.source);
-      if (adapter == null) continue;
+      if (adapter == null || !adapter.capabilities.playback) continue;
+
+      hasPlaybackCapableSource = true;
+      attemptedPlayable++;
       try {
         final files = await adapter.loadTracks(ref);
         if (files.isEmpty) {
@@ -181,11 +184,17 @@ class UnifiedSourceService {
           files: files,
           usedFallback:
               (preferredSource != null && ref.source != preferredSource) ||
-                  attempted > 1,
+                  attemptedPlayable > 1,
         );
       } catch (error) {
         lastError = error;
       }
+    }
+
+    if (!hasPlaybackCapableSource) {
+      throw UnsupportedError(
+        'No configured source supports playback for this work',
+      );
     }
     throw StateError(
       'No playable source is currently available: $lastError',
@@ -266,6 +275,7 @@ class UnifiedSourceService {
           SourceHtmlParser.basenameFromUrl(url, entry.key);
       final identity = hash ??
           '${resolved.source.source.id}:${resolved.source.localId}:${entry.key}';
+      final sourceTrackId = file['id']?.toString() ?? hash ?? identity;
       tracks.add(
         AudioTrack(
           id: identity,
@@ -282,6 +292,10 @@ class UnifiedSourceService {
           workId: work.id,
           hash: hash ?? identity,
           sourcePath: resolved.source.detailUrl,
+          sourceKind: resolved.source.source.id,
+          sourceLocalWorkId: resolved.source.localId,
+          canonicalWorkId: resolved.source.canonicalId ?? work.sourceId,
+          sourceTrackId: sourceTrackId,
         ),
       );
     }
