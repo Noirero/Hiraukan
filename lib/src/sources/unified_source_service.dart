@@ -121,7 +121,7 @@ class UnifiedSourceService {
     Object? lastError;
     for (final ref in _orderedRefs(bundle.sources, preferredSource)) {
       final adapter = _adapterFor(ref.source);
-      if (adapter == null || !adapter.capabilities.detail) continue;
+      if (adapter == null || !ref.source.capabilities.detail) continue;
       try {
         final detail = await adapter.loadDetail(ref);
         if (_looksLikeProviderInterstitial(detail)) {
@@ -164,12 +164,21 @@ class UnifiedSourceService {
 
     Object? lastError;
     var attemptedPlayableSources = 0;
+    var hasPlaybackCapableSource = false;
     final availableSourceKinds =
         bundle.sources.map((ref) => ref.source).toList(growable: false);
 
     for (final ref in _orderedRefs(bundle.sources, preferredSource)) {
+      if (!ref.source.capabilities.playback) {
+        continue;
+      }
+
+      hasPlaybackCapableSource = true;
       final adapter = _adapterFor(ref.source);
-      if (adapter == null || !adapter.capabilities.playback) {
+      if (adapter == null) {
+        lastError = StateError(
+          'No adapter is registered for ${ref.source.label}',
+        );
         continue;
       }
 
@@ -194,7 +203,7 @@ class UnifiedSourceService {
       }
     }
 
-    if (attemptedPlayableSources == 0) {
+    if (!hasPlaybackCapableSource) {
       throw SourcePlaybackUnavailableException(
         sources: availableSourceKinds,
         unsupportedOnly: true,
