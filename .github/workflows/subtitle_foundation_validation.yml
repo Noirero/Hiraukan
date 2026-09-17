@@ -15,12 +15,13 @@ concurrency:
 
 jobs:
   validate:
-    name: Analyze, test, and build signed arm64 APK
+    name: Analyze, test, and build arm64 APK
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
-      - name: Prepare Android release signing
+      - name: Select Android install identity
+        id: android_mode
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -28,22 +29,32 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ] || \
-             [ -z "${ANDROID_KEYSTORE_PASSWORD:-}" ] || \
-             [ -z "${ANDROID_KEY_ALIAS:-}" ] || \
-             [ -z "${ANDROID_KEY_PASSWORD:-}" ]; then
-            echo "::error::Android release signing secrets are required. Refusing to publish a debug-signed APK with the production applicationId."
-            exit 1
-          fi
 
-          printf "%s" "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-key.jks
-          cat <<EOF > android/key.properties
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] && \
+             [ -n "${ANDROID_KEYSTORE_PASSWORD:-}" ] && \
+             [ -n "${ANDROID_KEY_ALIAS:-}" ] && \
+             [ -n "${ANDROID_KEY_PASSWORD:-}" ]; then
+            printf "%s" "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-key.jks
+            cat <<EOF > android/key.properties
           storeFile=app/release-key.jks
           storePassword=$ANDROID_KEYSTORE_PASSWORD
           keyAlias=$ANDROID_KEY_ALIAS
           keyPassword=$ANDROID_KEY_PASSWORD
           EOF
-          chmod 600 android/app/release-key.jks android/key.properties
+            chmod 600 android/app/release-key.jks android/key.properties
+
+            echo "mode=update" >> "$GITHUB_OUTPUT"
+            echo "app_id=com.meteor.kikoeruflutter" >> "$GITHUB_OUTPUT"
+            echo "apk_name=Hiraukan-update-arm64-v8a.apk" >> "$GITHUB_OUTPUT"
+            echo "artifact_name=Hiraukan-update-arm64-v8a" >> "$GITHUB_OUTPUT"
+            echo "Release signing is available: producing an update-compatible APK."
+          else
+            echo "mode=standalone" >> "$GITHUB_OUTPUT"
+            echo "app_id=com.meteor.kikoeruflutter.subtitlefoundation" >> "$GITHUB_OUTPUT"
+            echo "apk_name=Hiraukan-subtitle-foundation-standalone-arm64-v8a.apk" >> "$GITHUB_OUTPUT"
+            echo "artifact_name=Hiraukan-subtitle-foundation-standalone-arm64-v8a" >> "$GITHUB_OUTPUT"
+            echo "Release signing is unavailable: producing a separate-install APK with a different applicationId."
+          fi
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -75,24 +86,29 @@ jobs:
             test/unified_source_playback_capability_test.dart \
             test/unified_source_service_test.dart
 
-      - name: Build signed arm64 release APK
+      - name: Build arm64 release APK
+        env:
+          HIRAUAKAN_APPLICATION_ID: ${{ steps.android_mode.outputs.app_id }}
+          APK_NAME: ${{ steps.android_mode.outputs.apk_name }}
         run: |
           set -euo pipefail
           mkdir -p dist
           flutter build apk --release --target-platform android-arm64 --split-per-abi
-          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
-             dist/Hiraukan-subtitle-foundation-arm64-v8a.apk
+          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "dist/$APK_NAME"
 
-      - name: Verify update compatibility
+      - name: Verify package and update safety
         env:
-          EXPECTED_PACKAGE_ID: com.meteor.kikoeruflutter
-          EXPECTED_CERT_SHA256: b49fcc1a879b7dab15f223f7431dfbee447dbe268d1578fc549340c430ddc87f
+          BUILD_MODE: ${{ steps.android_mode.outputs.mode }}
+          EXPECTED_PACKAGE_ID: ${{ steps.android_mode.outputs.app_id }}
+          APK_NAME: ${{ steps.android_mode.outputs.apk_name }}
+          PRODUCTION_PACKAGE_ID: com.meteor.kikoeruflutter
+          EXPECTED_PRODUCTION_CERT_SHA256: b49fcc1a879b7dab15f223f7431dfbee447dbe268d1578fc549340c430ddc87f
         run: |
           set -euo pipefail
           build_tools_dir="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
           aapt="$build_tools_dir/aapt"
           apksigner="$build_tools_dir/apksigner"
-          apk="dist/Hiraukan-subtitle-foundation-arm64-v8a.apk"
+          apk="dist/$APK_NAME"
 
           for tool in "$aapt" "$apksigner"; do
             if [ ! -x "$tool" ]; then
@@ -101,12 +117,23 @@ jobs:
             fi
           done
 
-          badging="$("$aapt" dump badging "$apk" | sed -n '1p')"
-          package_name="$(sed -n "s/.*package: name='\([^']*\)'.*/\1/p" <<< "$badging")"
-          version_code="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<< "$badging")"
+          badging="$("$aapt" dump badging "$apk")"
+          package_line="$(printf '%s\n' "$badging" | sed -n '1p')"
+          package_name="$(sed -n "s/.*package: name='\([^']*\)'.*/\1/p" <<< "$package_line")"
+          version_code="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<< "$package_line")"
+          native_code="$(printf '%s\n' "$badging" | sed -n "s/^native-code: //p" | head -n 1)"
 
           if [ "$package_name" != "$EXPECTED_PACKAGE_ID" ]; then
             echo "::error::Unexpected applicationId: $package_name (expected $EXPECTED_PACKAGE_ID)"
+            exit 1
+          fi
+
+          if ! grep -q "arm64-v8a" <<< "$native_code"; then
+            echo "::error::APK is not an arm64-v8a build: $native_code"
+            exit 1
+          fi
+          if grep -Eq "armeabi-v7a|x86|x86_64" <<< "$native_code"; then
+            echo "::error::APK contains an unexpected non-arm64 ABI: $native_code"
             exit 1
           fi
 
@@ -128,24 +155,38 @@ jobs:
             exit 1
           fi
 
-          if [ "$actual_cert" != "$EXPECTED_CERT_SHA256" ]; then
-            echo "::error::Signing certificate mismatch. Refusing to publish an APK that cannot update the existing app."
-            echo "Actual:   $actual_cert"
-            echo "Expected: $EXPECTED_CERT_SHA256"
-            exit 1
+          if [ "$BUILD_MODE" = "update" ]; then
+            if [ "$package_name" != "$PRODUCTION_PACKAGE_ID" ]; then
+              echo "::error::Update build must keep the production applicationId."
+              exit 1
+            fi
+            if [ "$actual_cert" != "$EXPECTED_PRODUCTION_CERT_SHA256" ]; then
+              echo "::error::Production signing certificate mismatch. This APK would not update the existing app."
+              exit 1
+            fi
+            echo "Verified UPDATE build: same applicationId and production signing certificate."
+          else
+            if [ "$package_name" = "$PRODUCTION_PACKAGE_ID" ]; then
+              echo "::error::Standalone build must never reuse the production applicationId."
+              exit 1
+            fi
+            echo "Verified STANDALONE build: separate applicationId, so it can coexist without package conflict."
           fi
 
-          echo "Verified applicationId: $package_name"
-          echo "Verified versionCode: $version_code"
-          echo "Verified signing certificate SHA-256: $actual_cert"
+          echo "applicationId=$package_name"
+          echo "versionCode=$version_code"
+          echo "native-code=$native_code"
+          echo "certificate-sha256=$actual_cert"
 
       - name: Record APK size
-        run: ls -lh dist/Hiraukan-subtitle-foundation-arm64-v8a.apk
+        env:
+          APK_NAME: ${{ steps.android_mode.outputs.apk_name }}
+        run: ls -lh "dist/$APK_NAME"
 
-      - name: Upload signed arm64 APK
+      - name: Upload arm64 APK
         uses: actions/upload-artifact@v6
         with:
-          name: Hiraukan-subtitle-foundation-arm64-v8a
-          path: dist/Hiraukan-subtitle-foundation-arm64-v8a.apk
+          name: ${{ steps.android_mode.outputs.artifact_name }}
+          path: dist/${{ steps.android_mode.outputs.apk_name }}
           if-no-files-found: error
           retention-days: 7
