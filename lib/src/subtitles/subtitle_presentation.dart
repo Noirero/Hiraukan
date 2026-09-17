@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import '../models/subtitle/subtitle_segment.dart';
 import '../models/subtitle/timed_subtitle.dart';
 
 enum SubtitleDisplayMode {
@@ -68,23 +69,20 @@ class SubtitlePresentation extends Equatable {
           start: originalSubtitle.segments[index].start,
           end: originalSubtitle.segments[index].end,
           originalText: originalSubtitle.segments[index].text,
-          translatedText: _translatedTextFor(
-            index,
-            translatedSegments,
-          ),
+          translatedText: _translatedTextFor(index, translatedSegments),
         ),
     ];
   }
 
   String? _translatedTextFor(
     int index,
-    List<dynamic>? translatedSegments,
+    List<SubtitleSegment>? translatedSegments,
   ) {
     if (mode == SubtitleDisplayMode.original || translatedSegments == null) {
       return null;
     }
     if (index >= translatedSegments.length) return null;
-    return translatedSegments[index].text as String;
+    return translatedSegments[index].text;
   }
 
   @override
