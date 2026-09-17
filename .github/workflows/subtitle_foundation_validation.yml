@@ -102,7 +102,7 @@ jobs:
           EXPECTED_PACKAGE_ID: ${{ steps.android_mode.outputs.app_id }}
           APK_NAME: ${{ steps.android_mode.outputs.apk_name }}
           PRODUCTION_PACKAGE_ID: com.meteor.kikoeruflutter
-          EXPECTED_PRODUCTION_CERT_SHA256: b49fcc1a879b7dab15f223f7431dfbee447dbe268d1578fc549340c430ddc87f
+          EXPECTED_PRODUCTION_CERT_SHA256: 4e6d5e53526058b226d05d075ac95e08b1c795f0e16a3636765438e5d7565c05
         run: |
           set -euo pipefail
           build_tools_dir="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
