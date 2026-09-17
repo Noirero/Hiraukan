@@ -240,6 +240,7 @@ extension TranslationTargetLanguageL10n on TranslationTargetLanguage {
       TranslationTargetLanguage.zhHans => s.translationLanguageZhHans,
       TranslationTargetLanguage.zhHant => s.translationLanguageZhHant,
       TranslationTargetLanguage.english => s.translationLanguageEnglish,
+      TranslationTargetLanguage.indonesian => 'Bahasa Indonesia',
       TranslationTargetLanguage.japanese => s.translationLanguageJapanese,
       TranslationTargetLanguage.russian => s.translationLanguageRussian,
       TranslationTargetLanguage.custom => s.translationLanguageCustom,
