@@ -58,6 +58,10 @@ class SubtitleState extends Equatable {
 class SubtitleController extends StateNotifier<SubtitleState> {
   SubtitleController() : super(const SubtitleState());
 
+  /// Read-only snapshot for coordinators that need to compare track identity
+  /// without reaching into StateNotifier's protected [state] member.
+  SubtitleState get snapshot => state;
+
   void setOriginal(TimedSubtitle subtitle) {
     final trackChanged =
         state.trackId != null && state.trackId != subtitle.trackId;
