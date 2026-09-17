@@ -118,7 +118,7 @@ class FallbackGlassTransparencyNotifier extends StateNotifier<double> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setDouble(preferenceKey, state);
     } catch (_) {
-      // Keep the in-memory value when persistence is unavailable.
+      // Keep the in-memory setting when persistence is unavailable.
     }
   }
 
@@ -262,6 +262,7 @@ enum TranslationTargetLanguage {
   zhHans('zh_hans'),
   zhHant('zh_hant'),
   english('en'),
+  indonesian('id'),
   japanese('ja'),
   russian('ru'),
   custom('custom');
@@ -284,6 +285,7 @@ enum TranslationTargetLanguage {
       TranslationTargetLanguage.zhHant =>
         const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
       TranslationTargetLanguage.english => const Locale('en'),
+      TranslationTargetLanguage.indonesian => const Locale('id'),
       TranslationTargetLanguage.japanese => const Locale('ja'),
       TranslationTargetLanguage.russian => const Locale('ru'),
       TranslationTargetLanguage.custom => appLocale,
@@ -447,7 +449,6 @@ class TranslationSourceNotifier extends StateNotifier<TranslationSource> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final savedValue = prefs.getString(_preferenceKey);
-
       if (savedValue != null) {
         final source = TranslationSource.values.firstWhere(
           (s) => s.value == savedValue,
