@@ -1,0 +1,65 @@
+name: Subtitle Foundation Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: subtitle-foundation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Analyze, test, and build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.7'
+          channel: stable
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Generate localizations
+        run: flutter gen-l10n
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Run foundation tests
+        run: |
+          flutter test \
+            test/source_capabilities_test.dart \
+            test/subtitle_foundation_test.dart \
+            test/unified_source_playback_capability_test.dart \
+            test/unified_source_service_test.dart
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Record APK size
+        run: ls -lh build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload validation APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: Hiraukan-subtitle-foundation-validation
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 7
