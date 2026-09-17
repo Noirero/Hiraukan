@@ -4,15 +4,15 @@ import 'package:kikoeru_flutter/src/subtitles/subtitle_format_adapter.dart';
 
 void main() {
   test('existing LyricLine timestamps survive universal subtitle conversion', () {
-    const lines = <LyricLine>[
+    final lines = <LyricLine>[
       LyricLine(
-        startTime: Duration(milliseconds: 250),
-        endTime: Duration(milliseconds: 1750),
+        startTime: const Duration(milliseconds: 250),
+        endTime: const Duration(milliseconds: 1750),
         text: 'line one',
       ),
       LyricLine(
-        startTime: Duration(seconds: 2),
-        endTime: Duration(seconds: 3),
+        startTime: const Duration(seconds: 2),
+        endTime: const Duration(seconds: 3),
         text: 'line two',
       ),
     ];
@@ -28,6 +28,11 @@ void main() {
     );
     final restored = SubtitleFormatAdapter.toLyricLines(subtitle);
 
-    expect(restored, lines);
+    expect(restored, hasLength(lines.length));
+    for (var i = 0; i < lines.length; i++) {
+      expect(restored[i].startTime, lines[i].startTime);
+      expect(restored[i].endTime, lines[i].endTime);
+      expect(restored[i].text, lines[i].text);
+    }
   });
 }
