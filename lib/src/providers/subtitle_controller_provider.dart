@@ -28,7 +28,7 @@ final subtitleControllerProvider =
     }
 
     if (lyricState.lyrics.isEmpty) {
-      if (controller.state.trackId != track.id) {
+      if (controller.snapshot.trackId != track.id) {
         controller.clearForTrack(track.id);
       }
       controller.setLoading(lyricState.isLoading);
