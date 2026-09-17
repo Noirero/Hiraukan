@@ -26,14 +26,12 @@ jobs:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ] || \
              [ -z "${ANDROID_KEYSTORE_PASSWORD:-}" ] || \
-             [ -z "${ANDROID_KEY_ALIAS:-}" ] || \
-             [ -z "${ANDROID_KEY_PASSWORD:-}" ]; then
-            echo "::error::All Android release signing secrets are required for the production applicationId."
+             [ -z "${ANDROID_KEY_ALIAS:-}" ]; then
+            echo "::error::Android release signing secrets are required for the production applicationId."
             exit 1
           fi
 
@@ -42,7 +40,7 @@ jobs:
           storeFile=app/release-key.jks
           storePassword=$ANDROID_KEYSTORE_PASSWORD
           keyAlias=$ANDROID_KEY_ALIAS
-          keyPassword=$ANDROID_KEY_PASSWORD
+          keyPassword=$ANDROID_KEYSTORE_PASSWORD
           EOF
           chmod 600 android/app/release-key.jks android/key.properties
 
