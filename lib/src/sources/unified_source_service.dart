@@ -121,7 +121,7 @@ class UnifiedSourceService {
     Object? lastError;
     for (final ref in _orderedRefs(bundle.sources, preferredSource)) {
       final adapter = _adapterFor(ref.source);
-      if (adapter == null) continue;
+      if (adapter == null || !adapter.capabilities.detail) continue;
       try {
         final detail = await adapter.loadDetail(ref);
         if (_looksLikeProviderInterstitial(detail)) {
@@ -163,11 +163,17 @@ class UnifiedSourceService {
     }
 
     Object? lastError;
-    var attempted = 0;
+    var attemptedPlayableSources = 0;
+    final availableSourceKinds =
+        bundle.sources.map((ref) => ref.source).toList(growable: false);
+
     for (final ref in _orderedRefs(bundle.sources, preferredSource)) {
-      attempted++;
       final adapter = _adapterFor(ref.source);
-      if (adapter == null) continue;
+      if (adapter == null || !adapter.capabilities.playback) {
+        continue;
+      }
+
+      attemptedPlayableSources++;
       try {
         final files = await adapter.loadTracks(ref);
         if (files.isEmpty) {
@@ -181,14 +187,24 @@ class UnifiedSourceService {
           files: files,
           usedFallback:
               (preferredSource != null && ref.source != preferredSource) ||
-                  attempted > 1,
+                  attemptedPlayableSources > 1,
         );
       } catch (error) {
         lastError = error;
       }
     }
-    throw StateError(
-      'No playable source is currently available: $lastError',
+
+    if (attemptedPlayableSources == 0) {
+      throw SourcePlaybackUnavailableException(
+        sources: availableSourceKinds,
+        unsupportedOnly: true,
+      );
+    }
+
+    throw SourcePlaybackUnavailableException(
+      sources: availableSourceKinds,
+      unsupportedOnly: false,
+      lastError: lastError,
     );
   }
 
@@ -282,6 +298,8 @@ class UnifiedSourceService {
           workId: work.id,
           hash: hash ?? identity,
           sourcePath: resolved.source.detailUrl,
+          sourceKey: resolved.source.source.id,
+          sourceWorkId: resolved.source.localId,
         ),
       );
     }
