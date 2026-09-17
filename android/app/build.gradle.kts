@@ -15,6 +15,14 @@ if (keystorePropertiesFile.exists()) {
 val releaseKeystoreFile = keystoreProperties.getProperty("storeFile")?.let(rootProject::file)
 val hasReleaseKeystore = releaseKeystoreFile?.exists() == true
 
+// Default builds keep the historical production applicationId so APKs signed
+// with the production certificate can update an existing Hiraukan install.
+// CI may explicitly override this only for intentionally standalone test builds
+// that must coexist with the production app.
+val applicationIdOverride = System.getenv("HIRAUAKAN_APPLICATION_ID")
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+
 android {
     namespace = "com.meteor.kikoeruflutter"
     compileSdk = flutter.compileSdkVersion
@@ -30,10 +38,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.meteor.kikoeruflutter"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        applicationId = applicationIdOverride ?: "com.meteor.kikoeruflutter"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
