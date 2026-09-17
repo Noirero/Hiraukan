@@ -4,6 +4,8 @@ import 'unified_source_models.dart';
 abstract class UnifiedSourceAdapter {
   UnifiedSourceKind get kind;
 
+  SourceCapabilities get capabilities => kind.capabilities;
+
   Future<SourceSearchPage> search({
     required String keyword,
     required int page,
