@@ -12,6 +12,23 @@ import '../utils/global_keys.dart';
 
 final _log = LogService.instance;
 
+class TranslationUnavailableException implements Exception {
+  final String? sourceLanguage;
+  final String? targetLanguage;
+
+  const TranslationUnavailableException({
+    this.sourceLanguage,
+    this.targetLanguage,
+  });
+
+  @override
+  String toString() {
+    final source = sourceLanguage ?? 'auto';
+    final target = targetLanguage ?? 'configured target';
+    return 'TranslationUnavailableException($source -> $target)';
+  }
+}
+
 class TranslationService {
   static final TranslationService _instance = TranslationService._internal();
   factory TranslationService() => _instance;
@@ -34,10 +51,39 @@ class TranslationService {
         : Locale(language);
   }
 
+  Locale _localeFromLanguageTag(String languageTag) {
+    final normalized = languageTag.trim().replaceAll('_', '-');
+    if (normalized.isEmpty) {
+      throw ArgumentError.value(languageTag, 'languageTag', 'Must not be empty');
+    }
+
+    final parts = normalized.split('-');
+    final languageCode = parts.first.toLowerCase();
+    String? scriptCode;
+    String? countryCode;
+
+    for (final rawPart in parts.skip(1)) {
+      if (rawPart.length == 4 && scriptCode == null) {
+        scriptCode =
+            '${rawPart[0].toUpperCase()}${rawPart.substring(1).toLowerCase()}';
+      } else if ((rawPart.length == 2 || rawPart.length == 3) &&
+          countryCode == null) {
+        countryCode = rawPart.toUpperCase();
+      }
+    }
+
+    return Locale.fromSubtags(
+      languageCode: languageCode,
+      scriptCode: scriptCode,
+      countryCode: countryCode,
+    );
+  }
+
   _TranslationLanguageConfig _getLanguageConfig(
     SharedPreferences prefs,
-    String selectedSource,
-  ) {
+    String selectedSource, {
+    Locale? targetLocaleOverride,
+  }) {
     final appLocale = _getEffectiveLocaleFromPreferences(prefs);
     final preferences = TranslationLanguagePreferences(
       targetLanguage: TranslationTargetLanguage.fromValue(
@@ -54,7 +100,8 @@ class TranslationService {
     return _TranslationLanguageConfig(
       preferences: preferences,
       allowCustomLanguage: selectedSource == TranslationSource.llm.value,
-      targetLocale: preferences.targetLanguage.resolveLocale(appLocale),
+      targetLocale:
+          targetLocaleOverride ?? preferences.targetLanguage.resolveLocale(appLocale),
     );
   }
 
@@ -101,6 +148,8 @@ class TranslationService {
             : 'Simplified Chinese (zh-CN)';
       case 'en':
         return 'English';
+      case 'id':
+        return 'Indonesian';
       case 'ja':
         return 'Japanese';
       case 'ru':
@@ -145,13 +194,27 @@ class TranslationService {
     );
   }
 
-  /// 翻译文本到应用当前语言
-  Future<String> translate(String text, {String? sourceLang}) async {
+  /// 翻译文本。未指定 [targetLang] 时保持旧行为，使用设置中的目标语言。
+  ///
+  /// Subtitle engine passes [targetLang] explicitly so changing subtitle
+  /// presentation never needs to mutate global translation preferences.
+  Future<String> translate(
+    String text, {
+    String? sourceLang,
+    String? targetLang,
+    bool returnOriginalOnFailure = true,
+  }) async {
     if (text.isEmpty) return text;
 
     final prefs = await SharedPreferences.getInstance();
     final selectedSource = prefs.getString('translation_source') ?? 'google';
-    final languageConfig = _getLanguageConfig(prefs, selectedSource);
+    final explicitTargetLocale =
+        targetLang == null ? null : _localeFromLanguageTag(targetLang);
+    final languageConfig = _getLanguageConfig(
+      prefs,
+      selectedSource,
+      targetLocaleOverride: explicitTargetLocale,
+    );
     final cacheSourceLang = languageConfig.cacheSourceLang(sourceLang);
     final cacheTargetLang = languageConfig.cacheTargetLang();
     final targetLocale = languageConfig.targetLocale;
@@ -185,20 +248,26 @@ class TranslationService {
       try {
         String result;
         if (source == 'youdao') {
-          result = await _youdaoTranslator.translate(text,
-              sourceLang: languageConfig.youdaoSourceLang(sourceLang),
-              targetLang: _youdaoTargetLang(targetLocale));
+          result = await _youdaoTranslator.translate(
+            text,
+            sourceLang: languageConfig.youdaoSourceLang(sourceLang),
+            targetLang: _youdaoTargetLang(targetLocale),
+          );
         } else if (source == 'microsoft') {
-          result = await _microsoftTranslator.translate(text,
-              sourceLang: languageConfig.microsoftSourceLang(sourceLang),
-              targetLang: _microsoftTargetLang(targetLocale));
+          result = await _microsoftTranslator.translate(
+            text,
+            sourceLang: languageConfig.microsoftSourceLang(sourceLang),
+            targetLang: _microsoftTargetLang(targetLocale),
+          );
         } else if (source == 'llm') {
-          result = await _llmTranslator.translate(text,
-              sourceLang: languageConfig.llmSourceLanguageName(sourceLang),
-              locale: targetLocale,
-              sourceLanguageName:
-                  languageConfig.llmSourceLanguageName(sourceLang),
-              targetLanguageName: languageConfig.llmTargetLanguageName());
+          result = await _llmTranslator.translate(
+            text,
+            sourceLang: languageConfig.llmSourceLanguageName(sourceLang),
+            locale: targetLocale,
+            sourceLanguageName:
+                languageConfig.llmSourceLanguageName(sourceLang),
+            targetLanguageName: languageConfig.llmTargetLanguageName(),
+          );
         } else {
           // Google 翻译
           final translation = await _googleTranslator.translate(
@@ -224,7 +293,13 @@ class TranslationService {
       }
     }
 
-    return text; // 所有尝试都失败，返回原文
+    if (returnOriginalOnFailure) {
+      return text;
+    }
+    throw TranslationUnavailableException(
+      sourceLanguage: sourceLang,
+      targetLanguage: targetLang ?? cacheTargetLang,
+    );
   }
 
   void _showFallbackNotification(String sourceName) {
@@ -249,8 +324,12 @@ class TranslationService {
   }
 
   /// 批量翻译
-  Future<List<String>> translateBatch(List<String> texts,
-      {String? sourceLang}) async {
+  Future<List<String>> translateBatch(
+    List<String> texts, {
+    String? sourceLang,
+    String? targetLang,
+    bool returnOriginalOnFailure = true,
+  }) async {
     if (texts.isEmpty) return [];
 
     // 获取并发设置
@@ -273,11 +352,16 @@ class TranslationService {
         index = currentIndex++;
 
         try {
-          final translated =
-              await translate(texts[index], sourceLang: sourceLang);
+          final translated = await translate(
+            texts[index],
+            sourceLang: sourceLang,
+            targetLang: targetLang,
+            returnOriginalOnFailure: returnOriginalOnFailure,
+          );
           results[index] = translated;
         } catch (e) {
           _log.captureOutput('Translation batch item $index failed: $e');
+          if (!returnOriginalOnFailure) rethrow;
           results[index] = texts[index];
         }
       }
@@ -294,6 +378,8 @@ class TranslationService {
   Future<String> translateLongText(
     String text, {
     String? sourceLang,
+    String? targetLang,
+    bool returnOriginalOnFailure = true,
     Function(int current, int total)? onProgress,
   }) async {
     if (text.isEmpty) return text;
@@ -361,11 +447,16 @@ class TranslationService {
         index = currentIndex++;
 
         try {
-          final translated =
-              await translate(chunks[index], sourceLang: sourceLang);
+          final translated = await translate(
+            chunks[index],
+            sourceLang: sourceLang,
+            targetLang: targetLang,
+            returnOriginalOnFailure: returnOriginalOnFailure,
+          );
           results[index] = translated;
         } catch (e) {
           _log.captureOutput('Translation chunk $index failed: $e');
+          if (!returnOriginalOnFailure) rethrow;
           results[index] = chunks[index];
         } finally {
           completedCount++;
@@ -382,7 +473,10 @@ class TranslationService {
 
   /// 获取缓存的翻译
   Future<String?> _getCachedTranslation(
-      String text, String sourceLang, String targetLang) async {
+    String text,
+    String sourceLang,
+    String targetLang,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final key = _getCacheKey(text, sourceLang, targetLang);
@@ -403,8 +497,12 @@ class TranslationService {
   }
 
   /// 缓存翻译结果
-  Future<void> _cacheTranslation(String text, String translation,
-      String sourceLang, String targetLang) async {
+  Future<void> _cacheTranslation(
+    String text,
+    String translation,
+    String sourceLang,
+    String targetLang,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final key = _getCacheKey(text, sourceLang, targetLang);
@@ -518,6 +616,7 @@ class _TranslationLanguageConfig {
       'zh-cht' =>
         'Traditional Chinese (zh-TW)',
       'en' => 'English',
+      'id' || 'id-id' => 'Indonesian',
       'ja' => 'Japanese',
       'ru' => 'Russian',
       _ => code,
