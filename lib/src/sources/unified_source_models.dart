@@ -8,6 +8,25 @@ enum UnifiedSourceKind {
   eroVoice,
 }
 
+class SourceCapabilities extends Equatable {
+  final bool catalog;
+  final bool detail;
+  final bool playback;
+  final bool download;
+  final bool subtitle;
+
+  const SourceCapabilities({
+    required this.catalog,
+    required this.detail,
+    required this.playback,
+    required this.download,
+    required this.subtitle,
+  });
+
+  @override
+  List<Object?> get props => [catalog, detail, playback, download, subtitle];
+}
+
 extension UnifiedSourceKindX on UnifiedSourceKind {
   String get id => switch (this) {
         UnifiedSourceKind.asmrOne => 'asmr_one',
@@ -26,6 +45,35 @@ extension UnifiedSourceKindX on UnifiedSourceKind {
         UnifiedSourceKind.hentaiAsmr => 1,
         UnifiedSourceKind.eroVoice => 2,
       };
+
+  /// Declares what a source is allowed to provide to the rest of Hiraukan.
+  ///
+  /// Keep this separate from runtime health. A healthy source can still be
+  /// intentionally non-playable, and that must not be reported as a playback
+  /// failure.
+  SourceCapabilities get capabilities => switch (this) {
+        UnifiedSourceKind.asmrOne => const SourceCapabilities(
+            catalog: true,
+            detail: true,
+            playback: true,
+            download: true,
+            subtitle: true,
+          ),
+        UnifiedSourceKind.hentaiAsmr => const SourceCapabilities(
+            catalog: true,
+            detail: true,
+            playback: true,
+            download: true,
+            subtitle: false,
+          ),
+        UnifiedSourceKind.eroVoice => const SourceCapabilities(
+            catalog: true,
+            detail: true,
+            playback: false,
+            download: true,
+            subtitle: false,
+          ),
+      };
 }
 
 enum UnifiedSourceHealth {
@@ -33,6 +81,34 @@ enum UnifiedSourceHealth {
   degraded,
   broken,
   unknown,
+}
+
+/// A non-fatal domain condition indicating that the current work cannot be
+/// played from the available source set.
+///
+/// [unsupportedOnly] distinguishes a capability decision from a real runtime
+/// playback/source failure. UI code should present the former as an
+/// informational state, not as a player error.
+class SourcePlaybackUnavailableException implements Exception {
+  final List<UnifiedSourceKind> sources;
+  final bool unsupportedOnly;
+  final Object? lastError;
+
+  const SourcePlaybackUnavailableException({
+    required this.sources,
+    required this.unsupportedOnly,
+    this.lastError,
+  });
+
+  @override
+  String toString() {
+    if (unsupportedOnly) {
+      return 'Playback is not supported by the available source(s): '
+          '${sources.map((source) => source.label).join(', ')}';
+    }
+    return 'No playable source is currently available'
+        '${lastError == null ? '' : ': $lastError'}';
+  }
 }
 
 class UnifiedSourceRef extends Equatable {
@@ -128,6 +204,9 @@ class UnifiedWorkBundle {
   }
 
   bool get hasFallback => sources.length > 1;
+
+  bool get hasPlayableSource =>
+      sources.any((ref) => ref.source.capabilities.playback);
 
   bool hasSource(UnifiedSourceKind source) =>
       sources.any((ref) => ref.source == source);
