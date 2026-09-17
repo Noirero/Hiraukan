@@ -11,7 +11,7 @@ class SubtitleSegment extends Equatable {
     required this.text,
   });
 
-  bool get isValid => end >= start && text.trim().isNotEmpty;
+  bool get isValid => end.compareTo(start) >= 0 && text.trim().isNotEmpty;
 
   SubtitleSegment copyWith({
     Duration? start,
