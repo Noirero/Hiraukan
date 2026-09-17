@@ -15,25 +15,28 @@ concurrency:
 
 jobs:
   android:
-    name: Android Main Build
+    name: Android Main arm64 Build
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
       - name: Prepare Android Signing
-        id: android_signing
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "ANDROID_KEYSTORE_BASE64 secret missing; skipping signing setup."
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            exit 0
+          set -euo pipefail
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ] || \
+             [ -z "${ANDROID_KEYSTORE_PASSWORD:-}" ] || \
+             [ -z "${ANDROID_KEY_ALIAS:-}" ] || \
+             [ -z "${ANDROID_KEY_PASSWORD:-}" ]; then
+            echo "::error::All Android release signing secrets are required for the production applicationId."
+            exit 1
           fi
+
           printf "%s" "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-key.jks
           cat <<EOF > android/key.properties
           storeFile=app/release-key.jks
@@ -42,10 +45,9 @@ jobs:
           keyPassword=$ANDROID_KEY_PASSWORD
           EOF
           chmod 600 android/app/release-key.jks android/key.properties
-          echo "configured=true" >> "$GITHUB_OUTPUT"
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'zulu'
           java-version: '17'
@@ -60,27 +62,25 @@ jobs:
       - name: Get Dependencies
         run: flutter pub get
 
-      - name: Build Android Main APKs
+      - name: Build signed arm64 APK
         run: |
           set -euo pipefail
           mkdir -p dist
-          flutter build apk --release
-          mv build/app/outputs/flutter-apk/app-release.apk dist/Hiraukan-main-android-universal-test.apk
-          flutter build apk --release --split-per-abi
-          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk dist/Hiraukan-main-android-arm64-v8a-test.apk
+          flutter build apk --release --target-platform android-arm64 --split-per-abi
+          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+             dist/Hiraukan-main-update-arm64-v8a.apk
 
-      - name: Verify Android Main Package Compatibility
+      - name: Verify Android Main Update Compatibility
         env:
-          SIGNING_CONFIGURED: ${{ steps.android_signing.outputs.configured }}
-          EXPECTED_CERT_SHA256: b49fcc1a879b7dab15f223f7431dfbee447dbe268d1578fc549340c430ddc87f
+          EXPECTED_PACKAGE_ID: com.meteor.kikoeruflutter
+          EXPECTED_CERT_SHA256: 4e6d5e53526058b226d05d075ac95e08b1c795f0e16a3636765438e5d7565c05
         run: |
           set -euo pipefail
 
           build_tools_dir="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
           aapt="$build_tools_dir/aapt"
           apksigner="$build_tools_dir/apksigner"
-          universal_apk="dist/Hiraukan-main-android-universal-test.apk"
-          arm64_apk="dist/Hiraukan-main-android-arm64-v8a-test.apk"
+          apk="dist/Hiraukan-main-update-arm64-v8a.apk"
 
           for tool in "$aapt" "$apksigner"; do
             if [ ! -x "$tool" ]; then
@@ -89,53 +89,53 @@ jobs:
             fi
           done
 
-          universal_badging="$("$aapt" dump badging "$universal_apk" | sed -n '1p')"
-          arm64_badging="$("$aapt" dump badging "$arm64_apk" | sed -n '1p')"
-          universal_code="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<< "$universal_badging")"
-          arm64_code="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<< "$arm64_badging")"
+          badging="$("$aapt" dump badging "$apk")"
+          package_line="$(printf '%s\n' "$badging" | sed -n '1p')"
+          package_name="$(sed -n "s/.*package: name='\([^']*\)'.*/\1/p" <<< "$package_line")"
+          native_code="$(printf '%s\n' "$badging" | sed -n "s/^native-code: //p" | head -n 1)"
 
-          for badging in "$universal_badging" "$arm64_badging"; do
-            package_name="$(sed -n "s/.*package: name='\([^']*\)'.*/\1/p" <<< "$badging")"
-            if [ "$package_name" != "com.meteor.kikoeruflutter" ]; then
-              echo "::error::Unexpected Android package metadata: $badging"
-              exit 1
-            fi
-          done
-
-          if [ "$arm64_code" -ne $((universal_code + 2000)) ]; then
-            echo "::error::arm64 versionCode $arm64_code does not preserve the legacy split offset from $universal_code."
+          if [ "$package_name" != "$EXPECTED_PACKAGE_ID" ]; then
+            echo "::error::Unexpected package id: $package_name"
+            exit 1
+          fi
+          if ! grep -q "arm64-v8a" <<< "$native_code"; then
+            echo "::error::APK is not arm64-v8a: $native_code"
+            exit 1
+          fi
+          if grep -Eq "armeabi-v7a|x86|x86_64" <<< "$native_code"; then
+            echo "::error::APK contains an unexpected ABI: $native_code"
             exit 1
           fi
 
-          if [ "$SIGNING_CONFIGURED" = "true" ]; then
-            for apk in "$universal_apk" "$arm64_apk"; do
-              cert_output="$("$apksigner" verify --print-certs "$apk" 2>&1)"
-              actual_cert="$(
-                printf '%s\n' "$cert_output" |
-                  sed -nE '/certificate SHA-256 digest:/I {
-                    s/.*certificate SHA-256 digest:[[:space:]]*//I
-                    p
-                    q
-                  }' |
-                  tr -d '[:space:]:' |
-                  tr '[:upper:]' '[:lower:]'
-              )"
-              if [ -z "$actual_cert" ]; then
-                echo "::error::Unable to read the Android signing certificate for $apk."
-                printf '%s\n' "$cert_output" >&2
-                exit 1
-              fi
-              if [ "$actual_cert" != "$EXPECTED_CERT_SHA256" ]; then
-                echo "::error::Unexpected Android signing certificate for $apk: $actual_cert"
-                exit 1
-              fi
-            done
+          cert_output="$("$apksigner" verify --print-certs "$apk" 2>&1)"
+          actual_cert="$(
+            printf '%s\n' "$cert_output" |
+              sed -nE '/certificate SHA-256 digest:/I {
+                s/.*certificate SHA-256 digest:[[:space:]]*//I
+                p
+                q
+              }' |
+              tr -d '[:space:]:' |
+              tr '[:upper:]' '[:lower:]'
+          )"
+
+          if [ -z "$actual_cert" ]; then
+            echo "::error::Unable to read Android signing certificate."
+            exit 1
+          fi
+          if [ "$actual_cert" != "$EXPECTED_CERT_SHA256" ]; then
+            echo "::error::Unexpected Android signing certificate: $actual_cert"
+            exit 1
           fi
 
-      - name: Upload Android Main Artifacts
+          echo "Verified update-compatible package id and signing certificate."
+          echo "native-code=$native_code"
+          echo "certificate-sha256=$actual_cert"
+
+      - name: Upload Android Main Artifact
         uses: actions/upload-artifact@v6
         with:
-          name: Hiraukan-main-android-test
-          path: dist/*
+          name: Hiraukan-main-update-arm64-v8a
+          path: dist/Hiraukan-main-update-arm64-v8a.apk
           if-no-files-found: error
           retention-days: 7
