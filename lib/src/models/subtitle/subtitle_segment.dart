@@ -11,7 +11,7 @@ class SubtitleSegment extends Equatable {
   final Duration end;
   final String text;
 
-  const SubtitleSegment({
+  SubtitleSegment({
     required this.id,
     required this.start,
     required this.end,
