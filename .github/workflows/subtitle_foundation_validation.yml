@@ -15,10 +15,35 @@ concurrency:
 
 jobs:
   validate:
-    name: Analyze, test, and build Android APK
+    name: Analyze, test, and build signed arm64 APK
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
+      - name: Prepare Android release signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ] || \
+             [ -z "${ANDROID_KEYSTORE_PASSWORD:-}" ] || \
+             [ -z "${ANDROID_KEY_ALIAS:-}" ] || \
+             [ -z "${ANDROID_KEY_PASSWORD:-}" ]; then
+            echo "::error::Android release signing secrets are required. Refusing to publish a debug-signed APK with the production applicationId."
+            exit 1
+          fi
+
+          printf "%s" "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-key.jks
+          cat <<EOF > android/key.properties
+          storeFile=app/release-key.jks
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          EOF
+          chmod 600 android/app/release-key.jks android/key.properties
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -50,16 +75,77 @@ jobs:
             test/unified_source_playback_capability_test.dart \
             test/unified_source_service_test.dart
 
-      - name: Build release APK
-        run: flutter build apk --release
+      - name: Build signed arm64 release APK
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          flutter build apk --release --target-platform android-arm64 --split-per-abi
+          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+             dist/Hiraukan-subtitle-foundation-arm64-v8a.apk
+
+      - name: Verify update compatibility
+        env:
+          EXPECTED_PACKAGE_ID: com.meteor.kikoeruflutter
+          EXPECTED_CERT_SHA256: b49fcc1a879b7dab15f223f7431dfbee447dbe268d1578fc549340c430ddc87f
+        run: |
+          set -euo pipefail
+          build_tools_dir="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          aapt="$build_tools_dir/aapt"
+          apksigner="$build_tools_dir/apksigner"
+          apk="dist/Hiraukan-subtitle-foundation-arm64-v8a.apk"
+
+          for tool in "$aapt" "$apksigner"; do
+            if [ ! -x "$tool" ]; then
+              echo "::error::Required Android build tool not found: $tool"
+              exit 1
+            fi
+          done
+
+          badging="$("$aapt" dump badging "$apk" | sed -n '1p')"
+          package_name="$(sed -n "s/.*package: name='\([^']*\)'.*/\1/p" <<< "$badging")"
+          version_code="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<< "$badging")"
+
+          if [ "$package_name" != "$EXPECTED_PACKAGE_ID" ]; then
+            echo "::error::Unexpected applicationId: $package_name (expected $EXPECTED_PACKAGE_ID)"
+            exit 1
+          fi
+
+          cert_output="$("$apksigner" verify --print-certs "$apk" 2>&1)"
+          actual_cert="$(
+            printf '%s\n' "$cert_output" |
+              sed -nE '/certificate SHA-256 digest:/I {
+                s/.*certificate SHA-256 digest:[[:space:]]*//I
+                p
+                q
+              }' |
+              tr -d '[:space:]:' |
+              tr '[:upper:]' '[:lower:]'
+          )"
+
+          if [ -z "$actual_cert" ]; then
+            echo "::error::Unable to read APK signing certificate."
+            printf '%s\n' "$cert_output" >&2
+            exit 1
+          fi
+
+          if [ "$actual_cert" != "$EXPECTED_CERT_SHA256" ]; then
+            echo "::error::Signing certificate mismatch. Refusing to publish an APK that cannot update the existing app."
+            echo "Actual:   $actual_cert"
+            echo "Expected: $EXPECTED_CERT_SHA256"
+            exit 1
+          fi
+
+          echo "Verified applicationId: $package_name"
+          echo "Verified versionCode: $version_code"
+          echo "Verified signing certificate SHA-256: $actual_cert"
 
       - name: Record APK size
-        run: ls -lh build/app/outputs/flutter-apk/app-release.apk
+        run: ls -lh dist/Hiraukan-subtitle-foundation-arm64-v8a.apk
 
-      - name: Upload validation APK
+      - name: Upload signed arm64 APK
         uses: actions/upload-artifact@v6
         with:
-          name: Hiraukan-subtitle-foundation-validation
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: Hiraukan-subtitle-foundation-arm64-v8a
+          path: dist/Hiraukan-subtitle-foundation-arm64-v8a.apk
           if-no-files-found: error
           retention-days: 7
