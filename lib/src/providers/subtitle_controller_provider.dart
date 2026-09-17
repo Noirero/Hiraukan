@@ -55,6 +55,10 @@ final subtitleControllerProvider =
   ref.listen(currentTrackProvider, (_, __) => syncLegacyState());
   ref.listen(lyricControllerProvider, (_, __) => syncLegacyState());
 
+  // The provider can be first read after a track/subtitle is already active.
+  // Seed it immediately instead of waiting for the next stream change.
+  syncLegacyState();
+
   return controller;
 });
 
