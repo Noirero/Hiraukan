@@ -255,12 +255,14 @@ class TranslationService {
             text,
             sourceLang: languageConfig.youdaoSourceLang(sourceLang),
             targetLang: _youdaoTargetLang(targetLocale),
+            throwOnFailure: true,
           );
         } else if (source == 'microsoft') {
           result = await _microsoftTranslator.translate(
             text,
             sourceLang: languageConfig.microsoftSourceLang(sourceLang),
             targetLang: _microsoftTargetLang(targetLocale),
+            throwOnFailure: true,
           );
         } else if (source == 'llm') {
           result = await _llmTranslator.translate(
@@ -270,6 +272,7 @@ class TranslationService {
             sourceLanguageName:
                 languageConfig.llmSourceLanguageName(sourceLang),
             targetLanguageName: languageConfig.llmTargetLanguageName(),
+            throwOnFailure: true,
           );
         } else {
           // Google 翻译
