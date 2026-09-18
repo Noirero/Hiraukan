@@ -99,6 +99,19 @@ class _AiProvider implements AiSubtitleProvider {
   }
 }
 
+class _AsyncAiProvider implements AiSubtitleProvider {
+  final Future<TimedSubtitle?> Function(SubtitleRequest request) onGenerate;
+  int calls = 0;
+
+  _AsyncAiProvider(this.onGenerate);
+
+  @override
+  Future<TimedSubtitle?> generate(SubtitleRequest request) async {
+    calls++;
+    return onGenerate(request);
+  }
+}
+
 class _TranslationProvider implements TranslationProvider {
   final Future<TimedSubtitle> Function(
     TimedSubtitle subtitle,
@@ -450,4 +463,84 @@ void main() {
     expect(first.stableKey, isNot(second.stableKey));
     expect(first.storageKey, isNot(second.storageKey));
   });
+  test('source-original CC stays unavailable when subtitle comes from AI',
+      () async {
+    final controller = SubtitleController(
+      sourceProvider: _SourceProvider((_) async => null),
+      cachedProvider: _OriginalCache(),
+      aiProvider: _AiProvider(_subtitle(generatedBy: 'ai')),
+      translationCache: _MemoryTranslationCache(),
+    );
+
+    await controller.resolve(SubtitleRequest.forTrack(_track()));
+
+    expect(controller.state.resolvedFrom, SubtitleResolvedFrom.ai);
+    final sourceOriginal = controller.state.ccOptions.firstWhere(
+      (item) => item.option == SubtitleCcOption.sourceOriginal,
+    );
+    final automaticOriginal = controller.state.ccOptions.firstWhere(
+      (item) => item.option == SubtitleCcOption.automaticOriginal,
+    );
+    expect(sourceOriginal.available, isFalse);
+    expect(sourceOriginal.label, 'Subtitle Asli — Tidak tersedia');
+    expect(automaticOriginal.available, isTrue);
+    controller.dispose();
+  });
+
+  test('AI subtitle generation is exposed as nonblocking CC busy state',
+      () async {
+    final completer = Completer<TimedSubtitle?>();
+    final ai = _AsyncAiProvider((_) => completer.future);
+    final controller = SubtitleController(
+      sourceProvider: _SourceProvider((_) async => null),
+      cachedProvider: _OriginalCache(),
+      aiProvider: ai,
+      translationCache: _MemoryTranslationCache(),
+    );
+
+    final pending = controller.resolve(SubtitleRequest.forTrack(_track()));
+    await pumpEventQueue();
+
+    expect(ai.calls, 1);
+    expect(controller.state.status, SubtitleResolutionStatus.loading);
+    final automaticOriginal = controller.state.ccOptions.firstWhere(
+      (item) => item.option == SubtitleCcOption.automaticOriginal,
+    );
+    expect(automaticOriginal.available, isTrue);
+    expect(automaticOriginal.busy, isTrue);
+    expect(automaticOriginal.statusText, 'Membuat subtitle…');
+
+    completer.complete(_subtitle(generatedBy: 'ai'));
+    await pending;
+    expect(controller.state.status, SubtitleResolutionStatus.ready);
+    controller.dispose();
+  });
+
+  test('native Indonesian subtitle does not require a translation provider',
+      () async {
+    final original = _subtitle(language: 'id', text: 'halo');
+    final controller = SubtitleController(
+      sourceProvider: _SourceProvider((_) async => original),
+      cachedProvider: _OriginalCache(),
+      translationCache: _MemoryTranslationCache(),
+    );
+
+    await controller.resolve(SubtitleRequest.forTrack(_track()));
+    await controller.setDisplayMode(
+      SubtitleDisplayMode.translated,
+      targetLanguage: 'id',
+    );
+
+    expect(controller.state.translationSupported, isFalse);
+    expect(controller.state.translatedSubtitle, same(original));
+    expect(controller.state.translationStatus, SubtitleTranslationStatus.ready);
+    expect(controller.state.translationError, isNull);
+    final indonesiaOption = controller.state.ccOptions.firstWhere(
+      (item) => item.option == SubtitleCcOption.automaticIndonesian,
+    );
+    expect(indonesiaOption.available, isTrue);
+    expect(indonesiaOption.selected, isTrue);
+    controller.dispose();
+  });
+
 }
