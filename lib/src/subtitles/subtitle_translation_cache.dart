@@ -28,9 +28,18 @@ class SubtitleTranslationCacheKey extends Equatable {
     required TimedSubtitle subtitle,
     required String targetLanguage,
   }) {
+    final identitySource = identity.source.trim();
+    final identityWorkId = _firstNonEmpty(<String?>[
+      identity.canonicalWorkId,
+      identity.sourceWorkId,
+    ]);
+
     return SubtitleTranslationCacheKey(
-      source: _clean(identity.source, fallback: subtitle.source),
-      workId: _clean(identity.effectiveWorkId, fallback: subtitle.workId),
+      source: _clean(
+        identitySource == 'legacy' ? '' : identitySource,
+        fallback: subtitle.source,
+      ),
+      workId: _clean(identityWorkId ?? '', fallback: subtitle.workId),
       trackId: _clean(identity.trackId, fallback: subtitle.trackId),
       sourceLanguage: normalizeLanguage(subtitle.language),
       targetLanguage: normalizeLanguage(targetLanguage),
@@ -72,6 +81,14 @@ class SubtitleTranslationCacheKey extends Equatable {
         ..write(segment.text);
     }
     return _fnv1a32(buffer.toString());
+  }
+
+  static String? _firstNonEmpty(List<String?> values) {
+    for (final value in values) {
+      final cleaned = value?.trim();
+      if (cleaned != null && cleaned.isNotEmpty) return cleaned;
+    }
+    return null;
   }
 
   static String _clean(String value, {required String fallback}) {
