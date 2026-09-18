@@ -13,14 +13,10 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 
-/**
- * 悬浮字幕插件
- * 负责管理悬浮窗的显示、隐藏和更新
- */
 class FloatingLyricPlugin private constructor(private val context: Context) : MethodCallHandler {
     companion object {
         const val CHANNEL = "com.kikoeru.flutter/floating_lyric"
-        
+
         @Volatile
         private var instance: FloatingLyricPlugin? = null
 
@@ -47,33 +43,17 @@ class FloatingLyricPlugin private constructor(private val context: Context) : Me
 
     override fun onMethodCall(call: MethodCall, result: Result) {
         when (call.method) {
-            "show" -> {
-                val text = call.argument<String>("text") ?: "♪ - ♪"
-                show(text, result)
-            }
-            "hide" -> {
-                hide(result)
-            }
-            "updateText" -> {
-                val text = call.argument<String>("text") ?: ""
-                updateText(text, result)
-            }
-            "hasPermission" -> {
-                result.success(hasPermission())
-            }
-            "requestPermission" -> {
-                requestPermission(result)
-            }
-            "updateStyle" -> {
-                updateStyle(call, result)
-            }
+            "show" -> show(call.argument<String>("text") ?: "♪ - ♪", result)
+            "hide" -> hide(result)
+            "updateText" -> updateText(call.argument<String>("text") ?: "", result)
+            "hasPermission" -> result.success(hasPermission())
+            "requestPermission" -> requestPermission(result)
+            "updateStyle" -> updateStyle(call, result)
             "setTouchEnabled" -> {
                 val enabled = call.argument<Boolean>("enabled") ?: true
                 setTouchEnabled(enabled, result)
             }
-            else -> {
-                result.notImplemented()
-            }
+            else -> result.notImplemented()
         }
     }
 
@@ -85,13 +65,11 @@ class FloatingLyricPlugin private constructor(private val context: Context) : Me
 
         try {
             if (isShowing) {
-                // 如果已经显示，只更新文本
                 floatingView?.updateText(text)
                 result.success(true)
                 return
             }
 
-            // 配置窗口参数
             val params = WindowManager.LayoutParams().apply {
                 width = WindowManager.LayoutParams.WRAP_CONTENT
                 height = WindowManager.LayoutParams.WRAP_CONTENT
@@ -101,28 +79,27 @@ class FloatingLyricPlugin private constructor(private val context: Context) : Me
                     @Suppress("DEPRECATION")
                     WindowManager.LayoutParams.TYPE_PHONE
                 }
-                // 设置触摸模式
                 flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                        WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
                 format = PixelFormat.TRANSLUCENT
                 gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-                x = 0 // 水平居中
-                y = 100 // 距离顶部的距离
+                x = 0
+                y = 100
             }
 
-            // 创建悬浮窗视图（传入 windowManager 和 params 以支持拖动）
             floatingView = FloatingLyricView(
                 context,
                 windowManager!!,
                 params,
-                touchEnabled
-            ) { enabled ->
-                handleTouchEnabledChanged(enabled)
-            }
+                touchEnabled,
+                { enabled -> handleTouchEnabledChanged(enabled) },
+                {
+                    hide(null)
+                    channel?.invokeMethod("onClose", null)
+                }
+            )
             floatingView?.updateText(text)
-
-            // 添加到窗口
             windowManager?.addView(floatingView as android.view.View, params)
             isShowing = true
             result.success(true)
@@ -131,16 +108,16 @@ class FloatingLyricPlugin private constructor(private val context: Context) : Me
         }
     }
 
-    private fun hide(result: Result) {
+    private fun hide(result: Result?) {
         try {
             if (isShowing && floatingView != null) {
                 windowManager?.removeView(floatingView as android.view.View)
                 floatingView = null
                 isShowing = false
             }
-            result.success(true)
+            result?.success(true)
         } catch (e: Exception) {
-            result.error("HIDE_FAILED", "隐藏悬浮窗失败: ${e.message}", null)
+            result?.error("HIDE_FAILED", "隐藏悬浮窗失败: ${e.message}", null)
         }
     }
 
@@ -157,30 +134,27 @@ class FloatingLyricPlugin private constructor(private val context: Context) : Me
         }
     }
 
-    private fun hasPermission(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+    private fun hasPermission(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             Settings.canDrawOverlays(context)
         } else {
             true
         }
-    }
 
     private fun requestPermission(result: Result) {
         if (hasPermission()) {
             result.success(true)
             return
         }
-
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val intent = Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:${context.packageName}")
-                ).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                }
-                context.startActivity(intent)
-                result.success(false) // 返回 false 表示需要用户手动授权
+                context.startActivity(
+                    Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:${context.packageName}")
+                    ).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK }
+                )
+                result.success(false)
             } else {
                 result.success(true)
             }
@@ -191,21 +165,20 @@ class FloatingLyricPlugin private constructor(private val context: Context) : Me
 
     private fun updateStyle(call: MethodCall, result: Result) {
         try {
-            val fontSize = call.argument<Double>("fontSize")
-            // Dart int is 64-bit, so it might be passed as Long
-            val textColor = call.argument<Number>("textColor")?.toInt()
-            val backgroundColor = call.argument<Number>("backgroundColor")?.toInt()
-            val cornerRadius = call.argument<Double>("cornerRadius")
-            val paddingHorizontal = call.argument<Double>("paddingHorizontal")
-            val paddingVertical = call.argument<Double>("paddingVertical")
-
             floatingView?.updateStyle(
-                fontSize?.toFloat(),
-                textColor,
-                backgroundColor,
-                cornerRadius?.toFloat(),
-                paddingHorizontal?.toFloat(),
-                paddingVertical?.toFloat()
+                call.argument<Double>("fontSize")?.toFloat(),
+                call.argument<Number>("textColor")?.toInt(),
+                call.argument<Number>("backgroundColor")?.toInt(),
+                call.argument<Double>("cornerRadius")?.toFloat(),
+                call.argument<Double>("paddingHorizontal")?.toFloat(),
+                call.argument<Double>("paddingVertical")?.toFloat(),
+                call.argument<String>("fontFamily"),
+                call.argument<Number>("fontWeight")?.toInt(),
+                call.argument<Boolean>("shadowEnabled"),
+                call.argument<Double>("shadowBlur")?.toFloat(),
+                call.argument<Number>("shadowColor")?.toInt(),
+                call.argument<Number>("transparencyMode")?.toInt(),
+                call.argument<Boolean>("showCloseButton")
             )
             result.success(true)
         } catch (e: Exception) {
@@ -228,16 +201,11 @@ class FloatingLyricPlugin private constructor(private val context: Context) : Me
         channel?.invokeMethod("onTouchEnabledChanged", mapOf("enabled" to enabled))
     }
 
-    /**
-     * 清理资源
-     */
     fun cleanup() {
         if (isShowing) {
             try {
                 windowManager?.removeView(floatingView as android.view.View)
-            } catch (e: Exception) {
-                // 忽略错误
-            }
+            } catch (_: Exception) {}
             floatingView = null
             isShowing = false
         }

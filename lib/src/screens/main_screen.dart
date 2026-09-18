@@ -99,12 +99,14 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   @override
   Widget build(BuildContext context) {
     final isLandscape =
-        MediaQuery.of(context).orientation == Orientation.landscape;
+        MediaQuery.orientationOf(context) == Orientation.landscape;
     final showUpdateBadge = ref.watch(showUpdateRedDotProvider);
     final useLiquidGlass = ref.watch(liquidGlassNavigationProvider);
     final destinations = _buildDestinations(context, showUpdateBadge);
 
     if (isLandscape) {
+      final mediaSize = MediaQuery.sizeOf(context);
+      final mediaPadding = MediaQuery.paddingOf(context);
       // 横屏布局：使用 NavigationRail
       final landscapeScaffold = Scaffold(
         body: Stack(
@@ -117,9 +119,9 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                   child: SingleChildScrollView(
                     child: ConstrainedBox(
                       constraints: BoxConstraints(
-                        minHeight: MediaQuery.of(context).size.height -
-                            MediaQuery.of(context).padding.top -
-                            MediaQuery.of(context).padding.bottom,
+                        minHeight: mediaSize.height -
+                            mediaPadding.top -
+                            mediaPadding.bottom,
                       ),
                       child: IntrinsicHeight(
                         child: Padding(
@@ -235,7 +237,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                     return const SizedBox.shrink();
                   }
 
-                  final topPadding = MediaQuery.of(context).padding.top;
+                  final topPadding = MediaQuery.paddingOf(context).top;
 
                   return Container(
                     width: double.infinity,
@@ -379,7 +381,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                   return const SizedBox.shrink();
                 }
 
-                final topPadding = MediaQuery.of(context).padding.top;
+                final topPadding = MediaQuery.paddingOf(context).top;
 
                 return Container(
                   width: double.infinity,
