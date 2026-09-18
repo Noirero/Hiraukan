@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:whisper_ggml_plus/whisper_ggml_plus.dart';
