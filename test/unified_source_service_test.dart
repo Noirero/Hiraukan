@@ -9,6 +9,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 class _FakeAdapter implements UnifiedSourceAdapter {
   @override
   final UnifiedSourceKind kind;
+
+  @override
+  SourceCapabilities get capabilities => kind.capabilities;
   final List<SourceWorkCandidate> candidates;
   final List<dynamic> tracks;
   final bool failSearch;

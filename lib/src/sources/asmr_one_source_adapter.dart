@@ -13,6 +13,9 @@ class AsmrOneSourceAdapter implements UnifiedSourceAdapter {
   UnifiedSourceKind get kind => UnifiedSourceKind.asmrOne;
 
   @override
+  SourceCapabilities get capabilities => kind.capabilities;
+
+  @override
   Future<SourceSearchPage> search({
     required String keyword,
     required int page,

@@ -22,6 +22,9 @@ class HentaiAsmrSourceAdapter implements UnifiedSourceAdapter {
   UnifiedSourceKind get kind => UnifiedSourceKind.hentaiAsmr;
 
   @override
+  SourceCapabilities get capabilities => kind.capabilities;
+
+  @override
   Future<SourceSearchPage> search({
     required String keyword,
     required int page,

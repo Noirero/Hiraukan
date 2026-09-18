@@ -9,6 +9,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 class _CandidateAdapter implements UnifiedSourceAdapter {
   @override
   final UnifiedSourceKind kind;
+
+  @override
+  SourceCapabilities get capabilities => kind.capabilities;
   final SourceWorkCandidate candidate;
 
   _CandidateAdapter(this.kind, this.candidate);
