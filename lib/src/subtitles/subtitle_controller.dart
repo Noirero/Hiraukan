@@ -73,6 +73,13 @@ class SubtitleControllerState extends Equatable {
     final translationFailure =
         translationStatus == SubtitleTranslationStatus.unavailable;
     final creatingSubtitle = status == SubtitleResolutionStatus.loading;
+    final originalIsIndonesian = hasOriginal &&
+        SubtitleTranslationCacheKey.normalizeLanguage(
+              originalSubtitle!.language,
+            ) ==
+            SubtitleTranslationTarget.indonesian;
+    final indonesianAvailable =
+        hasOriginal && (translationSupported || originalIsIndonesian);
 
     return <SubtitleCcOptionState>[
       SubtitleCcOptionState(
@@ -102,8 +109,10 @@ class SubtitleControllerState extends Equatable {
       SubtitleCcOptionState(
         option: SubtitleCcOption.automaticIndonesian,
         label: 'Otomatis — Bahasa Indonesia',
-        available: hasOriginal && translationSupported,
-        selected: displayMode == SubtitleDisplayMode.translated,
+        available: indonesianAvailable,
+        selected: displayMode == SubtitleDisplayMode.translated &&
+            SubtitleTranslationCacheKey.normalizeLanguage(targetLanguage) ==
+                SubtitleTranslationTarget.indonesian,
         busy: translationBusy,
         statusText: translationBusy
             ? 'Menerjemahkan…'
@@ -405,17 +414,7 @@ class SubtitleController {
     if (!_isCurrent(generation)) return;
     final request = _currentRequest;
     final original = _state.originalSubtitle;
-    final provider = translationProvider;
     if (request == null || original == null) return;
-
-    if (provider == null) {
-      _publishTranslationUnavailable(
-        StateError('Translation provider is not configured.'),
-        generation,
-        ++_translationGeneration,
-      );
-      return;
-    }
 
     final targetLanguage = SubtitleTranslationCacheKey.normalizeLanguage(
       _state.targetLanguage,
@@ -443,6 +442,16 @@ class SubtitleController {
     if (sourceLanguage == targetLanguage) {
       _publishTranslation(
         original,
+        generation,
+        translationGeneration,
+      );
+      return;
+    }
+
+    final provider = translationProvider;
+    if (provider == null) {
+      _publishTranslationUnavailable(
+        StateError('Translation provider is not configured.'),
         generation,
         translationGeneration,
       );
