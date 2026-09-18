@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kikoeru_flutter/src/providers/settings_provider.dart';
 import 'package:kikoeru_flutter/src/services/translation_service.dart';
+import 'package:kikoeru_flutter/src/services/llm_translator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> _pumpAsyncPreferenceLoad() async {
@@ -227,4 +228,63 @@ void main() {
     expect(prompt, isNot(contains('Portuguese (Brazil)')));
     expect(prompt, contains('into English'));
   });
+  test('Indonesian translation target loads and persists in preferences',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      TranslationLanguagePreferencesNotifier.keyTargetLanguage:
+          TranslationTargetLanguage.indonesian.value,
+    });
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    await _pumpAsyncPreferenceLoad();
+
+    var preferences = container.read(translationLanguagePreferencesProvider);
+    expect(
+      preferences.targetLanguage,
+      TranslationTargetLanguage.indonesian,
+    );
+
+    final notifier =
+        container.read(translationLanguagePreferencesProvider.notifier);
+    await notifier.updateTargetLanguage(TranslationTargetLanguage.english);
+    await notifier.updateTargetLanguage(TranslationTargetLanguage.indonesian);
+
+    preferences = container.read(translationLanguagePreferencesProvider);
+    final prefs = await SharedPreferences.getInstance();
+    expect(
+      preferences.targetLanguage,
+      TranslationTargetLanguage.indonesian,
+    );
+    expect(
+      prefs.getString(TranslationLanguagePreferencesNotifier.keyTargetLanguage),
+      'id',
+    );
+  });
+
+  test('LLM strict failure surfaces missing API key for provider fallback',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+
+    await expectLater(
+      LLMTranslator().translate(
+        'こんにちは',
+        targetLanguageName: 'Indonesian',
+        throwOnFailure: true,
+      ),
+      throwsA(isA<StateError>()),
+    );
+  });
+
+  test('LLM non-strict mode keeps legacy missing-key behavior', () async {
+    SharedPreferences.setMockInitialValues({});
+
+    final result = await LLMTranslator().translate(
+      'こんにちは',
+      targetLanguageName: 'Indonesian',
+    );
+
+    expect(result, startsWith('Error: API Key is missing.'));
+  });
+
 }
