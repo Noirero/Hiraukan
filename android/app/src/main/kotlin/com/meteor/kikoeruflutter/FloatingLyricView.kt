@@ -16,27 +16,29 @@ import android.widget.ImageView
 import android.widget.TextView
 
 /**
- * 悬浮字幕视图
- * 美观、简洁、现代化的设计，支持拖动
+ * Hiraukan floating lyric view.
+ * Keeps the existing drag/touch-lock behavior while adding the useful style
+ * options from newer KikoFlu builds.
  */
 class FloatingLyricView(
     context: Context,
     private val windowManager: WindowManager,
     private val layoutParams: WindowManager.LayoutParams,
     initialTouchEnabled: Boolean,
-    private val onTouchEnabledChanged: (Boolean) -> Unit
+    private val onTouchEnabledChanged: (Boolean) -> Unit,
+    private val onClose: () -> Unit
 ) : FrameLayout(context) {
     private val textView: TextView
     private val lockIndicator: ImageView
-    
-    // 触摸事件相关变量
+    private val closeIndicator: ImageView
+
     private var initialX: Int = 0
     private var initialY: Int = 0
     private var initialTouchX: Float = 0f
     private var initialTouchY: Float = 0f
     private var isDragging = false
     private var longPressTriggered = false
-    private val dragThreshold = 10f // 拖动阈值，避免点击误触发
+    private val dragThreshold = 10f
     private val longPressTimeout = ViewConfiguration.getLongPressTimeout().toLong()
 
     private val longPressRunnable = Runnable {
@@ -46,63 +48,67 @@ class FloatingLyricView(
         onTouchEnabledChanged(touchEnabled)
     }
 
-    // 是否允许触摸交互（拖动等）
     var touchEnabled: Boolean = initialTouchEnabled
         set(value) {
             field = value
             updateLockIndicator()
         }
 
-    // 当前样式状态
     private var currentBackgroundColor: Int = Color.parseColor("#F2000000")
     private var currentCornerRadius: Float = 16f
+    private var transparencyMode: Int = 0
+    private var configuredPaddingHorizontal: Float = 20f
+    private var configuredPaddingVertical: Float = 10f
 
     init {
-        // 使用 GradientDrawable 创建圆角背景
         updateBackground()
         clipChildren = false
         clipToPadding = false
-        
-        setPadding(
-            dpToPx(20f).toInt(),
-            dpToPx(10f).toInt(),
-            dpToPx(20f).toInt(),
-            dpToPx(10f).toInt()
-        )
-        elevation = dpToPx(12f) // 增加阴影深度
+        updatePadding()
+        elevation = dpToPx(12f)
 
-        // 创建文本视图
         textView = TextView(context).apply {
             textSize = 16f
             setTextColor(Color.WHITE)
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL) // 使用常规字重
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
             gravity = Gravity.CENTER
-            // 不添加文本阴影，保持简洁
             maxLines = 6
             ellipsize = android.text.TextUtils.TruncateAt.END
-            letterSpacing = 0.02f // 增加字间距，更易阅读
+            letterSpacing = 0.02f
         }
-
-        addView(textView, LayoutParams(
-            LayoutParams.WRAP_CONTENT,
-            LayoutParams.WRAP_CONTENT
-        ))
+        addView(
+            textView,
+            LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT)
+        )
 
         lockIndicator = ImageView(context).apply {
             setImageResource(android.R.drawable.ic_lock_lock)
             setColorFilter(Color.WHITE)
             alpha = 0.7f
         }
+        addView(
+            lockIndicator,
+            LayoutParams(dpToPx(10f).toInt(), dpToPx(10f).toInt(), Gravity.END or Gravity.TOP).apply {
+                topMargin = -dpToPx(8f).toInt()
+                rightMargin = -dpToPx(16f).toInt()
+            }
+        )
 
-        // 将图标放在 padding 区域（右上角边框空白处），使用负 margin 突破内容区
-        addView(lockIndicator, LayoutParams(
-            dpToPx(10f).toInt(),
-            dpToPx(10f).toInt(),
-            Gravity.END or Gravity.TOP
-        ).apply {
-            topMargin = -dpToPx(8f).toInt()
-            rightMargin = -dpToPx(16f).toInt()
-        })
+        closeIndicator = ImageView(context).apply {
+            setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
+            setColorFilter(Color.WHITE)
+            alpha = 0.85f
+            visibility = View.GONE
+            isClickable = true
+            setOnClickListener {
+                performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                onClose()
+            }
+        }
+        addView(
+            closeIndicator,
+            LayoutParams(dpToPx(22f).toInt(), dpToPx(22f).toInt(), Gravity.END or Gravity.CENTER_VERTICAL)
+        )
 
         updateLockIndicator()
     }
@@ -110,7 +116,6 @@ class FloatingLyricView(
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
-                // 记录初始位置
                 initialX = layoutParams.x
                 initialY = layoutParams.y
                 initialTouchX = event.rawX
@@ -121,40 +126,26 @@ class FloatingLyricView(
                 postDelayed(longPressRunnable, longPressTimeout)
                 return true
             }
-            
             MotionEvent.ACTION_MOVE -> {
-                // 计算移动距离
                 val dx = event.rawX - initialTouchX
                 val dy = event.rawY - initialTouchY
-                
-                // 判断是否超过拖动阈值
-                if (!isDragging && (Math.abs(dx) > dragThreshold || Math.abs(dy) > dragThreshold)) {
+                if (!isDragging &&
+                    (kotlin.math.abs(dx) > dragThreshold || kotlin.math.abs(dy) > dragThreshold)) {
                     removeCallbacks(longPressRunnable)
-                    if (touchEnabled) {
-                        isDragging = true
-                    }
+                    if (touchEnabled) isDragging = true
                 }
-                
                 if (isDragging && touchEnabled) {
-                    // 更新悬浮窗位置
                     layoutParams.x = initialX + dx.toInt()
                     layoutParams.y = initialY + dy.toInt()
-                    
                     try {
                         windowManager.updateViewLayout(this, layoutParams)
-                    } catch (e: Exception) {
-                        // 忽略更新失败
-                    }
+                    } catch (_: Exception) {}
                 }
                 return true
             }
-            
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 removeCallbacks(longPressRunnable)
-                if (!isDragging && !longPressTriggered) {
-                    // 如果没有拖动，可以在这里处理点击事件
-                    performClick()
-                }
+                if (!isDragging && !longPressTriggered) performClick()
                 return true
             }
         }
@@ -163,7 +154,6 @@ class FloatingLyricView(
 
     override fun performClick(): Boolean {
         super.performClick()
-        // 可以在这里添加点击事件处理
         return true
     }
 
@@ -171,71 +161,87 @@ class FloatingLyricView(
         lockIndicator.visibility = if (touchEnabled) View.GONE else View.VISIBLE
     }
 
-    /**
-     * 更新显示的文本
-     */
     fun updateText(text: String) {
         textView.text = text
     }
 
-    /**
-     * 更新背景
-     */
     private fun updateBackground() {
-        val drawable = GradientDrawable().apply {
-            setColor(currentBackgroundColor)
+        val color = if (transparencyMode == 1) Color.TRANSPARENT else currentBackgroundColor
+        background = GradientDrawable().apply {
+            setColor(color)
             cornerRadius = dpToPx(currentCornerRadius)
         }
-        background = drawable
+        elevation = if (transparencyMode == 1) 0f else dpToPx(12f)
     }
 
-    /**
-     * 更新样式
-     */
+    private fun updatePadding() {
+        val horizontal = if (transparencyMode == 2) configuredPaddingHorizontal + 8f else configuredPaddingHorizontal
+        val vertical = if (transparencyMode == 2) configuredPaddingVertical + 4f else configuredPaddingVertical
+        setPadding(
+            dpToPx(horizontal).toInt(),
+            dpToPx(vertical).toInt(),
+            dpToPx(horizontal).toInt(),
+            dpToPx(vertical).toInt()
+        )
+    }
+
+    @Suppress("LongParameterList")
     fun updateStyle(
         fontSize: Float?,
         textColor: Int?,
         backgroundColor: Int?,
         cornerRadius: Float?,
         paddingHorizontal: Float?,
-        paddingVertical: Float?
+        paddingVertical: Float?,
+        fontFamily: String? = null,
+        fontWeight: Int? = null,
+        shadowEnabled: Boolean? = null,
+        shadowBlur: Float? = null,
+        shadowColor: Int? = null,
+        transparencyMode: Int? = null,
+        showCloseButton: Boolean? = null
     ) {
-        fontSize?.let {
-            textView.textSize = it
+        fontSize?.let { textView.textSize = it }
+        textColor?.let { textView.setTextColor(it) }
+        fontFamily?.let { family ->
+            val style = if ((fontWeight ?: 3) >= 5) Typeface.BOLD else Typeface.NORMAL
+            textView.typeface = Typeface.create(
+                if (family.isBlank()) Typeface.DEFAULT else Typeface.create(family, style),
+                style
+            )
         }
-        textColor?.let {
-            textView.setTextColor(it)
-        }
-        
-        var backgroundChanged = false
-        backgroundColor?.let {
-            currentBackgroundColor = it
-            backgroundChanged = true
-        }
-        cornerRadius?.let {
-            currentCornerRadius = it
-            backgroundChanged = true
-        }
-        
-        if (backgroundChanged) {
-            updateBackground()
+        if (fontFamily == null && fontWeight != null) {
+            textView.setTypeface(textView.typeface, if (fontWeight >= 5) Typeface.BOLD else Typeface.NORMAL)
         }
 
-        if (paddingHorizontal != null || paddingVertical != null) {
-            val pH = paddingHorizontal?.let { dpToPx(it).toInt() } ?: paddingLeft
-            val pV = paddingVertical?.let { dpToPx(it).toInt() } ?: paddingTop
-            setPadding(pH, pV, pH, pV)
+        val useShadow = shadowEnabled ?: false
+        if (useShadow) {
+            textView.setShadowLayer(
+                dpToPx(shadowBlur ?: 3f),
+                0f,
+                dpToPx(1f),
+                shadowColor ?: Color.argb(204, 0, 0, 0)
+            )
+        } else {
+            textView.setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT)
         }
+
+        backgroundColor?.let { currentBackgroundColor = it }
+        cornerRadius?.let { currentCornerRadius = it }
+        paddingHorizontal?.let { configuredPaddingHorizontal = it }
+        paddingVertical?.let { configuredPaddingVertical = it }
+        transparencyMode?.let { this.transparencyMode = it.coerceIn(0, 2) }
+        showCloseButton?.let {
+            closeIndicator.visibility = if (it) View.VISIBLE else View.GONE
+        }
+
+        updateBackground()
+        updatePadding()
     }
 
-    /**
-     * dp 转 px
-     */
-    private fun dpToPx(dp: Float): Float {
-        return TypedValue.applyDimension(
-            TypedValue.COMPLEX_UNIT_DIP,
-            dp,
-            resources.displayMetrics
-        )
-    }
+    private fun dpToPx(dp: Float): Float = TypedValue.applyDimension(
+        TypedValue.COMPLEX_UNIT_DIP,
+        dp,
+        resources.displayMetrics
+    )
 }
