@@ -38,5 +38,16 @@ jobs:
             test/translation_target_language_test.dart \
             test/translation_language_preferences_test.dart
 
-      - name: Analyze
-        run: flutter analyze
+      - name: Analyze translation changes
+        run: |
+          flutter analyze --no-pub lib/src/subtitles
+          flutter analyze --no-pub lib/src/services/translation_service.dart
+          flutter analyze --no-pub lib/src/services/youdao_translator.dart
+          flutter analyze --no-pub lib/src/services/microsoft_translator.dart
+          flutter analyze --no-pub lib/src/services/llm_translator.dart
+          flutter analyze --no-pub lib/src/providers/settings_provider.dart
+          flutter analyze --no-pub lib/src/utils/l10n_extensions.dart
+          flutter analyze --no-pub test/subtitle_translation_test.dart
+          flutter analyze --no-pub test/translation_service_provider_test.dart
+          flutter analyze --no-pub test/translation_target_language_test.dart
+          flutter analyze --no-pub test/translation_language_preferences_test.dart
