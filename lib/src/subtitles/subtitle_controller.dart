@@ -328,9 +328,11 @@ class SubtitleController {
       targetLanguage ?? _state.targetLanguage,
     );
     final targetChanged = normalizedTarget != _state.targetLanguage;
-    final modeChanged = mode != _state.displayMode;
 
-    if (targetChanged || modeChanged) {
+    // Presentation-only mode changes must not invalidate an in-flight
+    // translation for the same target. Only a target change makes the current
+    // translation stale.
+    if (targetChanged) {
       _translationGeneration++;
     }
 
@@ -432,6 +434,10 @@ class SubtitleController {
         );
         _emitCurrent();
       }
+      return;
+    }
+
+    if (_state.translationStatus == SubtitleTranslationStatus.translating) {
       return;
     }
 
