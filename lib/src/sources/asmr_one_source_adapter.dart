@@ -18,14 +18,23 @@ class AsmrOneSourceAdapter implements UnifiedSourceAdapter {
     required int page,
     required int pageSize,
   }) async {
-    final result = await api.searchWorks(
-      keyword: keyword,
-      page: page,
-      pageSize: pageSize,
-      order: 'create_date',
-      sort: 'desc',
-      subtitle: 0,
-    );
+    final trimmedKeyword = keyword.trim();
+    final result = trimmedKeyword.isEmpty
+        ? await api.getWorks(
+            page: page,
+            pageSize: pageSize,
+            order: 'create_date',
+            sort: 'desc',
+            subtitle: 0,
+          )
+        : await api.searchWorks(
+            keyword: trimmedKeyword,
+            page: page,
+            pageSize: pageSize,
+            order: 'create_date',
+            sort: 'desc',
+            subtitle: 0,
+          );
 
     final rawWorks = (result['works'] as List?) ?? const [];
     final items = <SourceWorkCandidate>[];
@@ -56,7 +65,8 @@ class AsmrOneSourceAdapter implements UnifiedSourceAdapter {
     }
 
     final pagination = result['pagination'] as Map<String, dynamic>?;
-    final totalCount = (pagination?['totalCount'] as num?)?.toInt() ?? items.length;
+    final totalCount =
+        (pagination?['totalCount'] as num?)?.toInt() ?? items.length;
     final totalPages = totalCount <= 0 ? 1 : (totalCount / pageSize).ceil();
     return SourceSearchPage(
       items: items,
@@ -79,11 +89,6 @@ class AsmrOneSourceAdapter implements UnifiedSourceAdapter {
   @override
   Future<UnifiedSourceHealth> checkHealth() async {
     try {
-      // Probe the configured Kikoeru/ASMR.one API itself rather than merely
-      // checking whether the device has generic internet connectivity. The
-      // ordinary works endpoint is used instead of an empty search query so
-      // this health check cannot fail only because a search route rejects an
-      // empty keyword.
       await api.getWorks(
         page: 1,
         pageSize: 1,
