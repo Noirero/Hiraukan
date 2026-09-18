@@ -32,6 +32,21 @@ jobs:
 
           if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] && \
              [ -n "${ANDROID_KEYSTORE_PASSWORD:-}" ] && \
+             [ -n "${ANDROID_KEY_ALIAS:-}" ]; then
+            printf "%s" "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-key.jks
+            cert_output="$(keytool -list -v \
+              -keystore android/app/release-key.jks \
+              -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+              -alias "$ANDROID_KEY_ALIAS" 2>&1 || true)"
+            keystore_cert_sha256="$(printf '%s\n' "$cert_output" |
+              sed -nE '/SHA256:/I { s/.*SHA256:[[:space:]]*//I; p; q; }' |
+              tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+            echo "keystore_cert_sha256=$keystore_cert_sha256" >> "$GITHUB_OUTPUT"
+            echo "Available keystore certificate-sha256=$keystore_cert_sha256"
+          fi
+
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] && \
+             [ -n "${ANDROID_KEYSTORE_PASSWORD:-}" ] && \
              [ -n "${ANDROID_KEY_ALIAS:-}" ] && \
              [ -n "${ANDROID_KEY_PASSWORD:-}" ]; then
             printf "%s" "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-key.jks
