@@ -8,8 +8,12 @@ class YoudaoTranslator {
   static const String _url = 'https://dict.youdao.com/dicttranslate';
   static const String _key = 'cybibtzhdwayqjmrncst';
 
-  Future<String> translate(String text,
-      {String? sourceLang, String targetLang = 'zh-CHS'}) async {
+  Future<String> translate(
+    String text, {
+    String? sourceLang,
+    String targetLang = 'zh-CHS',
+    bool throwOnFailure = false,
+  }) async {
     if (text.isEmpty) return text;
 
     final timestamp = DateTime.now().millisecondsSinceEpoch.toString();
@@ -72,12 +76,17 @@ class YoudaoTranslator {
               }
             }
           }
-          return sb.toString();
+          final translated = sb.toString();
+          if (translated.isNotEmpty) return translated;
         }
+      }
+      if (throwOnFailure) {
+        throw StateError('Youdao translation returned no usable result.');
       }
       return text;
     } catch (e) {
       logOutput('Youdao translation error: $e');
+      if (throwOnFailure) rethrow;
       return text;
     }
   }
