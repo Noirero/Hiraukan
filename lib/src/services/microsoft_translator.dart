@@ -78,8 +78,12 @@ class MicrosoftTranslator {
     23
   ];
 
-  Future<String> translate(String text,
-      {String? sourceLang, String targetLang = 'zh-Hans'}) async {
+  Future<String> translate(
+    String text, {
+    String? sourceLang,
+    String targetLang = 'zh-Hans',
+    bool throwOnFailure = false,
+  }) async {
     if (text.isEmpty) return text;
 
     final from = sourceLang != null ? '&from=$sourceLang' : '';
@@ -113,14 +117,24 @@ class MicrosoftTranslator {
           if (first is Map && first['translations'] is List) {
             final translations = first['translations'] as List;
             if (translations.isNotEmpty) {
-              return translations[0]['text'] ?? text;
+              final firstTranslation = translations[0];
+              final translated = firstTranslation is Map
+                  ? firstTranslation['text']?.toString()
+                  : null;
+              if (translated != null && translated.isNotEmpty) {
+                return translated;
+              }
             }
           }
         }
       }
+      if (throwOnFailure) {
+        throw StateError('Microsoft translation returned no usable result.');
+      }
       return text;
     } catch (e) {
       logOutput('Microsoft translation error: $e');
+      if (throwOnFailure) rethrow;
       return text;
     }
   }
