@@ -240,7 +240,7 @@ class _PrivacyModeSettingsScreenState
                   icon: Icons.auto_awesome_rounded,
                   title: 'Advanced Audio & AI',
                   subtitle:
-                      'Crossfade, WAV conversion, Whisper, notifications dan Hi-Res',
+                      'WAV conversion, Whisper, notifications, dan status Hi-Res',
                   trailing: const Icon(Icons.arrow_forward_ios),
                   onTap: () {
                     Navigator.of(context).push(
