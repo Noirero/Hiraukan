@@ -99,7 +99,10 @@ class TranslationService {
 
     return _TranslationLanguageConfig(
       preferences: preferences,
-      allowCustomLanguage: selectedSource == TranslationSource.llm.value,
+      // An explicit target comes from the subtitle engine and must win over
+      // any global custom LLM target stored in preferences.
+      allowCustomLanguage: selectedSource == TranslationSource.llm.value &&
+          targetLocaleOverride == null,
       targetLocale:
           targetLocaleOverride ?? preferences.targetLanguage.resolveLocale(appLocale),
     );
