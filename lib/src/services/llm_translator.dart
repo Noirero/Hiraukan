@@ -85,7 +85,7 @@ class LLMTranslator {
       }
       if (throwOnFailure) {
         throw StateError(
-          'LLM translation failed with status \${response.statusCode}.',
+          'LLM translation failed with status ${response.statusCode}.',
         );
       }
       return text;
