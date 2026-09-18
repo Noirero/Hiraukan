@@ -33,6 +33,7 @@ class PlayerCoverWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mediaSize = MediaQuery.sizeOf(context);
     return GestureDetector(
       onTap: onTap,
       child: Center(
@@ -41,11 +42,11 @@ class PlayerCoverWidget extends StatelessWidget {
           child: ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: isLandscape
-                  ? MediaQuery.of(context).size.width * 0.35
-                  : MediaQuery.of(context).size.width - 48,
+                  ? mediaSize.width * 0.35
+                  : mediaSize.width - 48,
               maxHeight: isLandscape
-                  ? MediaQuery.of(context).size.height * 0.6
-                  : MediaQuery.of(context).size.height * 0.4,
+                  ? mediaSize.height * 0.6
+                  : mediaSize.height * 0.4,
             ),
             child: Container(
               decoration: BoxDecoration(
