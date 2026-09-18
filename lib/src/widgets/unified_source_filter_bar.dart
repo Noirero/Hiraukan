@@ -50,7 +50,7 @@ class UnifiedSourceFilterBar extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Same work is merged across sources. If one source cannot play it, KikoFlu automatically tries another available source.',
+            'Same work is merged across sources. If one source cannot play it, Hiraukan automatically tries another available source.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
