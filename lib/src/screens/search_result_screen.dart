@@ -19,6 +19,7 @@ import '../widgets/floating_feed_toolbar.dart';
 import '../utils/system_ui_style.dart';
 import '../widgets/search_condition_chip.dart';
 import '../widgets/async_state_view.dart';
+import '../widgets/unified_source_filter_bar.dart';
 
 class SearchResultScreen extends StatelessWidget {
   final String keyword;
@@ -472,6 +473,10 @@ class _SearchResultContentState extends ConsumerState<_SearchResultContent> {
             ),
           ),
         ),
+        if (_isFederatedSearch)
+          const SliverToBoxAdapter(
+            child: UnifiedSourceFilterBar(),
+          ),
       ],
     );
   }
