@@ -26,18 +26,20 @@ jobs:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
 
           if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] && \
              [ -n "${ANDROID_KEYSTORE_PASSWORD:-}" ] && \
-             [ -n "${ANDROID_KEY_ALIAS:-}" ]; then
+             [ -n "${ANDROID_KEY_ALIAS:-}" ] && \
+             [ -n "${ANDROID_KEY_PASSWORD:-}" ]; then
             printf "%s" "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-key.jks
             cat <<EOF > android/key.properties
           storeFile=app/release-key.jks
           storePassword=$ANDROID_KEYSTORE_PASSWORD
           keyAlias=$ANDROID_KEY_ALIAS
-          keyPassword=$ANDROID_KEYSTORE_PASSWORD
+          keyPassword=$ANDROID_KEY_PASSWORD
           EOF
             chmod 600 android/app/release-key.jks android/key.properties
 
@@ -100,7 +102,7 @@ jobs:
           EXPECTED_PACKAGE_ID: ${{ steps.android_mode.outputs.app_id }}
           APK_NAME: ${{ steps.android_mode.outputs.apk_name }}
           PRODUCTION_PACKAGE_ID: com.meteor.kikoeruflutter
-          EXPECTED_PRODUCTION_CERT_SHA256: 4e6d5e53526058b226d05d075ac95e08b1c795f0e16a3636765438e5d7565c05
+          EXPECTED_PRODUCTION_CERT_SHA256: b49fcc1a879b7dab15f223f7431dfbee447dbe268d1578fc549340c430ddc87f
         run: |
           set -euo pipefail
           build_tools_dir="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
