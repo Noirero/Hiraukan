@@ -26,11 +26,13 @@ jobs:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ] || \
              [ -z "${ANDROID_KEYSTORE_PASSWORD:-}" ] || \
-             [ -z "${ANDROID_KEY_ALIAS:-}" ]; then
+             [ -z "${ANDROID_KEY_ALIAS:-}" ] || \
+             [ -z "${ANDROID_KEY_PASSWORD:-}" ]; then
             echo "::error::Android release signing secrets are required for the production applicationId."
             exit 1
           fi
@@ -40,7 +42,7 @@ jobs:
           storeFile=app/release-key.jks
           storePassword=$ANDROID_KEYSTORE_PASSWORD
           keyAlias=$ANDROID_KEY_ALIAS
-          keyPassword=$ANDROID_KEYSTORE_PASSWORD
+          keyPassword=$ANDROID_KEY_PASSWORD
           EOF
           chmod 600 android/app/release-key.jks android/key.properties
 
@@ -71,7 +73,7 @@ jobs:
       - name: Verify Android Main Update Compatibility
         env:
           EXPECTED_PACKAGE_ID: com.meteor.kikoeruflutter
-          EXPECTED_CERT_SHA256: 4e6d5e53526058b226d05d075ac95e08b1c795f0e16a3636765438e5d7565c05
+          EXPECTED_CERT_SHA256: b49fcc1a879b7dab15f223f7431dfbee447dbe268d1578fc549340c430ddc87f
         run: |
           set -euo pipefail
 
