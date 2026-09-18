@@ -566,4 +566,51 @@ void main() {
     expect(key.targetLanguage, 'id');
   });
 
+  test('switching translated to bilingual reuses in-flight translation',
+      () async {
+    final original = _subtitle(text: 'ありがとう');
+    final completer = Completer<TimedSubtitle>();
+    final translation = _TranslationProvider(
+      (subtitle, target) => completer.future,
+    );
+    final controller = SubtitleController(
+      sourceProvider: _SourceProvider((_) async => original),
+      cachedProvider: _OriginalCache(),
+      translationProvider: translation,
+      translationCache: _MemoryTranslationCache(),
+    );
+
+    await controller.resolve(SubtitleRequest.forTrack(_track()));
+    final translatedMode =
+        controller.setDisplayMode(SubtitleDisplayMode.translated);
+    await pumpEventQueue();
+
+    expect(translation.calls, 1);
+    expect(
+      controller.state.translationStatus,
+      SubtitleTranslationStatus.translating,
+    );
+
+    final bilingualMode =
+        controller.setDisplayMode(SubtitleDisplayMode.bilingual);
+    await pumpEventQueue();
+
+    expect(translation.calls, 1);
+    expect(controller.state.displayMode, SubtitleDisplayMode.bilingual);
+
+    completer.complete(_translated(original, 'id', 'terima kasih'));
+    await translatedMode;
+    await bilingualMode;
+    await pumpEventQueue();
+
+    expect(translation.calls, 1);
+    expect(controller.state.translationStatus, SubtitleTranslationStatus.ready);
+    expect(controller.state.presentation.mode, SubtitleDisplayMode.bilingual);
+    expect(
+      controller.state.presentation.segments.single.translatedText,
+      'terima kasih',
+    );
+    controller.dispose();
+  });
+
 }
