@@ -237,6 +237,12 @@ void main() {
     final container = ProviderContainer();
     addTearDown(container.dispose);
 
+    // Riverpod providers are lazy. Read once to construct the notifier and
+    // start the asynchronous SharedPreferences load before pumping it.
+    expect(
+      container.read(translationLanguagePreferencesProvider).targetLanguage,
+      TranslationTargetLanguage.followApp,
+    );
     await _pumpAsyncPreferenceLoad();
 
     var preferences = container.read(translationLanguagePreferencesProvider);
