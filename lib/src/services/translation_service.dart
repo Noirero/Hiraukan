@@ -486,6 +486,12 @@ class TranslationService {
       final cached = prefs.getString(key);
       if (cached != null) {
         final data = json.decode(cached);
+        if (data is! Map) return null;
+        if (data['text'] != text ||
+            data['sourceLang'] != sourceLang ||
+            data['targetLang'] != targetLang) {
+          return null;
+        }
         // 缓存7天有效
         final timestamp = data['timestamp'] as int;
         if (DateTime.now().millisecondsSinceEpoch - timestamp <
@@ -510,6 +516,9 @@ class TranslationService {
       final prefs = await SharedPreferences.getInstance();
       final key = _getCacheKey(text, sourceLang, targetLang);
       final data = json.encode({
+        'text': text,
+        'sourceLang': sourceLang,
+        'targetLang': targetLang,
         'translation': translation,
         'timestamp': DateTime.now().millisecondsSinceEpoch,
       });
@@ -519,9 +528,23 @@ class TranslationService {
     }
   }
 
-  /// 生成缓存键（包含目标语言）
+  /// 生成稳定缓存键（包含源语言、目标语言和文本指纹）。
+  ///
+  /// String.hashCode is not a persistence contract across app runs. A
+  /// deterministic fingerprint plus payload verification makes collisions
+  /// degrade to cache misses instead of returning unrelated translations.
   String _getCacheKey(String text, String sourceLang, String targetLang) {
-    return '$_cachePrefix${sourceLang}_${targetLang}_${text.hashCode}';
+    final identity = '$sourceLang|$targetLang|$text';
+    return '${_cachePrefix}v2_${_fnv1a32(identity)}';
+  }
+
+  String _fnv1a32(String input) {
+    var hash = 0x811c9dc5;
+    for (final codeUnit in input.codeUnits) {
+      hash ^= codeUnit;
+      hash = (hash * 0x01000193) & 0xffffffff;
+    }
+    return hash.toRadixString(16).padLeft(8, '0');
   }
 
   /// 清除所有翻译缓存
