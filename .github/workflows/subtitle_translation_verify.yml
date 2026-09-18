@@ -1,0 +1,42 @@
+name: Subtitle Translation Verify
+
+on:
+  push:
+    branches:
+      - feature/subtitle-translation-id
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: subtitle-translation-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Flutter subtitle translation verification
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.7'
+          channel: 'stable'
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Run subtitle translation tests
+        run: |
+          flutter test \
+            test/subtitle_translation_test.dart \
+            test/translation_service_provider_test.dart \
+            test/translation_target_language_test.dart \
+            test/translation_language_preferences_test.dart
+
+      - name: Analyze
+        run: flutter analyze
