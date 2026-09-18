@@ -18,6 +18,14 @@ class AudioTrack extends Equatable {
   final String? sourcePath;
   final String? subtitleWorkDirPath;
 
+  /// Stable source namespace used by multi-source-aware caches.
+  /// Examples: `asmr_one`, `hentai_asmr`, `ero_voice`.
+  final String? sourceKey;
+
+  /// Source-local work identity. This is intentionally a string because not
+  /// every provider uses numeric work ids.
+  final String? sourceWorkId;
+
   const AudioTrack({
     required this.id,
     required this.title,
@@ -31,6 +39,8 @@ class AudioTrack extends Equatable {
     this.hash,
     this.sourcePath,
     this.subtitleWorkDirPath,
+    this.sourceKey,
+    this.sourceWorkId,
   });
 
   factory AudioTrack.fromJson(Map<String, dynamic> json) =>
@@ -51,6 +61,8 @@ class AudioTrack extends Equatable {
     String? hash,
     String? sourcePath,
     String? subtitleWorkDirPath,
+    String? sourceKey,
+    String? sourceWorkId,
   }) {
     return AudioTrack(
       id: id ?? this.id,
@@ -66,6 +78,8 @@ class AudioTrack extends Equatable {
       sourcePath: sourcePath ?? this.sourcePath,
       subtitleWorkDirPath:
           subtitleWorkDirPath ?? this.subtitleWorkDirPath,
+      sourceKey: sourceKey ?? this.sourceKey,
+      sourceWorkId: sourceWorkId ?? this.sourceWorkId,
     );
   }
 
@@ -83,6 +97,8 @@ class AudioTrack extends Equatable {
         hash,
         sourcePath,
         subtitleWorkDirPath,
+        sourceKey,
+        sourceWorkId,
       ];
 }
 

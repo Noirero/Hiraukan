@@ -35,6 +35,7 @@ class _UnifiedWorkDetailScreenState
   bool _loadingTracks = true;
   String? _detailError;
   String? _trackError;
+  String? _trackNotice;
 
   UnifiedWorkBundle? get _bundle => _hydratedBundle ??
       UnifiedSourceRegistry.instance.bundleFor(widget.work.id) ??
@@ -100,6 +101,8 @@ class _UnifiedWorkDetailScreenState
       setState(() {
         _loadingTracks = true;
         _trackError = null;
+        _trackNotice = null;
+        _resolved = null;
         _tracks = const [];
       });
     }
@@ -130,10 +133,27 @@ class _UnifiedWorkDetailScreenState
         _tracks = tracks;
         _loadingTracks = false;
       });
+    } on SourcePlaybackUnavailableException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadingTracks = false;
+        _resolved = null;
+        _tracks = const [];
+        if (error.unsupportedOnly) {
+          _trackNotice =
+              'Sumber yang tersedia tidak menyediakan pemutaran langsung. '
+              'Metadata dan kemampuan unduhan tetap dapat digunakan.';
+          _trackError = null;
+        } else {
+          _trackNotice = null;
+          _trackError = error.toString();
+        }
+      });
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _trackError = error.toString();
+        _trackNotice = null;
         _loadingTracks = false;
       });
     }
@@ -250,6 +270,8 @@ class _UnifiedWorkDetailScreenState
                     child: CircularProgressIndicator(),
                   ),
                 )
+              else if (_trackNotice != null)
+                _InfoCard(message: _trackNotice!)
               else if (_trackError != null)
                 _ErrorCard(
                   message: _trackError!,
@@ -341,13 +363,17 @@ class _UnifiedWorkDetailScreenState
             ...bundle.sources.map((source) {
               final health =
                   _health[source.source] ?? UnifiedSourceHealth.unknown;
+              final playback = source.source.capabilities.playback;
               return ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: CircleAvatar(
                   child: Text(source.source.label.substring(0, 1)),
                 ),
                 title: Text(source.source.label),
-                subtitle: Text(_healthLabel(health)),
+                subtitle: Text(
+                  '${_healthLabel(health)} • '
+                  '${playback ? 'Playback & download' : 'Catalog/detail/download'}',
+                ),
                 trailing: IconButton(
                   onPressed: () => _openSource(source),
                   icon: const Icon(Icons.open_in_new),
@@ -478,6 +504,31 @@ class _TrackTile extends StatelessWidget {
     final seconds =
         duration.inSeconds.remainder(60).toString().padLeft(2, '0');
     return hours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
+  }
+}
+
+class _InfoCard extends StatelessWidget {
+  final String message;
+
+  const _InfoCard({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Icon(
+              Icons.info_outline,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Text(message)),
+          ],
+        ),
+      ),
+    );
   }
 }
 

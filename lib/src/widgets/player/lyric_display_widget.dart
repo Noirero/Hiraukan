@@ -5,6 +5,7 @@ import '../../models/lyric.dart';
 import '../../providers/audio_provider.dart';
 import '../../providers/lyric_provider.dart';
 import '../../providers/player_lyric_style_provider.dart';
+import '../../providers/subtitle_controller_provider.dart';
 import '../../../l10n/app_localizations.dart';
 
 /// 小字幕显示组件（在封面下方显示当前字幕）
@@ -15,6 +16,10 @@ class LyricDisplay extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Keep the universal subtitle bridge alive while the legacy renderer is in
+    // use. Rendering still reads LyricController during the migration phase.
+    ref.watch(subtitleControllerProvider);
+
     final currentLyric = ref.watch(currentLyricTextProvider);
     final lyricState = ref.watch(lyricControllerProvider);
     final lyricSettings = ref.watch(playerLyricSettingsProvider);
@@ -234,6 +239,8 @@ class _FullLyricDisplayState extends ConsumerState<FullLyricDisplay> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(subtitleControllerProvider);
+
     final lyricState = ref.watch(lyricControllerProvider);
     final position = ref.watch(positionProvider);
     final lyricSettings = ref.watch(playerLyricSettingsProvider);
