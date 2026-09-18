@@ -28,6 +28,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
       suffix: ${{ steps.version.outputs.suffix }}
+      build_number: ${{ steps.version.outputs.build_number }}
     steps:
       - name: Normalize and validate version
         id: version
@@ -39,8 +40,21 @@ jobs:
           set -euo pipefail
 
           version="${INPUT_VERSION#v}"
-          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Version must use MAJOR.MINOR.PATCH, for example 3.8.1."
+          if [[ ! "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "::error::Version must use MAJOR.MINOR.PATCH, for example 3.8.3."
+            exit 1
+          fi
+
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+          patch="${BASH_REMATCH[3]}"
+          if (( minor > 999 || patch > 999 )); then
+            echo "::error::MINOR and PATCH must be 0-999."
+            exit 1
+          fi
+          build_number=$((major * 1000000 + minor * 1000 + patch))
+          if (( build_number <= 0 || build_number > 2100000000 )); then
+            echo "::error::Computed Android versionCode is outside the supported range."
             exit 1
           fi
 
@@ -60,7 +74,8 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "suffix=$suffix" >> "$GITHUB_OUTPUT"
-          echo "Building Android Main release $tag with filename suffix $suffix"
+          echo "build_number=$build_number" >> "$GITHUB_OUTPUT"
+          echo "Building Android Main release $tag with versionCode $build_number"
 
   android:
     name: Android Main Build
@@ -68,11 +83,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-
-      - name: Set Application Version
-        run: |
-          sed -i.bak -E 's/^version: .*/version: ${{ needs.prepare.outputs.version }}/' pubspec.yaml
-          rm pubspec.yaml.bak
 
       - name: Prepare Android Signing
         id: android_signing
@@ -82,11 +92,13 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "ANDROID_KEYSTORE_BASE64 secret missing; skipping signing setup."
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          set -euo pipefail
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::$name is required. Production releases must never fall back to debug signing."
+              exit 1
+            fi
+          done
           printf "%s" "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-key.jks
           cat <<EOF > android/key.properties
           storeFile=app/release-key.jks
@@ -118,11 +130,15 @@ jobs:
           set -euo pipefail
           mkdir -p dist
 
-          flutter build apk --release
+          flutter build apk --release \
+            --build-name="${{ needs.prepare.outputs.version }}" \
+            --build-number="${{ needs.prepare.outputs.build_number }}"
           mv build/app/outputs/flutter-apk/app-release.apk \
             "dist/Hiraukan-main-android-universal_${{ needs.prepare.outputs.suffix }}.apk"
 
-          flutter build apk --release --split-per-abi
+          flutter build apk --release --split-per-abi \
+            --build-name="${{ needs.prepare.outputs.version }}" \
+            --build-number="${{ needs.prepare.outputs.build_number }}"
           mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
             "dist/Hiraukan-main-android-arm64-v8a_${{ needs.prepare.outputs.suffix }}.apk"
 
@@ -166,8 +182,12 @@ jobs:
             exit 1
           fi
 
-          if [ "$SIGNING_CONFIGURED" = "true" ]; then
-            for apk in "$universal_apk" "$arm64_apk"; do
+          if [ "$SIGNING_CONFIGURED" != "true" ]; then
+            echo "::error::Android signing was not configured."
+            exit 1
+          fi
+
+          for apk in "$universal_apk" "$arm64_apk"; do
               cert_output="$("$apksigner" verify --print-certs "$apk" 2>&1)"
               actual_cert="$(
                 printf '%s\n' "$cert_output" |
@@ -188,8 +208,7 @@ jobs:
                 echo "::error::Unexpected Android signing certificate for $apk: $actual_cert"
                 exit 1
               fi
-            done
-          fi
+          done
 
       - name: Upload Android Main Artifacts
         uses: actions/upload-artifact@v6
