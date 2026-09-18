@@ -543,4 +543,29 @@ void main() {
     controller.dispose();
   });
 
+  test('translation cache falls back to subtitle source and work identity',
+      () {
+    final subtitle = _subtitle(
+      source: 'asmr_one',
+      workId: 'RJ654321',
+      trackId: 'track-legacy',
+    );
+    const legacyIdentity = SubtitleIdentity(
+      source: 'legacy',
+      trackId: 'track-legacy',
+    );
+
+    final key = SubtitleTranslationCacheKey.fromSubtitle(
+      identity: legacyIdentity,
+      subtitle: subtitle,
+      targetLanguage: 'id',
+    );
+
+    expect(key.source, 'asmr_one');
+    expect(key.workId, 'RJ654321');
+    expect(key.trackId, 'track-legacy');
+    expect(key.sourceLanguage, 'ja');
+    expect(key.targetLanguage, 'id');
+  });
+
 }
