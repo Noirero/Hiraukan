@@ -14,7 +14,7 @@ class HentaiAsmrSourceAdapter implements UnifiedSourceAdapter {
     _dio.options
       ..connectTimeout = const Duration(seconds: 12)
       ..receiveTimeout = const Duration(seconds: 20)
-      ..headers['User-Agent'] = 'KikoFlu/3.8 UnifiedSources'
+      ..headers['User-Agent'] = 'Hiraukan/3.8 UnifiedSources'
       ..headers['Accept'] = 'text/html,application/xhtml+xml';
   }
 
@@ -27,10 +27,13 @@ class HentaiAsmrSourceAdapter implements UnifiedSourceAdapter {
     required int page,
     required int pageSize,
   }) async {
-    final encoded = Uri.encodeQueryComponent(keyword.trim());
-    final url = page <= 1
-        ? '$baseUrl/?s=$encoded'
-        : '$baseUrl/page/$page/?s=$encoded';
+    final trimmedKeyword = keyword.trim();
+    final encoded = Uri.encodeQueryComponent(trimmedKeyword);
+    final url = trimmedKeyword.isEmpty
+        ? (page <= 1 ? '$baseUrl/' : '$baseUrl/page/$page/')
+        : (page <= 1
+            ? '$baseUrl/?s=$encoded'
+            : '$baseUrl/page/$page/?s=$encoded');
     final html = await _getHtml(url);
     final base = Uri.parse(baseUrl);
 
@@ -84,6 +87,7 @@ class HentaiAsmrSourceAdapter implements UnifiedSourceAdapter {
       final work = Work(
         id: SourceHtmlParser.stableNegativeId('hentai:$localId'),
         title: title,
+        age: 'R18',
         duration: duration,
         images: cover == null ? null : [cover],
         sourceUrl: detailUrl,
@@ -123,6 +127,7 @@ class HentaiAsmrSourceAdapter implements UnifiedSourceAdapter {
         'hentai:${canonical ?? ref.localId}',
       ),
       title: title,
+      age: 'R18',
       duration: ref.durationSeconds,
       images: cover == null ? null : [cover],
       sourceUrl: ref.detailUrl,
