@@ -16,12 +16,13 @@ concurrency:
 jobs:
   android:
     name: Android Main arm64 Build
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
-      - name: Prepare Android Signing
+      - name: Select Android install identity
+        id: android_mode
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -29,22 +30,34 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ] || \
-             [ -z "${ANDROID_KEYSTORE_PASSWORD:-}" ] || \
-             [ -z "${ANDROID_KEY_ALIAS:-}" ] || \
-             [ -z "${ANDROID_KEY_PASSWORD:-}" ]; then
-            echo "::error::Android release signing secrets are required for the production applicationId."
-            exit 1
-          fi
 
-          printf "%s" "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-key.jks
-          cat <<EOF > android/key.properties
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] && \
+             [ -n "${ANDROID_KEYSTORE_PASSWORD:-}" ] && \
+             [ -n "${ANDROID_KEY_ALIAS:-}" ] && \
+             [ -n "${ANDROID_KEY_PASSWORD:-}" ]; then
+            printf "%s" "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-key.jks
+            cat <<EOF > android/key.properties
           storeFile=app/release-key.jks
           storePassword=$ANDROID_KEYSTORE_PASSWORD
           keyAlias=$ANDROID_KEY_ALIAS
           keyPassword=$ANDROID_KEY_PASSWORD
           EOF
-          chmod 600 android/app/release-key.jks android/key.properties
+            chmod 600 android/app/release-key.jks android/key.properties
+
+            echo "mode=update" >> "$GITHUB_OUTPUT"
+            echo "app_id=com.meteor.kikoeruflutter" >> "$GITHUB_OUTPUT"
+            echo "apk_name=Hiraukan-main-update-arm64-v8a.apk" >> "$GITHUB_OUTPUT"
+            echo "artifact_name=Hiraukan-main-update-arm64-v8a" >> "$GITHUB_OUTPUT"
+            echo "Production signing credentials are complete; building an update-compatible APK."
+          else
+            rm -f android/key.properties android/app/release-key.jks
+
+            echo "mode=standalone" >> "$GITHUB_OUTPUT"
+            echo "app_id=com.meteor.kikoeruflutter.mainbuild" >> "$GITHUB_OUTPUT"
+            echo "apk_name=Hiraukan-main-standalone-arm64-v8a.apk" >> "$GITHUB_OUTPUT"
+            echo "artifact_name=Hiraukan-main-standalone-arm64-v8a" >> "$GITHUB_OUTPUT"
+            echo "::warning::Production signing credentials are incomplete. Building a separate-install APK instead of reusing the production applicationId."
+          fi
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -62,25 +75,30 @@ jobs:
       - name: Get Dependencies
         run: flutter pub get
 
-      - name: Build signed arm64 APK
+      - name: Build arm64 APK
+        env:
+          HIRAUAKAN_APPLICATION_ID: ${{ steps.android_mode.outputs.app_id }}
+          APK_NAME: ${{ steps.android_mode.outputs.apk_name }}
         run: |
           set -euo pipefail
           mkdir -p dist
           flutter build apk --release --target-platform android-arm64 --split-per-abi
-          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
-             dist/Hiraukan-main-update-arm64-v8a.apk
+          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "dist/$APK_NAME"
 
-      - name: Verify Android Main Update Compatibility
+      - name: Verify Android Main Package Safety
         env:
-          EXPECTED_PACKAGE_ID: com.meteor.kikoeruflutter
-          EXPECTED_CERT_SHA256: b49fcc1a879b7dab15f223f7431dfbee447dbe268d1578fc549340c430ddc87f
+          BUILD_MODE: ${{ steps.android_mode.outputs.mode }}
+          EXPECTED_PACKAGE_ID: ${{ steps.android_mode.outputs.app_id }}
+          APK_NAME: ${{ steps.android_mode.outputs.apk_name }}
+          PRODUCTION_PACKAGE_ID: com.meteor.kikoeruflutter
+          EXPECTED_PRODUCTION_CERT_SHA256: b49fcc1a879b7dab15f223f7431dfbee447dbe268d1578fc549340c430ddc87f
         run: |
           set -euo pipefail
 
           build_tools_dir="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
           aapt="$build_tools_dir/aapt"
           apksigner="$build_tools_dir/apksigner"
-          apk="dist/Hiraukan-main-update-arm64-v8a.apk"
+          apk="dist/$APK_NAME"
 
           for tool in "$aapt" "$apksigner"; do
             if [ ! -x "$tool" ]; then
@@ -95,7 +113,7 @@ jobs:
           native_code="$(printf '%s\n' "$badging" | sed -n "s/^native-code: //p" | head -n 1)"
 
           if [ "$package_name" != "$EXPECTED_PACKAGE_ID" ]; then
-            echo "::error::Unexpected package id: $package_name"
+            echo "::error::Unexpected package id: $package_name (expected $EXPECTED_PACKAGE_ID)"
             exit 1
           fi
           if ! grep -q "arm64-v8a" <<< "$native_code"; then
@@ -123,19 +141,33 @@ jobs:
             echo "::error::Unable to read Android signing certificate."
             exit 1
           fi
-          if [ "$actual_cert" != "$EXPECTED_CERT_SHA256" ]; then
-            echo "::error::Unexpected Android signing certificate: $actual_cert"
-            exit 1
+
+          if [ "$BUILD_MODE" = "update" ]; then
+            if [ "$package_name" != "$PRODUCTION_PACKAGE_ID" ]; then
+              echo "::error::Update build must keep the production applicationId."
+              exit 1
+            fi
+            if [ "$actual_cert" != "$EXPECTED_PRODUCTION_CERT_SHA256" ]; then
+              echo "::error::Production signing certificate mismatch. Refusing to publish an APK that cannot update the production app."
+              exit 1
+            fi
+            echo "Verified UPDATE build: production applicationId and signing certificate match."
+          else
+            if [ "$package_name" = "$PRODUCTION_PACKAGE_ID" ]; then
+              echo "::error::Standalone build must never reuse the production applicationId."
+              exit 1
+            fi
+            echo "Verified STANDALONE build: separate applicationId prevents update/signature conflicts."
           fi
 
-          echo "Verified update-compatible package id and signing certificate."
+          echo "applicationId=$package_name"
           echo "native-code=$native_code"
           echo "certificate-sha256=$actual_cert"
 
       - name: Upload Android Main Artifact
         uses: actions/upload-artifact@v6
         with:
-          name: Hiraukan-main-update-arm64-v8a
-          path: dist/Hiraukan-main-update-arm64-v8a.apk
+          name: ${{ steps.android_mode.outputs.artifact_name }}
+          path: dist/${{ steps.android_mode.outputs.apk_name }}
           if-no-files-found: error
           retention-days: 7
