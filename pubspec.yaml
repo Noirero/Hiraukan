@@ -19,17 +19,17 @@ dependencies:
   # UI & Material Design
   cupertino_icons: ^1.0.6
   dynamic_color: ^1.7.0
-  
+
   # State Management
   provider: ^6.1.2
   flutter_riverpod: ^2.4.9
-  
+
   # Network & API
   dio: ^5.4.0
   connectivity_plus: ^5.0.2
   http: ^1.6.0
   translator: ^1.0.0
-  
+
   # Audio & Video & Pdf
   just_audio: ^0.9.36
   # Upstream 2.1.0 leaves load() pending when libmpv reports an open error.
@@ -48,7 +48,19 @@ dependencies:
       path: audio_service
   smtc_windows: ^0.1.3
   flutter_pdfview: ^1.3.2
-  
+
+  # KikoFlu advanced audio / AI (all opt-in)
+  ffmpeg_kit_flutter_new_min: ^3.1.0
+  whisper_ggml_plus: ^1.5.2
+  whisper_ggml_plus_ffmpeg: ^1.0.0
+  wakelock_plus: ^1.5.2
+
+  # Notifications. Firebase is initialized only when Hiraukan has its own
+  # platform configuration; no KikoFlu Firebase credentials are copied.
+  flutter_local_notifications: ^18.0.1
+  firebase_core: ^4.13.0
+  firebase_messaging: ^16.5.0
+
   # Local Storage
   shared_preferences: ^2.2.2
   path: ^1.8.3
@@ -58,26 +70,26 @@ dependencies:
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   path_provider: ^2.1.2
-  
+
   # UI Components
   cached_network_image: ^3.3.0
   flutter_staggered_grid_view: ^0.7.0
-  
+
   # Utilities
   json_annotation: ^4.8.1
   equatable: ^2.0.5
   crypto: ^3.0.3
-  
+
   # Permissions
   permission_handler: ^11.1.0
-  
+
   # Image & File Operations
   saver_gallery: ^4.0.1
   file_picker: ^8.0.0+1
   archive: ^3.6.1
   gbk_codec: ^0.4.0
   charset: ^2.0.1
-  
+
   # Share
   share_plus: ^10.1.4
 
@@ -89,6 +101,7 @@ dependencies:
   window_manager: ^0.4.3
   desktop_multi_window: ^0.3.0
   audio_session: ^0.1.25
+  local_auth: ^3.0.1
   ffi: ^2.1.4
   real_liquid_glass:
     path: third_party/real_liquid_glass
@@ -100,7 +113,6 @@ dev_dependencies:
   flutter_lints: ^3.0.1
   json_serializable: ^6.7.1
   build_runner: ^2.4.7
-  hive_generator: ^2.0.1
   flutter_launcher_icons: ^0.13.1
 
 flutter:
@@ -110,13 +122,6 @@ flutter:
   assets:
     - assets/icons/
     - LICENSE
-
-  # fonts:
-  #   - family: NotoSans
-  #     fonts:
-  #       - asset: assets/fonts/NotoSans-Regular.ttf
-  #       - asset: assets/fonts/NotoSans-Bold.ttf
-  #         weight: 700
 
 flutter_launcher_icons:
   android: "launcher_icon"

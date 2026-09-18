@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
+import 'app_lock_settings_screen.dart';
+import 'kikoflu_features_settings_screen.dart';
 import '../providers/settings_provider.dart';
+import '../services/app_lock_service.dart';
 import '../utils/snackbar_util.dart';
 import '../widgets/settings_section.dart';
 import '../widgets/common_input_dialog.dart';
@@ -53,6 +56,7 @@ class _PrivacyModeSettingsScreenState
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(privacyModeSettingsProvider);
+    final appLockEnabled = AppLockService.instance.isEnabled;
 
     return SettingsSubpageScaffold(
       title: S.of(context).privacyModeSettingsTitle,
@@ -60,7 +64,6 @@ class _PrivacyModeSettingsScreenState
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // 说明卡片
           SettingsSectionCard(
             color: Theme.of(context).colorScheme.primaryContainer,
             child: Padding(
@@ -105,8 +108,6 @@ class _PrivacyModeSettingsScreenState
             ),
           ),
           const SizedBox(height: 16),
-
-          // 主开关
           SettingsSectionCard(
             child: SettingsSwitchTile(
               icon: settings.enabled ? Icons.shield : Icons.shield_outlined,
@@ -126,12 +127,9 @@ class _PrivacyModeSettingsScreenState
             ),
           ),
           const SizedBox(height: 16),
-
-          // 详细设置
           SettingsSectionCard(
             child: Column(
               children: [
-                // 标题说明
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
@@ -160,8 +158,6 @@ class _PrivacyModeSettingsScreenState
                     ],
                   ),
                 ),
-
-                // 通知封面模糊
                 SettingsSwitchTile(
                   icon: Icons.notifications_outlined,
                   title: S.of(context).blurNotificationCover,
@@ -175,8 +171,6 @@ class _PrivacyModeSettingsScreenState
                   },
                 ),
                 const SettingsDivider(),
-
-                // 应用内封面模糊
                 SettingsSwitchTile(
                   icon: Icons.blur_on,
                   title: S.of(context).blurInAppCover,
@@ -190,8 +184,6 @@ class _PrivacyModeSettingsScreenState
                   },
                 ),
                 const SettingsDivider(),
-
-                // 标题替换
                 SettingsSwitchTile(
                   icon: Icons.text_fields,
                   title: S.of(context).replaceTitle,
@@ -205,8 +197,6 @@ class _PrivacyModeSettingsScreenState
                   },
                 ),
                 const SettingsDivider(),
-
-                // 自定义标题
                 SettingsListTile(
                   enabled: settings.enabled && settings.maskTitle,
                   icon: Icons.edit,
@@ -221,8 +211,50 @@ class _PrivacyModeSettingsScreenState
             ),
           ),
           const SizedBox(height: 16),
-
-          // 效果举例
+          SettingsSectionCard(
+            child: Column(
+              children: [
+                SettingsListTile(
+                  icon: appLockEnabled
+                      ? Icons.lock_rounded
+                      : Icons.lock_outline_rounded,
+                  iconColor: appLockEnabled
+                      ? Colors.green
+                      : Theme.of(context).colorScheme.primary,
+                  title: 'App Lock',
+                  subtitle: appLockEnabled
+                      ? 'Aktif — lindungi Hiraukan dengan PIN/biometrik'
+                      : 'Kunci Hiraukan dengan PIN dan biometrik perangkat',
+                  trailing: const Icon(Icons.arrow_forward_ios),
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const AppLockSettingsScreen(),
+                      ),
+                    );
+                    if (mounted) setState(() {});
+                  },
+                ),
+                const SettingsDivider(),
+                SettingsListTile(
+                  icon: Icons.auto_awesome_rounded,
+                  title: 'Advanced Audio & AI',
+                  subtitle:
+                      'WAV conversion, Whisper, notifications, dan status Hi-Res',
+                  trailing: const Icon(Icons.arrow_forward_ios),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const KikoFluFeaturesSettingsScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
           SettingsSectionCard(
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
             child: Padding(

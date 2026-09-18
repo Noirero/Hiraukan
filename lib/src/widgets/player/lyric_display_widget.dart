@@ -128,7 +128,7 @@ class _FullLyricDisplayState extends ConsumerState<FullLyricDisplay> {
         ? lyricSettings.fullActiveFontSize
         : lyricSettings.fullInactiveFontSize;
 
-    final screenWidth = MediaQuery.of(context).size.width;
+    final screenWidth = MediaQuery.sizeOf(context).width;
     final double lyricAreaWidth;
     final double outerPadding;
 
