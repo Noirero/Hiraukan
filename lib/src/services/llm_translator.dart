@@ -17,6 +17,7 @@ class LLMTranslator {
     Locale? locale,
     String? sourceLanguageName,
     String? targetLanguageName,
+    bool throwOnFailure = false,
   }) async {
     if (text.isEmpty) return text;
 
@@ -51,6 +52,9 @@ class LLMTranslator {
           : savedPrompt;
 
       if (apiKey.isEmpty) {
+        if (throwOnFailure) {
+          throw StateError('LLM translation API key is missing.');
+        }
         return 'Error: API Key is missing. Please configure LLM settings.';
       }
 
@@ -69,15 +73,25 @@ class LLMTranslator {
       );
 
       if (response.statusCode == 200) {
-        return extractTranslatedText(
-              protocol: apiProtocol,
-              data: response.data,
-            ) ??
-            text;
+        final translated = extractTranslatedText(
+          protocol: apiProtocol,
+          data: response.data,
+        );
+        if (translated != null) return translated;
+        if (throwOnFailure) {
+          throw StateError('LLM translation returned no usable result.');
+        }
+        return text;
+      }
+      if (throwOnFailure) {
+        throw StateError(
+          'LLM translation failed with status \${response.statusCode}.',
+        );
       }
       return text;
     } catch (e) {
       logOutput('LLM translation error: $e');
+      if (throwOnFailure) rethrow;
       if (e is DioException) {
         if (e.response != null) {
           logOutput('Response data: ${e.response?.data}');
