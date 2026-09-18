@@ -71,8 +71,6 @@ class _OriginalCache implements CachedSubtitleProvider {
   int loadCalls = 0;
   int saveCalls = 0;
 
-  _OriginalCache({this.value});
-
   @override
   Future<TimedSubtitle?> load(SubtitleRequest request) async {
     loadCalls++;
