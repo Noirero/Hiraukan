@@ -101,6 +101,8 @@ class _FastAsrModelSettingsScreenState
         FastAsrModelState.downloading => 'Sedang mengunduh',
         FastAsrModelState.verifying => 'Memverifikasi',
         FastAsrModelState.ready => 'Siap digunakan',
+        FastAsrModelState.updateAvailable => 'Pembaruan model tersedia',
+        FastAsrModelState.incompatible => 'Model tidak kompatibel',
         FastAsrModelState.corrupt => 'Model tidak lengkap / rusak',
         FastAsrModelState.failed => 'Gagal',
       };
