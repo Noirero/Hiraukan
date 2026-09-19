@@ -116,6 +116,30 @@ void main() {
     expect(calls, 2);
   });
 
+  test('temporary outage circuit prevents repeated slow network calls', () async {
+    var calls = 0;
+    final engine = FreeOnlineTranslationEngine.forTesting(
+      client: (text, source, target) async {
+        calls++;
+        throw StateError('network unavailable');
+      },
+      maxAttempts: 1,
+      failureCooldown: const Duration(minutes: 1),
+    );
+
+    await expectLater(
+      engine.translate('一行目'),
+      throwsA(isA<StateError>()),
+    );
+    expect(calls, 1);
+
+    await expectLater(
+      engine.translate('二行目'),
+      throwsA(isA<StateError>()),
+    );
+    expect(calls, 1);
+  });
+
   test('failed request is removed from in-flight deduplication', () async {
     var calls = 0;
     final engine = FreeOnlineTranslationEngine.forTesting(
