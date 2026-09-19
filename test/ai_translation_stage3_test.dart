@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kikoeru_flutter/src/models/lyric.dart';
-import 'package:kikoeru_flutter/src/services/local_subtitle_translation_service.dart';
+import 'package:kikoeru_flutter/src/services/contextual_subtitle_translation_service.dart';
 import 'package:kikoeru_flutter/src/services/translation_engine.dart';
 import 'package:kikoeru_flutter/src/services/subtitle_translation_planner.dart';
 import 'package:kikoeru_flutter/src/services/translation_glossary_service.dart';
@@ -55,7 +55,7 @@ void main() {
       }
       return 'fallback';
     });
-    final service = LocalSubtitleTranslationService(engine: engine);
+    final service = ContextualSubtitleTranslationService(engine: engine);
 
     final result = await service.translateSegment(
       sourceLines: const ['前', '今', '後'],
@@ -75,7 +75,7 @@ void main() {
     final engine = _FakeTranslationEngine((text) async {
       return text.contains('\n') ? 'merged output' : 'fallback satu baris';
     });
-    final service = LocalSubtitleTranslationService(engine: engine);
+    final service = ContextualSubtitleTranslationService(engine: engine);
 
     final result = await service.translateSegment(
       sourceLines: const ['前', '今', '後'],
@@ -93,7 +93,7 @@ void main() {
   test('glossary replacement survives translation through protected tokens',
       () async {
     final engine = _FakeTranslationEngine((text) async => text);
-    final service = LocalSubtitleTranslationService(engine: engine);
+    final service = ContextualSubtitleTranslationService(engine: engine);
 
     final result = await service.translateSegment(
       sourceLines: const ['お兄ちゃん、好き'],
