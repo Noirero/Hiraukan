@@ -61,6 +61,7 @@ jobs:
             test/locale_default_indonesian_test.dart \
             test/local_ai_translation_contract_test.dart \
             test/ai_subtitle_stage2_test.dart \
+            test/ai_translation_glossary_test.dart \
             test/unified_source_service_test.dart
 
       - name: Compute monotonic Beta versionCode
