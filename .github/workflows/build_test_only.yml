@@ -28,35 +28,55 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          EXPECTED_PRODUCTION_CERT_SHA256: b49fcc1a879b7dab15f223f7431dfbee447dbe268d1578fc549340c430ddc87f
         run: |
           set -euo pipefail
+          signing_compatible=false
+          actual_cert=""
 
           if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] && \
              [ -n "${ANDROID_KEYSTORE_PASSWORD:-}" ] && \
              [ -n "${ANDROID_KEY_ALIAS:-}" ] && \
              [ -n "${ANDROID_KEY_PASSWORD:-}" ]; then
             printf "%s" "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-key.jks
-            cat <<EOF > android/key.properties
+            cert_output="$(keytool -list -v \
+              -keystore android/app/release-key.jks \
+              -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+              -alias "$ANDROID_KEY_ALIAS" 2>&1 || true)"
+            actual_cert="$(printf '%s\n' "$cert_output" |
+              sed -nE '/SHA256:/I { s/.*SHA256:[[:space:]]*//I; p; q; }' |
+              tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+
+            if [ "$actual_cert" = "$EXPECTED_PRODUCTION_CERT_SHA256" ]; then
+              cat <<EOF > android/key.properties
           storeFile=app/release-key.jks
           storePassword=$ANDROID_KEYSTORE_PASSWORD
           keyAlias=$ANDROID_KEY_ALIAS
           keyPassword=$ANDROID_KEY_PASSWORD
           EOF
-            chmod 600 android/app/release-key.jks android/key.properties
+              chmod 600 android/app/release-key.jks android/key.properties
+              signing_compatible=true
+            else
+              echo "::warning::Configured Android keystore certificate '$actual_cert' does not match production. Update mode is disabled."
+              rm -f android/key.properties android/app/release-key.jks
+            fi
+          else
+            echo "::warning::Production signing credentials are incomplete. Update mode is disabled."
+            rm -f android/key.properties android/app/release-key.jks
+          fi
 
+          if [ "$signing_compatible" = "true" ]; then
             echo "mode=update" >> "$GITHUB_OUTPUT"
             echo "app_id=com.meteor.kikoeruflutter" >> "$GITHUB_OUTPUT"
             echo "apk_name=Hiraukan-main-update-arm64-v8a.apk" >> "$GITHUB_OUTPUT"
             echo "artifact_name=Hiraukan-main-update-arm64-v8a" >> "$GITHUB_OUTPUT"
-            echo "Production signing credentials are complete; building an update-compatible APK."
+            echo "Verified production signing key is available: producing an update-compatible APK."
           else
-            rm -f android/key.properties android/app/release-key.jks
-
             echo "mode=standalone" >> "$GITHUB_OUTPUT"
             echo "app_id=com.meteor.kikoeruflutter.mainbuild" >> "$GITHUB_OUTPUT"
             echo "apk_name=Hiraukan-main-NOT-UPDATE-standalone-arm64-v8a.apk" >> "$GITHUB_OUTPUT"
             echo "artifact_name=Hiraukan-main-NOT-UPDATE-standalone-arm64-v8a" >> "$GITHUB_OUTPUT"
-            echo "::warning::Production signing credentials are incomplete. Building a separate-install APK instead of reusing the production applicationId."
+            echo "Standalone validation only; this artifact cannot update installed production Hiraukan."
           fi
 
       - name: Setup Java
