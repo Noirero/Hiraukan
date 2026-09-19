@@ -7,7 +7,7 @@ import 'dart:convert';
 import 'youdao_translator.dart';
 import 'microsoft_translator.dart';
 import 'llm_translator.dart';
-import 'local_translation_engine.dart';
+import 'translation_engine.dart';
 import 'free_online_translation_engine.dart';
 import 'log_service.dart';
 import '../providers/settings_provider.dart';
@@ -24,7 +24,7 @@ class TranslationService {
   final YoudaoTranslator _youdaoTranslator = YoudaoTranslator();
   final MicrosoftTranslator _microsoftTranslator = MicrosoftTranslator();
   final LLMTranslator _llmTranslator = LLMTranslator();
-  final LocalTranslationEngine _freeOnlineTranslator =
+  final TranslationEngine _freeOnlineTranslator =
       FreeOnlineTranslationEngine.instance;
   static const String _cachePrefix = 'translation_cache_v2_';
 
@@ -343,8 +343,6 @@ class TranslationService {
             texts[index],
             sourceLang: sourceLang,
           );
-        } on LocalTranslationModelNotInstalledException {
-          rethrow;
         } catch (e) {
           _log.captureOutput('Translation batch item $index failed: $e');
           translated = texts[index];
