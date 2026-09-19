@@ -364,7 +364,7 @@ class PreferencesScreen extends ConsumerWidget {
     final s = S.of(context);
     switch (source) {
       case TranslationSource.freeOnline:
-        return 'Gratis · online · tanpa API key/token · Jepang → Indonesia';
+        return 'Gratis · online · tanpa API key/token pengguna · Jepang → Indonesia';
       case TranslationSource.google:
         return s.translationDescGoogle;
       case TranslationSource.youdao:
