@@ -1,5 +1,8 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:kikoeru_flutter/src/services/reazon_chunk_planner.dart';
 import 'package:kikoeru_flutter/src/services/reazon_fast_model_service.dart';
 import 'package:kikoeru_flutter/src/services/reazon_timestamp_segmenter.dart';
 import 'package:kikoeru_flutter/src/services/speech_recognition_coordinator.dart';
@@ -13,6 +16,60 @@ void main() {
     );
     expect(ReazonTimestampSegmenter.recommendedChunkSeconds, 20);
     expect(ReazonTimestampSegmenter.modelMaxClipSeconds, 30);
+  });
+
+  test('silence-aware planner stays non-overlapping and below hard limit', () {
+    const sampleRate = 100;
+    final samples = Float32List(50 * sampleRate);
+    for (var i = 0; i < samples.length; i++) {
+      samples[i] = 0.5;
+    }
+
+    // Quiet regions near the first and second target boundaries.
+    for (var i = 18 * sampleRate; i < 19 * sampleRate; i++) {
+      samples[i] = 0.001;
+    }
+    for (var i = 38 * sampleRate; i < 39 * sampleRate; i++) {
+      samples[i] = 0.001;
+    }
+
+    final chunks = ReazonChunkPlanner.plan(
+      samples: samples,
+      sampleRate: sampleRate,
+    );
+
+    expect(chunks.length, greaterThanOrEqualTo(3));
+    expect(chunks.first.endSample / sampleRate, closeTo(18.5, 1.0));
+
+    for (var i = 0; i < chunks.length; i++) {
+      final durationSeconds = chunks[i].sampleCount / sampleRate;
+      expect(
+        durationSeconds,
+        lessThanOrEqualTo(ReazonChunkPlanner.hardMaxSeconds),
+      );
+      if (i > 0) {
+        expect(chunks[i - 1].endSample, chunks[i].startSample);
+      }
+    }
+  });
+
+  test('flat audio keeps chunk boundaries near the 20 second target', () {
+    const sampleRate = 100;
+    final samples = Float32List(45 * sampleRate);
+    for (var i = 0; i < samples.length; i++) {
+      samples[i] = 0.2;
+    }
+
+    final chunks = ReazonChunkPlanner.plan(
+      samples: samples,
+      sampleRate: sampleRate,
+    );
+
+    expect(chunks.first.endSample / sampleRate, closeTo(20, 0.2));
+    expect(
+      ReazonChunkPlanner.hardMaxSeconds,
+      lessThan(ReazonTimestampSegmenter.modelMaxClipSeconds),
+    );
   });
 
   test('pinned Fast ASR weights keep the reviewed footprint', () {
