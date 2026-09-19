@@ -9,6 +9,18 @@ enum LocalModelState {
   failed,
 }
 
+class LocalTranslationCapabilities {
+  final bool supportsNativeContextWindow;
+  final bool supportsNativeGlossaryHints;
+  final int maxContextSegments;
+
+  const LocalTranslationCapabilities({
+    required this.supportsNativeContextWindow,
+    required this.supportsNativeGlossaryHints,
+    required this.maxContextSegments,
+  });
+}
+
 class LocalTranslationModelStatus {
   final LocalModelState state;
   final String engineId;
@@ -36,6 +48,7 @@ abstract interface class LocalTranslationEngine {
   String get id;
   String get version;
   String get displayName;
+  LocalTranslationCapabilities get capabilities;
 
   Future<LocalTranslationModelStatus> getModelStatus();
 
