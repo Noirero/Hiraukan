@@ -57,10 +57,10 @@ class ProtectedGlossaryText {
       final compact = entry.key
           .replaceAll('⟪', '')
           .replaceAll('⟫', '');
+      final escapedToken =
+          RegExp.escape(compact).replaceAll('_', r'[_\s]*');
       final pattern = RegExp(
-        '⟪\\s*' +
-            RegExp.escape(compact).replaceAll('_', r'[_\s]*') +
-            '\\s*⟫',
+        '⟪\\s*$escapedToken\\s*⟫',
         caseSensitive: false,
       );
       result = result.replaceAll(pattern, entry.value);
