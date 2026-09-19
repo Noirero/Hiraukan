@@ -47,24 +47,24 @@ class ReazonSpeechFastEngine implements SpeechRecognitionEngine {
       );
     }
 
-    final wavPath = await AudioConversionService.instance
-        .prepareSpeechRecognitionWav(request.audioPath);
-    if (wavPath == null) {
-      throw StateError('Unable to prepare 16 kHz PCM audio for Fast ASR.');
-    }
-
-    try {
-      return await AiHeavyJobQueue.instance.run(
-        () => _transcribePreparedWav(request, wavPath),
-      );
-    } finally {
-      final temporary = File(wavPath);
-      if (await temporary.exists()) {
-        try {
-          await temporary.delete();
-        } catch (_) {}
+    return AiHeavyJobQueue.instance.run(() async {
+      final wavPath = await AudioConversionService.instance
+          .prepareSpeechRecognitionWav(request.audioPath);
+      if (wavPath == null) {
+        throw StateError('Unable to prepare 16 kHz PCM audio for Fast ASR.');
       }
-    }
+
+      try {
+        return await _transcribePreparedWav(request, wavPath);
+      } finally {
+        final temporary = File(wavPath);
+        if (await temporary.exists()) {
+          try {
+            await temporary.delete();
+          } catch (_) {}
+        }
+      }
+    });
   }
 
   Future<TimedSubtitle?> _transcribePreparedWav(
