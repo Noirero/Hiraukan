@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/local_translation_engine.dart';
 import '../services/mlkit_local_translation_engine.dart';
+import '../services/subtitle_translation_cache.dart';
 
 class LocalTranslationModelNotifier
     extends StateNotifier<AsyncValue<LocalTranslationModelStatus>> {
@@ -48,4 +49,10 @@ final localTranslationModelProvider = StateNotifierProvider<
   return LocalTranslationModelNotifier(
     ref.watch(localTranslationEngineProvider),
   );
+});
+
+
+final translationDocumentCacheStatsProvider =
+    FutureProvider<TranslationDocumentCacheStats>((ref) {
+  return SubtitleTranslationCache.instance.stats();
 });

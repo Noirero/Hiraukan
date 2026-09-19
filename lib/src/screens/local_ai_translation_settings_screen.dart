@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/local_translation_provider.dart';
 import '../services/local_translation_engine.dart';
+import '../services/subtitle_translation_cache.dart';
 
 class LocalAiTranslationSettingsScreen extends ConsumerWidget {
   const LocalAiTranslationSettingsScreen({super.key});
@@ -10,6 +11,7 @@ class LocalAiTranslationSettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncStatus = ref.watch(localTranslationModelProvider);
+    final cacheStats = ref.watch(translationDocumentCacheStatsProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('AI Translate Lokal')),
@@ -53,19 +55,81 @@ class LocalAiTranslationSettingsScreen extends ConsumerWidget {
             data: (status) => _buildStatusCard(context, ref, status),
           ),
           const SizedBox(height: 16),
+          cacheStats.when(
+            loading: () => const Card(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: LinearProgressIndicator(),
+              ),
+            ),
+            error: (_, __) => const Card(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('Statistik cache terjemahan tidak tersedia.'),
+              ),
+            ),
+            data: (stats) => Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Cache subtitle Indonesia',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${stats.documents} dokumen · '
+                      '${_formatBytes(stats.bytes)}',
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Cache tetap dapat dipakai setelah model AI dihapus. '
+                      'Hapus cache hanya jika Anda ingin mengosongkan hasil '
+                      'terjemahan yang sudah dibuat.',
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: stats.documents == 0
+                          ? null
+                          : () async {
+                              await SubtitleTranslationCache.instance.clear();
+                              ref.invalidate(
+                                translationDocumentCacheStatsProvider,
+                              );
+                            },
+                      icon: const Icon(Icons.cleaning_services_outlined),
+                      label: const Text('Hapus Cache Terjemahan'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           const Card(
             child: Padding(
               padding: EdgeInsets.all(16),
               child: Text(
                 'Catatan: Local Lite adalah engine awal. Arsitektur Hiraukan '
                 'tetap modular agar Local HQ atau engine lain dapat ditambahkan '
-                'tanpa mengubah player dan sistem subtitle.',
+                'tanpa mengubah player dan sistem subtitle. Model bahasa '
+                'dikelola oleh runtime ML Kit dan tidak dibundel ke APK.',
               ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    final kib = bytes / 1024;
+    if (kib < 1024) return '${kib.toStringAsFixed(1)} KiB';
+    final mib = kib / 1024;
+    return '${mib.toStringAsFixed(1)} MiB';
   }
 
   Widget _buildStatusCard(
@@ -113,8 +177,8 @@ class LocalAiTranslationSettingsScreen extends ConsumerWidget {
               'AI Translate Lokal.',
       primaryLabel: 'Download Model (Wi-Fi)',
       onPrimary: () => notifier.download(wifiOnly: true),
-      secondaryLabel: 'Refresh',
-      onSecondary: notifier.refresh,
+      secondaryLabel: 'Download via jaringan apa pun',
+      onSecondary: () => notifier.download(wifiOnly: false),
     );
   }
 }

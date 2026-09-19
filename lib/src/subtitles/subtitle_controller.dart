@@ -89,6 +89,18 @@ class SubtitleController extends StateNotifier<SubtitleState> {
     );
   }
 
+  void clearTranslated() {
+    state = SubtitleState(
+      trackId: state.trackId,
+      original: state.original,
+      translated: null,
+      displayMode: state.displayMode,
+      isLoading: state.isLoading,
+      statusMessage: state.statusMessage,
+      errorMessage: state.errorMessage,
+    );
+  }
+
   void setDisplayMode(SubtitleDisplayMode mode) {
     state = SubtitleState(
       trackId: state.trackId,

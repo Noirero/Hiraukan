@@ -10,7 +10,10 @@ import '../models/work.dart';
 import '../providers/audio_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/lyric_provider.dart';
+import '../providers/settings_provider.dart';
+import '../providers/subtitle_display_mode_provider.dart';
 import '../services/local_translation_engine.dart';
+import '../subtitles/subtitle_controller.dart';
 import '../utils/local_file_url.dart';
 import '../utils/system_ui_style.dart';
 import '../widgets/player/player_cover_widget.dart';
@@ -851,7 +854,7 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
 
         final isTranslating = lyricState.isTranslating;
         final isTranslated = lyricState.isTranslated;
-        final showTranslated = lyricState.showTranslated;
+        final displayMode = ref.watch(subtitleDisplayModeProvider);
         final total = lyricState.translationTotal;
         final completed =
             total > 0 ? lyricState.translatedCount.clamp(0, total).toInt() : 0;
@@ -866,12 +869,52 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
                     total,
                   )
               : S.of(context).translatingLyrics;
-        } else if (isTranslated && showTranslated) {
-          tooltip = S.of(context).showOriginalLyrics;
-        } else if (isTranslated && !showTranslated) {
-          tooltip = S.of(context).showTranslatedLyrics;
+        } else if (isTranslated) {
+          tooltip = switch (displayMode) {
+            SubtitleDisplayMode.original => 'Tampilkan subtitle Indonesia',
+            SubtitleDisplayMode.translated => 'Tampilkan bilingual',
+            SubtitleDisplayMode.bilingual => S.of(context).showOriginalLyrics,
+            SubtitleDisplayMode.off => S.of(context).showOriginalLyrics,
+          };
         } else {
           tooltip = S.of(context).translateLyrics;
+        }
+
+        if (isTranslated && !isTranslating) {
+          return PopupMenuButton<SubtitleDisplayMode>(
+            tooltip: 'Mode subtitle',
+            initialValue: displayMode,
+            onSelected: (mode) {
+              ref
+                  .read(lyricControllerProvider.notifier)
+                  .setSubtitleDisplayMode(mode);
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: SubtitleDisplayMode.original,
+                child: Text('Original · Jepang'),
+              ),
+              PopupMenuItem(
+                value: SubtitleDisplayMode.translated,
+                child: Text('Terjemahan · Indonesia'),
+              ),
+              PopupMenuItem(
+                value: SubtitleDisplayMode.bilingual,
+                child: Text('Bilingual · Jepang + Indonesia'),
+              ),
+              PopupMenuItem(
+                value: SubtitleDisplayMode.off,
+                child: Text('Subtitle Mati'),
+              ),
+            ],
+            icon: Icon(
+              Icons.translate,
+              color: displayMode != SubtitleDisplayMode.original &&
+                      displayMode != SubtitleDisplayMode.off
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
+            ),
+          );
         }
 
         return IconButton(
@@ -894,12 +937,17 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
                     final savedPath =
                         await controller.translateAndSaveCurrentLyrics();
                     if (context.mounted) {
+                      final localAi =
+                          ref.read(translationSourceProvider) ==
+                              TranslationSource.localAi;
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
-                            savedPath != null
-                                ? S.of(context).savedToSubtitleLibrary
-                                : S.of(context).translatedLyricsNotSaved,
+                            localAi
+                                ? 'Terjemahan Indonesia siap dan disimpan di cache lokal.'
+                                : savedPath != null
+                                    ? S.of(context).savedToSubtitleLibrary
+                                    : S.of(context).translatedLyricsNotSaved,
                           ),
                           behavior: SnackBarBehavior.floating,
                         ),
@@ -987,7 +1035,9 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
                 )
               : Icon(
                   Icons.translate,
-                  color: (isTranslated && showTranslated)
+                  color: isTranslated &&
+                          displayMode != SubtitleDisplayMode.original &&
+                          displayMode != SubtitleDisplayMode.off
                       ? Theme.of(context).colorScheme.primary
                       : null,
                 ),

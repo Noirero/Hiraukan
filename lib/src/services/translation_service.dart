@@ -151,6 +151,17 @@ class TranslationService {
     );
   }
 
+  Future<bool> isLocalAiSelected() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getString('translation_source') ??
+            TranslationSource.google.value) ==
+        TranslationSource.localAi.value;
+  }
+
+  Future<(String engineId, String engineVersion)> localEngineIdentity() async {
+    return (_localTranslator.id, _localTranslator.version);
+  }
+
   /// 翻译文本到应用当前语言
   Future<String> translate(String text, {String? sourceLang}) async {
     if (text.isEmpty) return text;
@@ -300,6 +311,12 @@ class TranslationService {
     List<String> texts, {
     String? sourceLang,
     void Function(int current, int total)? onProgress,
+    void Function(
+      int index,
+      String translated,
+      int completed,
+      int total,
+    )? onItemTranslated,
   }) async {
     if (texts.isEmpty) return [];
 
@@ -315,6 +332,7 @@ class TranslationService {
 
     final results = List<String>.filled(texts.length, '');
     int currentIndex = 0;
+    int completedCount = 0;
 
     Future<void> worker() async {
       while (true) {
@@ -322,21 +340,28 @@ class TranslationService {
         if (currentIndex >= texts.length) return;
         index = currentIndex++;
 
+        String translated;
         try {
-          final translated =
-              await translate(texts[index], sourceLang: sourceLang);
-          results[index] = translated;
+          translated = await translate(
+            texts[index],
+            sourceLang: sourceLang,
+          );
         } on LocalTranslationModelNotInstalledException {
           rethrow;
         } catch (e) {
           _log.captureOutput('Translation batch item $index failed: $e');
-          results[index] = texts[index];
-        } finally {
-          onProgress?.call(
-            results.where((value) => value.isNotEmpty).length,
-            texts.length,
-          );
+          translated = texts[index];
         }
+
+        results[index] = translated;
+        completedCount++;
+        onItemTranslated?.call(
+          index,
+          translated,
+          completedCount,
+          texts.length,
+        );
+        onProgress?.call(completedCount, texts.length);
       }
     }
 
@@ -450,10 +475,12 @@ class TranslationService {
       final cached = prefs.getString(key);
       if (cached != null) {
         final data = json.decode(cached);
-        // 缓存7天有效
         final timestamp = data['timestamp'] as int;
-        if (DateTime.now().millisecondsSinceEpoch - timestamp <
-            7 * 24 * 60 * 60 * 1000) {
+        final isVersionedLocalEngine =
+            engineKey.startsWith('${_localTranslator.id}:');
+        if (isVersionedLocalEngine ||
+            DateTime.now().millisecondsSinceEpoch - timestamp <
+                7 * 24 * 60 * 60 * 1000) {
           return data['translation'] as String;
         }
       }
