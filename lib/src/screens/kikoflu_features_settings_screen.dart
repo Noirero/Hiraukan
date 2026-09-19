@@ -356,7 +356,11 @@ class _KikoFluFeaturesSettingsScreenState
                         ),
                         DropdownMenuItem(
                           value: 'fast',
-                          child: Text('Fast · ReazonSpeech'),
+                          enabled:
+                              SpeechRecognitionCoordinator.fastProfileApproved,
+                          child: Text(
+                            'Fast · ReazonSpeech · menunggu benchmark',
+                          ),
                         ),
                         DropdownMenuItem(
                           value: 'highQuality',
