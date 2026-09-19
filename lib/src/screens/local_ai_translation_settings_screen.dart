@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/local_translation_provider.dart';
+import '../providers/translation_glossary_provider.dart';
 import '../services/local_translation_engine.dart';
 import '../services/subtitle_translation_cache.dart';
+import 'translation_glossary_screen.dart';
 
 class LocalAiTranslationSettingsScreen extends ConsumerWidget {
   const LocalAiTranslationSettingsScreen({super.key});
@@ -12,6 +14,8 @@ class LocalAiTranslationSettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncStatus = ref.watch(localTranslationModelProvider);
     final cacheStats = ref.watch(translationDocumentCacheStatsProvider);
+    final glossary = ref.watch(translationGlossaryProvider);
+    final engine = ref.watch(localTranslationEngineProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('AI Translate Lokal')),
@@ -53,6 +57,58 @@ class LocalAiTranslationSettingsScreen extends ConsumerWidget {
                   ref.read(localTranslationModelProvider.notifier).refresh(),
             ),
             data: (status) => _buildStatusCard(context, ref, status),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.menu_book_outlined),
+              title: const Text('Glosarium Jepang → Indonesia'),
+              subtitle: glossary.when(
+                loading: () => const Text('Memuat glosarium...'),
+                error: (_, __) => const Text('Glosarium tidak tersedia'),
+                data: (snapshot) => Text(
+                  '${snapshot.entries.length} istilah · '
+                  'perubahan otomatis membatalkan cache lama',
+                ),
+              ),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 18),
+              onTap: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const TranslationGlossaryScreen(),
+                  ),
+                );
+                ref.invalidate(translationDocumentCacheStatsProvider);
+              },
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Kemampuan Local Lite',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text('Glosarium Hiraukan: aktif'),
+                  Text(
+                    engine.capabilities.supportsNativeContextWindow
+                        ? 'Context window native: didukung'
+                        : 'Context window native: belum didukung oleh engine ini',
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Hiraukan tetap menyimpan capability contract ini agar '
+                    'engine Local HQ nanti dapat memakai konteks beberapa '
+                    'segment tanpa mengubah player atau cache.',
+                  ),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 16),
           cacheStats.when(
