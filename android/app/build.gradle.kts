@@ -36,7 +36,7 @@ android {
     defaultConfig {
         // Hiraukan owns a distinct Android identity instead of reusing KikoFlu's package.
         applicationId = "com.noirero.hiraukan"
-        minSdk = flutter.minSdkVersion
+        minSdk = maxOf(flutter.minSdkVersion, 23)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
