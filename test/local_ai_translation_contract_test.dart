@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kikoeru_flutter/src/models/ai_job_identity.dart';
 import 'package:kikoeru_flutter/src/models/audio_track.dart';
