@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/lyric.dart';
 import '../../providers/audio_provider.dart';
 import '../../providers/lyric_provider.dart';
+import '../../providers/subtitle_controller_provider.dart';
 import '../../providers/player_lyric_style_provider.dart';
 import '../../../l10n/app_localizations.dart';
 
@@ -15,6 +16,10 @@ class LyricDisplay extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Keep the universal subtitle bridge alive while the legacy lyric renderer
+    // remains the visible player surface.
+    ref.watch(subtitleControllerProvider);
+
     final currentLyric = ref.watch(currentLyricTextProvider);
     final lyricState = ref.watch(lyricControllerProvider);
     final lyricSettings = ref.watch(playerLyricSettingsProvider);
