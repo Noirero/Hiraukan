@@ -171,9 +171,14 @@ class UnifiedSourceService {
       );
     }
 
+    final availableSourceKinds =
+        bundle.sources.map((ref) => ref.source).toList(growable: false);
     final playable = bundle.playableSources;
     if (playable.isEmpty) {
-      throw StateError('This work has no in-app playback source');
+      throw SourcePlaybackUnavailableException(
+        sources: availableSourceKinds,
+        unsupportedOnly: true,
+      );
     }
 
     final playablePreferred = preferredSource?.canPlay == true
@@ -184,7 +189,12 @@ class UnifiedSourceService {
     for (final ref in _orderedRefs(playable, playablePreferred)) {
       attempted++;
       final adapter = _adapterFor(ref.source);
-      if (adapter == null) continue;
+      if (adapter == null) {
+        lastError = StateError(
+          'No adapter is registered for ${ref.source.label}',
+        );
+        continue;
+      }
       try {
         final files = await adapter.loadTracks(ref);
         if (files.isEmpty) {
@@ -197,15 +207,17 @@ class UnifiedSourceService {
           source: ref,
           files: files,
           usedFallback:
-              (playablePreferred != null && ref.source != playablePreferred) ||
+              (preferredSource != null && ref.source != preferredSource) ||
                   attempted > 1,
         );
       } catch (error) {
         lastError = error;
       }
     }
-    throw StateError(
-      'No playable source is currently available: $lastError',
+    throw SourcePlaybackUnavailableException(
+      sources: availableSourceKinds,
+      unsupportedOnly: false,
+      lastError: lastError,
     );
   }
 
@@ -345,6 +357,8 @@ class UnifiedSourceService {
           workId: work.id,
           hash: hash ?? identity,
           sourcePath: resolved.source.detailUrl,
+          sourceKey: resolved.source.source.id,
+          sourceWorkId: resolved.source.localId,
         ),
       );
     }

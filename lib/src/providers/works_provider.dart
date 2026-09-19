@@ -151,7 +151,7 @@ class WorksState extends Equatable {
   final int basePageSize;
   final Map<String, WorksModeSnapshot> modeStates;
 
-  WorksState({
+  const WorksState({
     this.layoutType = LayoutType.bigGrid,
     this.sortOption = SortOrder.release,
     this.sortDirection = SortDirection.desc,
@@ -372,7 +372,7 @@ class WorksNotifier extends StateNotifier<WorksState> {
       int totalCount;
       int currentPage = page;
       bool hasMore;
-      Map<UnifiedSourceKind, UnifiedSourceHealth>? health;
+      late Map<UnifiedSourceKind, UnifiedSourceHealth> health;
 
       if (unifiedBrowse) {
         final result = await _ref.read(unifiedSourceServiceProvider).search(
@@ -472,7 +472,7 @@ class WorksNotifier extends StateNotifier<WorksState> {
           loadMoreError: null,
         ),
       );
-      if (state.activeFeedKey == feedKey && health != null) {
+      if (state.activeFeedKey == feedKey) {
         state = state.copyWith(sourceHealth: health);
       }
     } catch (e) {

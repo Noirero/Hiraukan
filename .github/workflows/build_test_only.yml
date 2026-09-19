@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - beta
+  pull_request:
+    branches:
+      - beta
   workflow_dispatch:
 
 permissions:
@@ -15,8 +18,8 @@ concurrency:
 
 jobs:
   android:
-    name: Android ARM64 Beta APK
-    if: github.ref == 'refs/heads/beta'
+    name: Analyze, test, and build ARM64 Beta APK
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/beta'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -43,24 +46,53 @@ jobs:
       - name: Get Dependencies
         run: flutter pub get
 
+      - name: Generate localizations
+        run: flutter gen-l10n
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Run Beta regression tests
+        run: |
+          flutter test \
+            test/source_capabilities_test.dart \
+            test/subtitle_foundation_test.dart \
+            test/unified_source_playback_capability_test.dart \
+            test/locale_default_indonesian_test.dart \
+            test/unified_source_service_test.dart
+
+      - name: Compute monotonic Beta versionCode
+        id: beta_version
+        run: |
+          set -euo pipefail
+          # Epoch seconds give Beta artifacts one chronological versionCode
+          # across PR, push and release workflows, so newer Beta builds can
+          # update older Beta installs regardless of which workflow produced it.
+          build_number="$(date -u +%s)"
+          if [ "$build_number" -le 0 ] || [ "$build_number" -gt 2099997999 ]; then
+            echo "::error::Computed Beta versionCode is outside Android's safe range: $build_number"
+            exit 1
+          fi
+          echo "build_number=$build_number" >> "$GITHUB_OUTPUT"
+
       - name: Build Android ARM64 Beta APK
         run: |
           set -euo pipefail
           mkdir -p dist
-          build_number=$((4000000 + GITHUB_RUN_NUMBER))
           flutter build apk \
             --release \
             --flavor beta \
             --target-platform android-arm64 \
             --split-per-abi \
-            --build-number="$build_number"
+            --build-number="${{ steps.beta_version.outputs.build_number }}"
           mv build/app/outputs/flutter-apk/app-arm64-v8a-beta-release.apk \
             dist/Hiraukan-android-arm64-v8a-beta.apk
 
-      - name: Verify Android Beta identity and signing
+      - name: Verify Android Beta identity, version, ABI and signing
         env:
           EXPECTED_PACKAGE: com.noirero.hiraukan.beta
           EXPECTED_CERT_SHA256: c078bbb5af0d981625e1f05b52e0618c1111002c4ff2b2f11dc08a7bab702505
+          EXPECTED_BASE_VERSION_CODE: ${{ steps.beta_version.outputs.build_number }}
         run: |
           set -euo pipefail
           build_tools_dir="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
@@ -69,7 +101,10 @@ jobs:
           apk="dist/Hiraukan-android-arm64-v8a-beta.apk"
 
           badging="$("$aapt" dump badging "$apk")"
-          package_name="$(sed -n "s/.*package: name='\([^']*\)'.*/\1/p" <<< "$badging" | head -n1)"
+          package_line="$(printf '%s\n' "$badging" | sed -n '1p')"
+          package_name="$(sed -n "s/.*package: name='\([^']*\)'.*/\1/p" <<< "$package_line")"
+          version_code="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<< "$package_line")"
+          native_code="$(printf '%s\n' "$badging" | sed -n "s/^native-code: //p" | head -n1)"
           app_label="$(sed -n "s/^application-label:'\([^']*\)'.*/\1/p" <<< "$badging" | head -n1)"
 
           if [ "$package_name" != "$EXPECTED_PACKAGE" ]; then
@@ -78,6 +113,19 @@ jobs:
           fi
           if [ "$app_label" != "Hiraukan Beta" ]; then
             echo "::error::Unexpected app label: $app_label"
+            exit 1
+          fi
+          expected_arm64_code=$((EXPECTED_BASE_VERSION_CODE + 2000))
+          if [ "$version_code" -ne "$expected_arm64_code" ]; then
+            echo "::error::Unexpected ARM64 versionCode: $version_code (expected $expected_arm64_code)"
+            exit 1
+          fi
+          if ! grep -q "arm64-v8a" <<< "$native_code"; then
+            echo "::error::APK is not arm64-v8a: $native_code"
+            exit 1
+          fi
+          if grep -Eq "armeabi-v7a|x86|x86_64" <<< "$native_code"; then
+            echo "::error::Unexpected ABI set: $native_code"
             exit 1
           fi
 
@@ -96,6 +144,8 @@ jobs:
             echo "::error::Unexpected signing certificate: $actual_cert"
             exit 1
           fi
+
+          echo "Verified BETA build: package=$package_name versionCode=$version_code ABI=$native_code"
 
       - name: Upload Android Beta APK
         uses: actions/upload-artifact@v6

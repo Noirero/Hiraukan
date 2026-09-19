@@ -403,18 +403,14 @@ class _KikoFluFeaturesSettingsScreenState
           Card(
             child: Column(
               children: [
-                SwitchListTile(
-                  secondary: const Icon(Icons.high_quality_rounded),
-                  title: const Text('Hi-Res output'),
-                  subtitle: const Text(
-                    'Falls back safely to normal playback when native support is unavailable.',
+                const SwitchListTile(
+                  secondary: Icon(Icons.high_quality_rounded),
+                  title: Text('Hi-Res output'),
+                  subtitle: Text(
+                    'Belum didukung di Android. Playback normal tetap digunakan.',
                   ),
-                  value: _settings.hiResEnabled,
-                  onChanged: (value) async {
-                    await _settings.setHiResEnabled(value);
-                    await HiResAudioService.instance.setEnabled(value);
-                    _refresh();
-                  },
+                  value: false,
+                  onChanged: null,
                 ),
                 ListTile(
                   leading: const Icon(Icons.usb_rounded),

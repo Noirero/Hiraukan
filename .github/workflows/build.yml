@@ -1,14 +1,14 @@
-name: Main Android Release
+name: Hiraukan Beta Android Release
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version, for example 3.8.3 or v3.8.3'
+        description: 'Beta version, for example 3.8.3 or v3.8.3'
         required: true
         type: string
       release_notes:
-        description: 'Release notes in Markdown'
+        description: 'Beta release notes in Markdown'
         required: true
         type: string
 
@@ -16,13 +16,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: hiraukan-android-release
+  group: hiraukan-beta-android-release
   cancel-in-progress: false
 
 jobs:
   prepare:
-    name: Prepare Main Release Metadata
-    if: github.ref == 'refs/heads/main'
+    name: Prepare Beta Release Metadata
+    if: github.ref == 'refs/heads/beta'
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -40,30 +40,21 @@ jobs:
           set -euo pipefail
 
           version="${INPUT_VERSION#v}"
-          if [[ ! "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::Version must use MAJOR.MINOR.PATCH, for example 3.8.3."
             exit 1
           fi
 
-          major="${BASH_REMATCH[1]}"
-          minor="${BASH_REMATCH[2]}"
-          patch="${BASH_REMATCH[3]}"
-          if (( minor > 999 || patch > 999 )); then
-            echo "::error::MINOR and PATCH must be 0-999."
-            exit 1
-          fi
-
-          build_number=$((major * 1000000 + minor * 1000 + patch))
-          if (( build_number <= 0 || build_number > 2100000000 )); then
-            echo "::error::Computed Android versionCode is outside the supported range."
-            exit 1
-          fi
-
-          tag="v${version}"
+          tag="v${version}-beta"
           suffix="${version//./}"
+          build_number="$(date -u +%s)"
+          if [ "$build_number" -le 0 ] || [ "$build_number" -gt 2099997999 ]; then
+            echo "::error::Computed Beta versionCode is outside Android's safe range: $build_number"
+            exit 1
+          fi
 
           if gh release view "$tag" >/dev/null 2>&1; then
-            echo "::error::Release $tag already exists. Choose a new version."
+            echo "::error::Beta release $tag already exists. Choose a new version."
             exit 1
           fi
           if gh api "repos/${GH_REPO}/git/ref/tags/${tag}" >/dev/null 2>&1; then
@@ -77,36 +68,17 @@ jobs:
           echo "build_number=$build_number" >> "$GITHUB_OUTPUT"
 
   android:
-    name: Android ARM64 Main Release APK
+    name: Build signed Hiraukan Beta ARM64 APK
     needs: prepare
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
-      - name: Require permanent Android signing
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          ANDROID_CERT_SHA256: ${{ secrets.ANDROID_CERT_SHA256 }}
+      - name: Prepare stable Beta signing key
         run: |
           set -euo pipefail
-          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD ANDROID_CERT_SHA256; do
-            if [ -z "${!name:-}" ]; then
-              echo "::error::$name is required. Production releases must never fall back to a debug/test key."
-              exit 1
-            fi
-          done
-
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-key.jks
-          cat <<PROPS > android/key.properties
-          storeFile=app/release-key.jks
-          storePassword=$ANDROID_KEYSTORE_PASSWORD
-          keyAlias=$ANDROID_KEY_ALIAS
-          keyPassword=$ANDROID_KEY_PASSWORD
-          PROPS
-          chmod 600 android/app/release-key.jks android/key.properties
+          base64 --decode .github/test-signing/hiraukan-test-key.jks.b64 > android/hiraukan-beta-key.jks
+          chmod 600 android/hiraukan-beta-key.jks
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -118,56 +90,88 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.44.7'
-          channel: 'stable'
+          channel: stable
           cache: true
 
       - name: Get Dependencies
         run: flutter pub get
 
-      - name: Build Android ARM64 APK
+      - name: Generate localizations
+        run: flutter gen-l10n
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Run Beta regression tests
+        run: |
+          flutter test \
+            test/source_capabilities_test.dart \
+            test/subtitle_foundation_test.dart \
+            test/unified_source_playback_capability_test.dart \
+            test/locale_default_indonesian_test.dart \
+            test/unified_source_service_test.dart
+
+      - name: Build Android ARM64 Beta APK
         run: |
           set -euo pipefail
           mkdir -p dist
           flutter build apk \
             --release \
-            --flavor prod \
+            --flavor beta \
             --target-platform android-arm64 \
             --split-per-abi \
             --build-name="${{ needs.prepare.outputs.version }}" \
             --build-number="${{ needs.prepare.outputs.build_number }}"
-          mv build/app/outputs/flutter-apk/app-prod-arm64-v8a-release.apk \
-            "dist/Hiraukan-android-arm64-v8a_${{ needs.prepare.outputs.suffix }}.apk"
+          mv build/app/outputs/flutter-apk/app-arm64-v8a-beta-release.apk \
+            "dist/Hiraukan-Beta-android-arm64-v8a_${{ needs.prepare.outputs.suffix }}.apk"
 
-      - name: Verify Android identity, version, and signing
+      - name: Verify Beta identity, version, ABI and signing
         env:
-          EXPECTED_VERSION: ${{ needs.prepare.outputs.version }}
-          EXPECTED_CERT_SHA256: ${{ secrets.ANDROID_CERT_SHA256 }}
+          EXPECTED_VERSION: ${{ needs.prepare.outputs.version }}-beta
+          EXPECTED_BASE_VERSION_CODE: ${{ needs.prepare.outputs.build_number }}
+          EXPECTED_CERT_SHA256: c078bbb5af0d981625e1f05b52e0618c1111002c4ff2b2f11dc08a7bab702505
         run: |
           set -euo pipefail
           build_tools_dir="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
           aapt="$build_tools_dir/aapt"
           apksigner="$build_tools_dir/apksigner"
-          apk="dist/Hiraukan-android-arm64-v8a_${{ needs.prepare.outputs.suffix }}.apk"
+          apk="dist/Hiraukan-Beta-android-arm64-v8a_${{ needs.prepare.outputs.suffix }}.apk"
 
           badging="$("$aapt" dump badging "$apk")"
-          package_name="$(sed -n "s/.*package: name='\([^']*\)'.*/\1/p" <<< "$badging" | head -n1)"
-          version_name="$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" <<< "$badging" | head -n1)"
+          package_line="$(printf '%s\n' "$badging" | sed -n '1p')"
+          package_name="$(sed -n "s/.*package: name='\([^']*\)'.*/\1/p" <<< "$package_line")"
+          version_name="$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" <<< "$package_line")"
+          version_code="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<< "$package_line")"
+          native_code="$(printf '%s\n' "$badging" | sed -n "s/^native-code: //p" | head -n1)"
           app_label="$(sed -n "s/^application-label:'\([^']*\)'.*/\1/p" <<< "$badging" | head -n1)"
 
-          if [ "$package_name" != "com.noirero.hiraukan" ]; then
-            echo "::error::Unexpected package: $package_name"
+          if [ "$package_name" != "com.noirero.hiraukan.beta" ]; then
+            echo "::error::Unexpected Beta package: $package_name"
             exit 1
           fi
           if [ "$version_name" != "$EXPECTED_VERSION" ]; then
-            echo "::error::Unexpected versionName: $version_name"
+            echo "::error::Unexpected Beta versionName: $version_name"
             exit 1
           fi
-          if [ "$app_label" != "Hiraukan" ]; then
-            echo "::error::Unexpected app label: $app_label"
+          if [ "$app_label" != "Hiraukan Beta" ]; then
+            echo "::error::Unexpected Beta app label: $app_label"
             exit 1
           fi
 
-          expected_cert="$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+          expected_arm64_code=$((EXPECTED_BASE_VERSION_CODE + 2000))
+          if [ "$version_code" -ne "$expected_arm64_code" ]; then
+            echo "::error::Unexpected ARM64 versionCode: $version_code (expected $expected_arm64_code)"
+            exit 1
+          fi
+          if ! grep -q "arm64-v8a" <<< "$native_code"; then
+            echo "::error::Beta APK is not arm64-v8a: $native_code"
+            exit 1
+          fi
+          if grep -Eq "armeabi-v7a|x86|x86_64" <<< "$native_code"; then
+            echo "::error::Unexpected ABI set: $native_code"
+            exit 1
+          fi
+
           cert_output="$("$apksigner" verify --print-certs "$apk" 2>&1)"
           actual_cert="$(
             printf '%s\n' "$cert_output" |
@@ -179,21 +183,23 @@ jobs:
               tr -d '[:space:]:' |
               tr '[:upper:]' '[:lower:]'
           )"
-          if [ -z "$actual_cert" ] || [ "$actual_cert" != "$expected_cert" ]; then
-            echo "::error::Android release signing certificate mismatch: $actual_cert"
+          if [ "$actual_cert" != "$EXPECTED_CERT_SHA256" ]; then
+            echo "::error::Unexpected Beta signing certificate: $actual_cert"
             exit 1
           fi
 
-      - name: Upload Android release APK
+          echo "Verified BETA release APK: package=$package_name versionName=$version_name versionCode=$version_code"
+
+      - name: Upload Beta release APK
         uses: actions/upload-artifact@v6
         with:
-          name: release-assets-android
-          path: dist/Hiraukan-android-arm64-v8a_${{ needs.prepare.outputs.suffix }}.apk
+          name: release-assets-hiraukan-beta
+          path: dist/Hiraukan-Beta-android-arm64-v8a_${{ needs.prepare.outputs.suffix }}.apk
           if-no-files-found: error
           retention-days: 7
 
   release:
-    name: Create GitHub Release
+    name: Create Hiraukan Beta GitHub Prerelease
     needs:
       - prepare
       - android
@@ -201,24 +207,25 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download Android release artifact
+      - name: Download Beta release artifact
         uses: actions/download-artifact@v6
         with:
-          name: release-assets-android
+          name: release-assets-hiraukan-beta
           path: release-assets
 
-      - name: Verify and publish release atomically
+      - name: Verify and publish Beta prerelease atomically
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
           RELEASE_NOTES: ${{ inputs.release_notes }}
-          ASSET_NAME: Hiraukan-android-arm64-v8a_${{ needs.prepare.outputs.suffix }}.apk
+          ASSET_NAME: Hiraukan-Beta-android-arm64-v8a_${{ needs.prepare.outputs.suffix }}.apk
         run: |
           set -euo pipefail
           asset="release-assets/$ASSET_NAME"
           if [ ! -s "$asset" ]; then
-            echo "::error::Missing or empty Android release APK: $ASSET_NAME"
+            echo "::error::Missing or empty Beta APK: $ASSET_NAME"
             exit 1
           fi
 
@@ -243,15 +250,15 @@ jobs:
           release_json="$(gh api --method POST "repos/${GH_REPO}/releases" \
             -f "tag_name=${TAG}" \
             -f "target_commitish=${GITHUB_SHA}" \
-            -f "name=${TAG}" \
+            -f "name=Hiraukan Beta ${VERSION}" \
             -f "body=${RELEASE_NOTES}" \
             -F 'draft=true' \
-            -F 'prerelease=false')"
+            -F 'prerelease=true')"
           release_id="$(jq -r '.id // empty' <<< "$release_json")"
           release_tag="$(jq -r '.tag_name // empty' <<< "$release_json")"
           upload_url="$(jq -r '.upload_url // empty' <<< "$release_json" | sed 's/{?name,label}$//')"
           if [ -z "$release_id" ] || [ -z "$upload_url" ]; then
-            echo "::error::GitHub did not return a usable draft release."
+            echo "::error::GitHub did not return a usable Beta draft release."
             exit 1
           fi
           draft_created=true
@@ -266,12 +273,12 @@ jobs:
 
           uploaded_size="$(gh api "repos/${GH_REPO}/releases/${release_id}" --jq ".assets[] | select(.name == \"${ASSET_NAME}\") | .size")"
           if [ -z "$uploaded_size" ] || [ "$uploaded_size" -le 0 ]; then
-            echo "::error::Uploaded APK is missing or empty in draft release."
+            echo "::error::Uploaded Beta APK is missing or empty."
             exit 1
           fi
 
           gh api --method PATCH "repos/${GH_REPO}/releases/${release_id}" \
             -F 'draft=false' \
-            -f 'make_latest=true' >/dev/null
+            -F 'prerelease=true' >/dev/null
           draft_created=false
           trap - ERR INT TERM

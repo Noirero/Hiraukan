@@ -21,6 +21,8 @@ AudioTrack _$AudioTrackFromJson(Map<String, dynamic> json) => AudioTrack(
       hash: json['hash'] as String?,
       sourcePath: json['sourcePath'] as String?,
       subtitleWorkDirPath: json['subtitleWorkDirPath'] as String?,
+      sourceKey: json['sourceKey'] as String?,
+      sourceWorkId: json['sourceWorkId'] as String?,
     );
 
 Map<String, dynamic> _$AudioTrackToJson(AudioTrack instance) =>
@@ -37,6 +39,8 @@ Map<String, dynamic> _$AudioTrackToJson(AudioTrack instance) =>
       'hash': instance.hash,
       'sourcePath': instance.sourcePath,
       'subtitleWorkDirPath': instance.subtitleWorkDirPath,
+      'sourceKey': instance.sourceKey,
+      'sourceWorkId': instance.sourceWorkId,
     };
 
 Playlist _$PlaylistFromJson(Map<String, dynamic> json) => Playlist(
