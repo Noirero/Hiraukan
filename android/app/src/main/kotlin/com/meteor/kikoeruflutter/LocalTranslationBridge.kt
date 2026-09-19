@@ -1,9 +1,7 @@
 package com.meteor.kikoeruflutter
 
-import android.content.Context
 import com.google.mlkit.common.model.DownloadConditions
 import com.google.mlkit.common.model.RemoteModelManager
-import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.TranslateRemoteModel
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.TranslatorOptions
@@ -12,7 +10,6 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
 class LocalTranslationBridge(
-    private val context: Context,
     messenger: BinaryMessenger,
 ) : MethodChannel.MethodCallHandler {
     companion object {
@@ -162,9 +159,7 @@ class LocalTranslationBridge(
             result.success(text)
             return
         }
-        if (TranslateLanguage.fromLanguageTag(sourceLanguage) == null ||
-            TranslateLanguage.fromLanguageTag(targetLanguage) == null
-        ) {
+        if (sourceLanguage != DEFAULT_SOURCE || targetLanguage != DEFAULT_TARGET) {
             result.error(
                 "UNSUPPORTED_LANGUAGE",
                 "Unsupported local translation pair: $sourceLanguage -> $targetLanguage",
