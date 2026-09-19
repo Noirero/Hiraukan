@@ -349,7 +349,7 @@ class _KikoFluFeaturesSettingsScreenState
                       initialValue: _settings.asrProfile,
                       decoration:
                           const InputDecoration(labelText: 'ASR profile'),
-                      items: const [
+                      items: [
                         DropdownMenuItem(
                           value: 'auto',
                           child: Text('Auto'),
