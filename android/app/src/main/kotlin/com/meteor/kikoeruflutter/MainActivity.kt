@@ -37,7 +37,6 @@ class MainActivity : AudioServiceFragmentActivity() {
             messenger = flutterEngine.dartExecutor.binaryMessenger
         )
         localTranslationBridge = LocalTranslationBridge(
-            context = applicationContext,
             messenger = flutterEngine.dartExecutor.binaryMessenger
         )
 
