@@ -28,6 +28,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
       suffix: ${{ steps.version.outputs.suffix }}
+      build_number: ${{ steps.version.outputs.build_number }}
     steps:
       - name: Normalize and validate version
         id: version
@@ -47,6 +48,17 @@ jobs:
           tag="v${version}"
           suffix="${version//./}"
 
+          IFS='.' read -r major minor patch <<< "$version"
+          if [ "$minor" -ge 1000 ] || [ "$patch" -ge 1000 ]; then
+            echo "::error::MINOR and PATCH must stay below 1000 for deterministic Android versionCode encoding."
+            exit 1
+          fi
+          build_number=$((10#$major * 1000000 + 10#$minor * 1000 + 10#$patch))
+          if [ "$build_number" -le 2001 ] || [ "$build_number" -gt 2099997999 ]; then
+            echo "::error::Computed Android build number $build_number is outside the safe update range."
+            exit 1
+          fi
+
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "::error::Release $tag already exists. Choose a new version."
             exit 1
@@ -60,7 +72,8 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "suffix=$suffix" >> "$GITHUB_OUTPUT"
-          echo "Building Android Main release $tag with filename suffix $suffix"
+          echo "build_number=$build_number" >> "$GITHUB_OUTPUT"
+          echo "Building Android Main release $tag with Android base versionCode $build_number"
 
   android:
     name: Android Main Build
@@ -71,7 +84,7 @@ jobs:
 
       - name: Set Application Version
         run: |
-          sed -i.bak -E 's/^version: .*/version: ${{ needs.prepare.outputs.version }}/' pubspec.yaml
+          sed -i.bak -E 's/^version: .*/version: ${{ needs.prepare.outputs.version }}+${{ needs.prepare.outputs.build_number }}/' pubspec.yaml
           rm pubspec.yaml.bak
 
       - name: Prepare Android Signing
@@ -82,10 +95,15 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "ANDROID_KEYSTORE_BASE64 secret missing; skipping signing setup."
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            exit 0
+          set -euo pipefail
+          missing=()
+          [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] || missing+=(ANDROID_KEYSTORE_BASE64)
+          [ -n "${ANDROID_KEYSTORE_PASSWORD:-}" ] || missing+=(ANDROID_KEYSTORE_PASSWORD)
+          [ -n "${ANDROID_KEY_ALIAS:-}" ] || missing+=(ANDROID_KEY_ALIAS)
+          [ -n "${ANDROID_KEY_PASSWORD:-}" ] || missing+=(ANDROID_KEY_PASSWORD)
+          if [ "${#missing[@]}" -ne 0 ]; then
+            echo "::error::Production signing is incomplete: ${missing[*]}. Refusing to create a release that cannot update installed Hiraukan."
+            exit 1
           fi
           printf "%s" "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-key.jks
           cat <<EOF > android/key.properties
@@ -95,6 +113,7 @@ jobs:
           keyPassword=$ANDROID_KEY_PASSWORD
           EOF
           chmod 600 android/app/release-key.jks android/key.properties
+          keytool -list -keystore android/app/release-key.jks -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" >/dev/null
           echo "configured=true" >> "$GITHUB_OUTPUT"
 
       - name: Setup Java
@@ -130,6 +149,7 @@ jobs:
         env:
           EXPECTED_VERSION: ${{ needs.prepare.outputs.version }}
           SIGNING_CONFIGURED: ${{ steps.android_signing.outputs.configured }}
+          EXPECTED_BUILD_NUMBER: ${{ needs.prepare.outputs.build_number }}
           EXPECTED_CERT_SHA256: b49fcc1a879b7dab15f223f7431dfbee447dbe268d1578fc549340c430ddc87f
         run: |
           set -euo pipefail
@@ -161,8 +181,16 @@ jobs:
             fi
           done
 
-          if [ "$arm64_code" -ne $((universal_code + 2000)) ]; then
-            echo "::error::arm64 versionCode $arm64_code does not preserve the legacy split offset from $universal_code."
+          if [ "$universal_code" -ne "$EXPECTED_BUILD_NUMBER" ]; then
+            echo "::error::Universal versionCode $universal_code does not match expected base code $EXPECTED_BUILD_NUMBER."
+            exit 1
+          fi
+          if [ "$arm64_code" -ne $((EXPECTED_BUILD_NUMBER + 2000)) ]; then
+            echo "::error::ARM64 versionCode $arm64_code does not match expected split code $((EXPECTED_BUILD_NUMBER + 2000))."
+            exit 1
+          fi
+          if [ "$SIGNING_CONFIGURED" != "true" ]; then
+            echo "::error::Production signing must be configured for a release build."
             exit 1
           fi
 

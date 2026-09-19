@@ -18,9 +18,13 @@ val hasReleaseKeystore = releaseKeystoreFile?.exists() == true
 // Keep the historical production applicationId so signed APKs can update
 // existing Hiraukan installations. CI may override it only for standalone
 // validation builds that intentionally coexist with production.
+val productionApplicationId = "com.meteor.kikoeruflutter"
 val applicationIdOverride = System.getenv("HIRAUAKAN_APPLICATION_ID")
     ?.trim()
     ?.takeIf { it.isNotEmpty() }
+val resolvedApplicationId = applicationIdOverride ?: productionApplicationId
+val isStandaloneValidationBuild =
+    resolvedApplicationId != productionApplicationId
 
 android {
     namespace = "com.meteor.kikoeruflutter"
@@ -38,7 +42,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = applicationIdOverride ?: "com.meteor.kikoeruflutter"
+        applicationId = resolvedApplicationId
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -60,10 +64,13 @@ android {
 
     buildTypes {
         release {
-            signingConfig = if (hasReleaseKeystore) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
+            signingConfig = when {
+                hasReleaseKeystore -> signingConfigs.getByName("release")
+                isStandaloneValidationBuild -> signingConfigs.getByName("debug")
+                else -> throw GradleException(
+                    "Production release build requires the historical Hiraukan signing keystore. " +
+                        "Refusing to create com.meteor.kikoeruflutter with a debug certificate."
+                )
             }
         }
         debug {
