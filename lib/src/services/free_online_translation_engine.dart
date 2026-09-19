@@ -17,9 +17,10 @@ typedef FreeOnlineTranslateClient = Future<String> Function(
 class FreeOnlineTranslationEngine implements TranslationEngine {
   FreeOnlineTranslationEngine._({
     FreeOnlineTranslateClient? client,
-    this.requestTimeout = const Duration(seconds: 12),
-    this.maxAttempts = 3,
-    this.retryBaseDelay = const Duration(milliseconds: 350),
+    this.requestTimeout = const Duration(seconds: 8),
+    this.maxAttempts = 2,
+    this.retryBaseDelay = const Duration(milliseconds: 300),
+    this.failureCooldown = const Duration(seconds: 30),
   }) : _client = client ?? _defaultClient;
 
   /// Test-only constructor that does not require real network access.
@@ -28,6 +29,7 @@ class FreeOnlineTranslationEngine implements TranslationEngine {
     this.requestTimeout = const Duration(milliseconds: 100),
     this.maxAttempts = 3,
     this.retryBaseDelay = Duration.zero,
+    this.failureCooldown = Duration.zero,
   }) : _client = client;
 
   static final FreeOnlineTranslationEngine instance =
@@ -37,7 +39,9 @@ class FreeOnlineTranslationEngine implements TranslationEngine {
   final Duration requestTimeout;
   final int maxAttempts;
   final Duration retryBaseDelay;
+  final Duration failureCooldown;
   final Map<String, Future<String>> _inFlight = {};
+  DateTime? _retryAfter;
 
   static final GoogleTranslator _translator = GoogleTranslator();
 
@@ -78,6 +82,15 @@ class FreeOnlineTranslationEngine implements TranslationEngine {
       );
     }
 
+    final retryAfter = _retryAfter;
+    if (retryAfter != null && DateTime.now().isBefore(retryAfter)) {
+      return Future.error(
+        StateError(
+          'Online translation is temporarily paused after a network failure.',
+        ),
+      );
+    }
+
     final key = '$sourceLanguage|$targetLanguage|$text';
     final existing = _inFlight[key];
     if (existing != null) return existing;
@@ -87,7 +100,15 @@ class FreeOnlineTranslationEngine implements TranslationEngine {
       text,
       sourceLanguage: sourceLanguage,
       targetLanguage: targetLanguage,
-    ).whenComplete(() {
+    ).then((value) {
+      _retryAfter = null;
+      return value;
+    }, onError: (Object error, StackTrace stackTrace) {
+      if (failureCooldown > Duration.zero) {
+        _retryAfter = DateTime.now().add(failureCooldown);
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }).whenComplete(() {
       if (identical(_inFlight[key], tracked)) {
         _inFlight.remove(key);
       }
