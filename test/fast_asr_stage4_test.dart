@@ -7,6 +7,7 @@ import 'package:kikoeru_flutter/src/services/reazon_fast_model_service.dart';
 import 'package:kikoeru_flutter/src/services/reazon_timestamp_segmenter.dart';
 import 'package:kikoeru_flutter/src/services/speech_recognition_coordinator.dart';
 import 'package:kikoeru_flutter/src/services/speech_recognition_engine.dart';
+import 'package:kikoeru_flutter/src/services/whisper_fast_candidate_engine.dart';
 
 void main() {
   test('Fast ASR stays below the documented ReazonSpeech clip limit', () {
@@ -144,6 +145,13 @@ void main() {
     expect(spans.single.text, '私は');
     expect(spans.single.start, const Duration(seconds: 5));
     expect(spans.single.end, const Duration(seconds: 15));
+  });
+
+  test('Whisper tiny remains a zero-extra-runtime Fast benchmark candidate', () {
+    const candidate = WhisperFastCandidateEngine();
+    expect(candidate.id, 'whisper_tiny_fast_candidate');
+    expect(candidate.profile, SpeechRecognitionProfile.fast);
+    expect(WhisperFastCandidateEngine.modelName, 'tiny');
   });
 
   test('profile parsing is stable and unknown values stay compatibility-safe', () {
