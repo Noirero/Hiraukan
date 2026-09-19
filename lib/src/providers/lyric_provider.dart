@@ -18,7 +18,7 @@ import '../services/subtitle_database.dart';
 import '../services/log_service.dart';
 import '../utils/encoding_utils.dart';
 import '../services/translation_service.dart';
-import '../services/local_subtitle_translation_service.dart';
+import '../services/contextual_subtitle_translation_service.dart';
 import '../services/translation_glossary_service.dart';
 import '../services/subtitle_translation_cache.dart';
 import '../services/subtitle_translation_planner.dart';
@@ -26,7 +26,7 @@ import '../services/storage_service.dart';
 import 'auth_provider.dart';
 import 'audio_provider.dart';
 import 'settings_provider.dart';
-import 'local_translation_quality_provider.dart';
+import 'translation_quality_provider.dart';
 import 'subtitle_display_mode_provider.dart';
 import '../subtitles/subtitle_controller.dart';
 
@@ -655,11 +655,11 @@ class LyricController extends StateNotifier<LyricState> {
       final isFreeOnline = await translationService.isFreeOnlineSelected();
       final freeOnlineIdentity =
           isFreeOnline ? await translationService.freeOnlineEngineIdentity() : null;
-      final localQuality = ref.read(localTranslationQualityProvider);
+      final translationQuality = ref.read(translationQualityProvider);
       final glossary =
           isFreeOnline ? await TranslationGlossaryService.instance.load() : null;
       final translationStrategy = isFreeOnline
-          ? (localQuality.contextEnabled
+          ? (translationQuality.contextEnabled
               ? 'free-online-context-v1'
               : 'free-online-segment-v1')
           : 'legacy-provider-v1';
@@ -758,7 +758,7 @@ class LyricController extends StateNotifier<LyricState> {
       }
 
       if (isFreeOnline && glossary != null) {
-        final localSubtitleTranslator = LocalSubtitleTranslationService();
+        final subtitleTranslator = ContextualSubtitleTranslationService();
         final allSourceTexts =
             sourceLyrics.map((line) => line.text).toList(growable: false);
         final pending = indexMap.toSet();
@@ -773,7 +773,7 @@ class LyricController extends StateNotifier<LyricState> {
               ref.read(positionProvider).value ?? Duration.zero;
           final effectivePlaybackPosition =
               rawPlaybackPosition - sourceOffset;
-          final lyricIndex = localQuality.playbackPriorityEnabled
+          final lyricIndex = translationQuality.playbackPriorityEnabled
               ? SubtitleTranslationPlanner.pickNextIndex(
                   pending: pending,
                   lyrics: sourceLyrics,
@@ -782,11 +782,11 @@ class LyricController extends StateNotifier<LyricState> {
               : pending.first;
 
           final translatedText =
-              await localSubtitleTranslator.translateSegment(
+              await subtitleTranslator.translateSegment(
             sourceLines: allSourceTexts,
             index: lyricIndex,
             glossary: glossary,
-            contextEnabled: localQuality.contextEnabled,
+            contextEnabled: translationQuality.contextEnabled,
           );
           if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
             return null;
