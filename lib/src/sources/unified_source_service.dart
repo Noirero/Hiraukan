@@ -207,7 +207,7 @@ class UnifiedSourceService {
           source: ref,
           files: files,
           usedFallback:
-              (playablePreferred != null && ref.source != playablePreferred) ||
+              (preferredSource != null && ref.source != preferredSource) ||
                   attempted > 1,
         );
       } catch (error) {
