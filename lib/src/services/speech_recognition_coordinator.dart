@@ -33,7 +33,7 @@ class SpeechRecognitionCoordinator {
 
   // Fast stays unavailable to normal profile routing until real Android/ASMR
   // benchmark results pass the acceptance policy in asr_benchmark.dart.
-  static const bool fastProfileApproved = false;
+  static final bool fastProfileApproved = false;
 
   SpeechRecognitionProfile profileFromName(String value) {
     return SpeechRecognitionProfile.values.firstWhere(
