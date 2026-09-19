@@ -36,7 +36,7 @@ android {
     defaultConfig {
         // Hiraukan owns a distinct Android identity instead of reusing KikoFlu's package.
         applicationId = "com.noirero.hiraukan"
-        minSdk = flutter.minSdkVersion
+        minSdk = maxOf(flutter.minSdkVersion, 23)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -106,6 +106,10 @@ dependencies {
     // theme. Declare it explicitly instead of relying on a transitive AndroidX
     // dependency so the theme resources stay deterministic across plugin updates.
     implementation("androidx.appcompat:appcompat:1.8.0")
+
+    // Local Lite translation runtime. Japanese/Indonesian language models
+    // are downloaded on demand by ML Kit and are not bundled in the APK.
+    implementation("com.google.mlkit:translate:17.0.3")
 
     val media3Version = "1.6.1"
     implementation("androidx.media3:media3-exoplayer:$media3Version")

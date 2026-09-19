@@ -14,6 +14,7 @@ class MainActivity : AudioServiceFragmentActivity() {
     private var floatingLyricPlugin: FloatingLyricPlugin? = null
     private var audioHapticsBridge: AudioHapticsBridge? = null
     private var subtitleDirectoryPicker: SubtitleDirectoryPicker? = null
+    private var localTranslationBridge: LocalTranslationBridge? = null
     private val screenAwakeChannelName = "com.meteor.kikoeruflutter/screen_awake"
     private val systemProxyChannelName = "com.meteor.kikoeruflutter/system_proxy"
 
@@ -34,6 +35,9 @@ class MainActivity : AudioServiceFragmentActivity() {
         )
         subtitleDirectoryPicker = SubtitleDirectoryPicker(
             activity = this,
+            messenger = flutterEngine.dartExecutor.binaryMessenger
+        )
+        localTranslationBridge = LocalTranslationBridge(
             messenger = flutterEngine.dartExecutor.binaryMessenger
         )
 
@@ -111,6 +115,8 @@ class MainActivity : AudioServiceFragmentActivity() {
         audioHapticsBridge = null
         subtitleDirectoryPicker?.dispose()
         subtitleDirectoryPicker = null
+        localTranslationBridge?.dispose()
+        localTranslationBridge = null
         super.onDestroy()
     }
 }

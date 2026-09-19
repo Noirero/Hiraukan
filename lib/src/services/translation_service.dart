@@ -2,10 +2,14 @@ import 'dart:ui';
 import 'package:translator/translator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
+import 'package:crypto/crypto.dart';
 import 'dart:convert';
 import 'youdao_translator.dart';
 import 'microsoft_translator.dart';
 import 'llm_translator.dart';
+import 'ai_heavy_job_queue.dart';
+import 'local_translation_engine.dart';
+import 'mlkit_local_translation_engine.dart';
 import 'log_service.dart';
 import '../providers/settings_provider.dart';
 import '../utils/global_keys.dart';
@@ -21,7 +25,9 @@ class TranslationService {
   final YoudaoTranslator _youdaoTranslator = YoudaoTranslator();
   final MicrosoftTranslator _microsoftTranslator = MicrosoftTranslator();
   final LLMTranslator _llmTranslator = LLMTranslator();
-  static const String _cachePrefix = 'translation_cache_';
+  final LocalTranslationEngine _localTranslator =
+      MlKitLocalTranslationEngine.instance;
+  static const String _cachePrefix = 'translation_cache_v2_';
 
   Locale _getEffectiveLocaleFromPreferences(SharedPreferences prefs) {
     final language = prefs.getString('locale_language');
@@ -136,7 +142,7 @@ class TranslationService {
   /// 获取当前 locale 对应的默认 LLM prompt
   Future<String> getDefaultLLMPromptForCurrentLocale() async {
     final prefs = await SharedPreferences.getInstance();
-    final selectedSource = prefs.getString('translation_source') ?? 'google';
+    final selectedSource = prefs.getString('translation_source') ?? TranslationSource.google.value;
     final languageConfig = _getLanguageConfig(prefs, selectedSource);
     return getDefaultLLMPrompt(
       languageConfig.targetLocale,
@@ -150,21 +156,56 @@ class TranslationService {
     if (text.isEmpty) return text;
 
     final prefs = await SharedPreferences.getInstance();
-    final selectedSource = prefs.getString('translation_source') ?? 'google';
+    final selectedSource = prefs.getString('translation_source') ?? TranslationSource.google.value;
     final languageConfig = _getLanguageConfig(prefs, selectedSource);
     final cacheSourceLang = languageConfig.cacheSourceLang(sourceLang);
     final cacheTargetLang = languageConfig.cacheTargetLang();
-    final targetLocale = languageConfig.targetLocale;
+    final targetLocale = selectedSource == TranslationSource.localAi.value
+        ? const Locale('id')
+        : languageConfig.targetLocale;
+    final engineCacheKey = selectedSource == TranslationSource.localAi.value
+        ? '${_localTranslator.id}:${_localTranslator.version}'
+        : selectedSource;
 
     // 检查缓存
-    final cachedTranslation =
-        await _getCachedTranslation(text, cacheSourceLang, cacheTargetLang);
+    final cachedTranslation = await _getCachedTranslation(
+      text,
+      cacheSourceLang,
+      selectedSource == TranslationSource.localAi.value ? 'id' : cacheTargetLang,
+      engineCacheKey,
+    );
     if (cachedTranslation != null) {
       return cachedTranslation;
     }
 
     // 构建尝试列表
     final sourcesToTry = <String>[selectedSource];
+
+    // Local AI never falls back to an online provider without an explicit
+    // user choice. Missing models are surfaced to the UI as a model state.
+    if (selectedSource == TranslationSource.localAi.value) {
+      try {
+        final result = await AiHeavyJobQueue.instance.run(
+          () => _localTranslator.translate(
+            text,
+            sourceLanguage:
+                sourceLang == null || sourceLang == 'auto' ? 'ja' : sourceLang,
+            targetLanguage: 'id',
+          ),
+        );
+        await _cacheTranslation(
+          text,
+          result,
+          cacheSourceLang,
+          'id',
+          engineCacheKey,
+        );
+        return result;
+      } catch (error) {
+        _log.captureOutput('Local translation error: $error');
+        rethrow;
+      }
+    }
 
     // 默认回退顺序
     final fallbackOrder = ['youdao', 'microsoft', 'google', 'llm'];
@@ -215,7 +256,13 @@ class TranslationService {
         }
 
         // 缓存结果
-        await _cacheTranslation(text, result, cacheSourceLang, cacheTargetLang);
+        await _cacheTranslation(
+          text,
+          result,
+          cacheSourceLang,
+          cacheTargetLang,
+          source,
+        );
 
         return result;
       } catch (e) {
@@ -249,13 +296,16 @@ class TranslationService {
   }
 
   /// 批量翻译
-  Future<List<String>> translateBatch(List<String> texts,
-      {String? sourceLang}) async {
+  Future<List<String>> translateBatch(
+    List<String> texts, {
+    String? sourceLang,
+    void Function(int current, int total)? onProgress,
+  }) async {
     if (texts.isEmpty) return [];
 
     // 获取并发设置
     final prefs = await SharedPreferences.getInstance();
-    final source = prefs.getString('translation_source') ?? 'google';
+    final source = prefs.getString('translation_source') ?? TranslationSource.google.value;
     int concurrency = 1;
     if (source == 'llm') {
       concurrency = LLMSettings.normalizeConcurrency(
@@ -276,9 +326,16 @@ class TranslationService {
           final translated =
               await translate(texts[index], sourceLang: sourceLang);
           results[index] = translated;
+        } on LocalTranslationModelNotInstalledException {
+          rethrow;
         } catch (e) {
           _log.captureOutput('Translation batch item $index failed: $e');
           results[index] = texts[index];
+        } finally {
+          onProgress?.call(
+            results.where((value) => value.isNotEmpty).length,
+            texts.length,
+          );
         }
       }
     }
@@ -382,10 +439,14 @@ class TranslationService {
 
   /// 获取缓存的翻译
   Future<String?> _getCachedTranslation(
-      String text, String sourceLang, String targetLang) async {
+    String text,
+    String sourceLang,
+    String targetLang,
+    String engineKey,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final key = _getCacheKey(text, sourceLang, targetLang);
+      final key = _getCacheKey(text, sourceLang, targetLang, engineKey);
       final cached = prefs.getString(key);
       if (cached != null) {
         final data = json.decode(cached);
@@ -403,11 +464,16 @@ class TranslationService {
   }
 
   /// 缓存翻译结果
-  Future<void> _cacheTranslation(String text, String translation,
-      String sourceLang, String targetLang) async {
+  Future<void> _cacheTranslation(
+    String text,
+    String translation,
+    String sourceLang,
+    String targetLang,
+    String engineKey,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final key = _getCacheKey(text, sourceLang, targetLang);
+      final key = _getCacheKey(text, sourceLang, targetLang, engineKey);
       final data = json.encode({
         'translation': translation,
         'timestamp': DateTime.now().millisecondsSinceEpoch,
@@ -419,8 +485,16 @@ class TranslationService {
   }
 
   /// 生成缓存键（包含目标语言）
-  String _getCacheKey(String text, String sourceLang, String targetLang) {
-    return '$_cachePrefix${sourceLang}_${targetLang}_${text.hashCode}';
+  String _getCacheKey(
+    String text,
+    String sourceLang,
+    String targetLang,
+    String engineKey,
+  ) {
+    final contentHash = sha256.convert(utf8.encode(text)).toString();
+    final engineHash = sha256.convert(utf8.encode(engineKey)).toString();
+    return '$_cachePrefix${sourceLang}_${targetLang}_'
+        '${engineHash.substring(0, 12)}_$contentHash';
   }
 
   /// 清除所有翻译缓存

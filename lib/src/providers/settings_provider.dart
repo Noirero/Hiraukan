@@ -246,6 +246,7 @@ enum AudioFormat {
 
 /// 翻译源
 enum TranslationSource {
+  localAi('AI Lokal (Gratis)', 'local_ai'),
   google('Google 翻译', 'google'),
   youdao('Youdao 翻译', 'youdao'),
   microsoft('Microsoft 翻译', 'microsoft'),
@@ -259,6 +260,7 @@ enum TranslationSource {
 /// 翻译目标语言
 enum TranslationTargetLanguage {
   followApp('follow_app'),
+  indonesian('id'),
   zhHans('zh_hans'),
   zhHant('zh_hant'),
   english('en'),
@@ -279,6 +281,7 @@ enum TranslationTargetLanguage {
   Locale resolveLocale(Locale appLocale) {
     return switch (this) {
       TranslationTargetLanguage.followApp => appLocale,
+      TranslationTargetLanguage.indonesian => const Locale('id'),
       TranslationTargetLanguage.zhHans =>
         const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hans'),
       TranslationTargetLanguage.zhHant =>

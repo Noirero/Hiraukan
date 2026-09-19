@@ -6,6 +6,7 @@ import '../../l10n/app_localizations.dart';
 import 'audio_format_settings_screen.dart';
 import 'blocked_items_screen.dart';
 import 'llm_settings_screen.dart';
+import 'local_ai_translation_settings_screen.dart';
 import '../models/audio_gain_settings.dart';
 import '../models/audio_tap_playlist_mode.dart';
 import '../models/sort_options.dart';
@@ -152,6 +153,11 @@ class PreferencesScreen extends ConsumerWidget {
             ),
         ],
         onChanged: (value) async {
+          if (value == TranslationSource.localAi) {
+            await ref
+                .read(translationLanguagePreferencesProvider.notifier)
+                .updateTargetLanguage(TranslationTargetLanguage.indonesian);
+          }
           if (value == TranslationSource.llm) {
             final llmSettings = ref.read(llmSettingsProvider);
             if (llmSettings.apiKey.isEmpty) {
@@ -357,6 +363,8 @@ class PreferencesScreen extends ConsumerWidget {
   ) {
     final s = S.of(context);
     switch (source) {
+      case TranslationSource.localAi:
+        return 'Gratis · on-device · model diunduh terpisah · Jepang → Indonesia';
       case TranslationSource.google:
         return s.translationDescGoogle;
       case TranslationSource.youdao:
@@ -421,13 +429,28 @@ class PreferencesScreen extends ConsumerWidget {
                 icon: Icons.language,
                 title: S.of(context).translationTargetLanguage,
                 subtitle: S.of(context).currentSettingLabel(
-                      _targetLanguageLabel(
-                        context,
-                        translationLanguagePreferences,
-                        translationSource == TranslationSource.llm,
-                      ),
+                      translationSource == TranslationSource.localAi
+                          ? 'Bahasa Indonesia'
+                          : _targetLanguageLabel(
+                              context,
+                              translationLanguagePreferences,
+                              translationSource == TranslationSource.llm,
+                            ),
                     ),
-                onTap: () => _showTranslationTargetLanguageDialog(context, ref),
+                onTap: () {
+                  if (translationSource == TranslationSource.localAi) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Local Lite saat ini khusus Jepang → Indonesia.',
+                        ),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                    return;
+                  }
+                  _showTranslationTargetLanguageDialog(context, ref);
+                },
               ),
               SettingsSwitchTile(
                 icon: Icons.save_alt,
@@ -438,6 +461,20 @@ class PreferencesScreen extends ConsumerWidget {
                     .read(autoSaveTranslatedLyricsProvider.notifier)
                     .setEnabled(enabled),
               ),
+              if (translationSource == TranslationSource.localAi)
+                SettingsNavigationTile(
+                  icon: Icons.memory,
+                  title: 'Model AI Translate Lokal',
+                  subtitle: 'Download / hapus model Jepang → Indonesia',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const LocalAiTranslationSettingsScreen(),
+                      ),
+                    );
+                  },
+                ),
               if (translationSource == TranslationSource.llm)
                 SettingsNavigationTile(
                   icon: Icons.settings_input_component,

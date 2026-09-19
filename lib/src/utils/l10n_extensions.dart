@@ -224,6 +224,7 @@ extension TranslationSourceL10n on TranslationSource {
   String localizedName(BuildContext context) {
     final s = S.of(context);
     return switch (this) {
+      TranslationSource.localAi => 'AI Lokal (Gratis)',
       TranslationSource.google => s.translationSourceGoogle,
       TranslationSource.youdao => s.translationSourceYoudao,
       TranslationSource.microsoft => s.translationSourceMicrosoft,
@@ -237,6 +238,7 @@ extension TranslationTargetLanguageL10n on TranslationTargetLanguage {
     final s = S.of(context);
     return switch (this) {
       TranslationTargetLanguage.followApp => s.translationLanguageFollowApp,
+      TranslationTargetLanguage.indonesian => 'Bahasa Indonesia',
       TranslationTargetLanguage.zhHans => s.translationLanguageZhHans,
       TranslationTargetLanguage.zhHant => s.translationLanguageZhHant,
       TranslationTargetLanguage.english => s.translationLanguageEnglish,

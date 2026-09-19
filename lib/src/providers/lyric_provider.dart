@@ -7,6 +7,7 @@ import 'package:path/path.dart' as path;
 
 import '../models/lyric.dart';
 import '../models/audio_track.dart';
+import '../models/ai_job_identity.dart';
 import '../services/cache_service.dart';
 import '../services/download_service.dart';
 import '../services/local_work_metadata_service.dart';
@@ -183,14 +184,25 @@ class LyricController extends StateNotifier<LyricState> {
     return mounted && requestId == _translationRequestId;
   }
 
-  bool _isSameTrack(AudioTrack? a, AudioTrack? b) {
-    if (a == null || b == null) return identical(a, b);
-    return a.id == b.id &&
-        a.url == b.url &&
-        a.title == b.title &&
-        a.workId == b.workId &&
-        a.hash == b.hash &&
-        a.sourcePath == b.sourcePath;
+  TrackIdentity? _trackIdentity(AudioTrack? track) =>
+      track == null ? null : TrackIdentity.fromTrack(track);
+
+  bool _isSameTrack(AudioTrack? a, AudioTrack? b) =>
+      _trackIdentity(a) == _trackIdentity(b);
+
+  bool _isCurrentGeneration(
+    GenerationId? generation,
+    int requestId,
+    AudioTrack? originalTrack,
+  ) {
+    if (!_isCurrentTranslationRequest(requestId)) return false;
+    if (generation == null) {
+      return _isSameTrack(originalTrack, ref.read(currentTrackProvider).value);
+    }
+    final activeTrack = ref.read(currentTrackProvider).value;
+    return activeTrack != null &&
+        generation.requestId == requestId &&
+        generation.track == TrackIdentity.fromTrack(activeTrack);
   }
 
   // 根据音频轨道查找并加载字幕
@@ -591,6 +603,12 @@ class LyricController extends StateNotifier<LyricState> {
     final sourceLyrics = List<LyricLine>.from(state.lyrics);
     final sourceOffset = state.timelineOffset;
     final currentTrack = ref.read(currentTrackProvider).value;
+    final generation = currentTrack == null
+        ? null
+        : GenerationId(
+            track: TrackIdentity.fromTrack(currentTrack),
+            requestId: requestId,
+          );
 
     state = state.copyWith(
       isTranslating: true,
@@ -620,13 +638,15 @@ class LyricController extends StateNotifier<LyricState> {
         return null;
       }
 
-      // 将歌词行用换行符拼接后复用文本浏览的分块翻译机制。
-      const separator = '\n';
-      final joinedText = textsToTranslate.join(separator);
-      final translatedText = await translationService.translateLongText(
-        joinedText,
+      // Translate one subtitle segment at a time in the first Local Lite
+      // implementation. This preserves a strict 1:1 segment mapping and keeps
+      // timing/segment order immutable. Context-window translation can be
+      // layered on later without changing this contract.
+      final translatedTexts = await translationService.translateBatch(
+        textsToTranslate,
+        sourceLang: 'ja',
         onProgress: (current, total) {
-          if (_isCurrentTranslationRequest(requestId)) {
+          if (_isCurrentGeneration(generation, requestId, currentTrack)) {
             state = state.copyWith(
               translatedCount: current,
               translationTotal: total,
@@ -634,27 +654,8 @@ class LyricController extends StateNotifier<LyricState> {
           }
         },
       );
-      if (!_isCurrentTranslationRequest(requestId)) return null;
-
-      final latestTrack = ref.read(currentTrackProvider).value;
-      if (!_isSameTrack(currentTrack, latestTrack)) {
-        if (_isCurrentTranslationRequest(requestId)) {
-          state = state.copyWith(isTranslating: false);
-        }
+      if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
         return null;
-      }
-
-      // 将翻译结果按换行符拆回逐行，映射回原歌词
-      final translatedTexts = translatedText.split(separator);
-      if (translatedTexts.length > textsToTranslate.length) {
-        final overflow = translatedTexts.skip(textsToTranslate.length - 1);
-        translatedTexts
-          ..removeRange(textsToTranslate.length - 1, translatedTexts.length)
-          ..add(overflow.join(' '));
-      } else if (translatedTexts.length < textsToTranslate.length) {
-        for (var i = translatedTexts.length; i < textsToTranslate.length; i++) {
-          translatedTexts.add(textsToTranslate[i]);
-        }
       }
 
       // 构建翻译后的歌词列表（保留原时间戳）
@@ -667,8 +668,7 @@ class LyricController extends StateNotifier<LyricState> {
       final shouldAutoSave = await ref
           .read(autoSaveTranslatedLyricsProvider.notifier)
           .resolvedEnabled();
-      if (!_isCurrentTranslationRequest(requestId) ||
-          !_isSameTrack(currentTrack, ref.read(currentTrackProvider).value)) {
+      if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
         return null;
       }
 
@@ -680,7 +680,9 @@ class LyricController extends StateNotifier<LyricState> {
               timelineOffset: sourceOffset,
             )
           : null;
-      if (!_isCurrentTranslationRequest(requestId)) return null;
+      if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
+        return null;
+      }
 
       state = state.copyWith(
         translatedLyrics: translated,
