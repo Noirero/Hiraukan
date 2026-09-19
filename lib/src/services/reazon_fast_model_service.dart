@@ -10,8 +10,16 @@ enum FastAsrModelState {
   downloading,
   verifying,
   ready,
+  updateAvailable,
+  incompatible,
   corrupt,
   failed,
+}
+
+enum FastAsrManifestCompatibility {
+  compatible,
+  updateAvailable,
+  incompatible,
 }
 
 class ReazonFastModelStatus {
@@ -53,6 +61,8 @@ class ReazonFastModelService {
   static const modelRevision =
       'a454b3fe1e63f4189ae3994248aeb3d31b6682f4';
   static const license = 'Apache-2.0';
+  static const runtimeId = 'sherpa-onnx-1.13.8';
+  static const manifestSchemaVersion = 1;
   static const repository =
       'https://huggingface.co/reazon-research/reazonspeech-k2-v2';
 
@@ -108,6 +118,23 @@ class ReazonFastModelService {
     );
   }
 
+  static FastAsrManifestCompatibility classifyManifest({
+    required int schemaVersion,
+    required String installedModelId,
+    required String installedRevision,
+    required String installedRuntime,
+  }) {
+    if (schemaVersion != manifestSchemaVersion ||
+        installedModelId != modelId ||
+        installedRuntime != runtimeId) {
+      return FastAsrManifestCompatibility.incompatible;
+    }
+    if (installedRevision != modelRevision) {
+      return FastAsrManifestCompatibility.updateAvailable;
+    }
+    return FastAsrManifestCompatibility.compatible;
+  }
+
   Future<ReazonFastModelStatus> status() async {
     final dir = await modelDirectory();
     if (!await dir.exists()) {
@@ -118,20 +145,71 @@ class ReazonFastModelService {
       );
     }
 
-    final recordedHashes = await _readInstalledHashes(dir);
     var installedBytes = 0;
     var anyFile = false;
-
     for (final spec in files) {
       final file = File(p.join(dir.path, spec.name));
       if (!await file.exists()) continue;
       anyFile = true;
       installedBytes += await file.length();
+    }
+
+    if (!anyFile) {
+      return ReazonFastModelStatus(
+        state: FastAsrModelState.notInstalled,
+        installedBytes: 0,
+        expectedBytes: expectedWeightBytes,
+      );
+    }
+
+    final manifest = await _readInstalledManifest(dir);
+    if (manifest == null) {
+      return ReazonFastModelStatus(
+        state: FastAsrModelState.incompatible,
+        installedBytes: installedBytes,
+        expectedBytes: expectedWeightBytes,
+        message: 'Manifest model Fast tidak tersedia/valid. Download ulang model.',
+      );
+    }
+
+    final compatibility = classifyManifest(
+      schemaVersion: manifest.schemaVersion,
+      installedModelId: manifest.modelId,
+      installedRevision: manifest.revision,
+      installedRuntime: manifest.runtime,
+    );
+    if (compatibility == FastAsrManifestCompatibility.updateAvailable) {
+      return ReazonFastModelStatus(
+        state: FastAsrModelState.updateAvailable,
+        installedBytes: installedBytes,
+        expectedBytes: expectedWeightBytes,
+        message: 'Versi model Fast yang lebih baru diperlukan.',
+      );
+    }
+    if (compatibility == FastAsrManifestCompatibility.incompatible) {
+      return ReazonFastModelStatus(
+        state: FastAsrModelState.incompatible,
+        installedBytes: installedBytes,
+        expectedBytes: expectedWeightBytes,
+        message: 'Model Fast tidak kompatibel dengan runtime saat ini.',
+      );
+    }
+
+    for (final spec in files) {
+      final file = File(p.join(dir.path, spec.name));
+      if (!await file.exists()) {
+        return ReazonFastModelStatus(
+          state: FastAsrModelState.corrupt,
+          installedBytes: installedBytes,
+          expectedBytes: expectedWeightBytes,
+          message: 'Model Fast belum lengkap: ${spec.name}',
+        );
+      }
 
       final valid = await _verifyFile(
         file,
         spec,
-        recordedHash: recordedHashes[spec.name],
+        recordedHash: manifest.hashes[spec.name],
       );
       if (!valid) {
         return ReazonFastModelStatus(
@@ -141,21 +219,6 @@ class ReazonFastModelService {
           message: 'File model rusak/tidak cocok: ${spec.name}',
         );
       }
-    }
-
-    final allPresent = await Future.wait(
-      files.map((spec) => File(p.join(dir.path, spec.name)).exists()),
-    ).then((values) => values.every((value) => value));
-
-    if (!allPresent) {
-      return ReazonFastModelStatus(
-        state: anyFile
-            ? FastAsrModelState.corrupt
-            : FastAsrModelState.notInstalled,
-        installedBytes: installedBytes,
-        expectedBytes: expectedWeightBytes,
-        message: anyFile ? 'Model Fast belum lengkap.' : null,
-      );
     }
 
     return ReazonFastModelStatus(
@@ -172,6 +235,15 @@ class ReazonFastModelService {
     final dir = await modelDirectory();
     await dir.create(recursive: true);
 
+    final existingManifest = await _readInstalledManifest(dir);
+    final canReuseInstalledFiles = existingManifest != null &&
+        classifyManifest(
+              schemaVersion: existingManifest.schemaVersion,
+              installedModelId: existingManifest.modelId,
+              installedRevision: existingManifest.revision,
+              installedRuntime: existingManifest.runtime,
+            ) ==
+            FastAsrManifestCompatibility.compatible;
     final installedHashes = <String, String>{};
     var completedBytes = 0;
     final estimatedTokenBytes = 46 * 1024;
@@ -183,11 +255,12 @@ class ReazonFastModelService {
       }
 
       final destination = File(p.join(dir.path, spec.name));
-      if (await destination.exists() &&
+      if (canReuseInstalledFiles &&
+          await destination.exists() &&
           await _verifyFile(
             destination,
             spec,
-            recordedHash: (await _readInstalledHashes(dir))[spec.name],
+            recordedHash: existingManifest.hashes[spec.name],
           )) {
         final length = await destination.length();
         completedBytes += length;
@@ -332,19 +405,25 @@ class ReazonFastModelService {
     return (await sha256.bind(file.openRead()).first).toString();
   }
 
-  Future<Map<String, String>> _readInstalledHashes(Directory dir) async {
+  Future<_InstalledManifest?> _readInstalledManifest(Directory dir) async {
     final manifest = File(p.join(dir.path, 'installed_manifest.json'));
-    if (!await manifest.exists()) return const {};
+    if (!await manifest.exists()) return null;
     try {
       final decoded = jsonDecode(await manifest.readAsString());
-      if (decoded is! Map) return const {};
+      if (decoded is! Map) return null;
       final hashes = decoded['sha256'];
-      if (hashes is! Map) return const {};
-      return hashes.map(
-        (key, value) => MapEntry(key.toString(), value.toString()),
+      if (hashes is! Map) return null;
+      return _InstalledManifest(
+        schemaVersion: (decoded['schemaVersion'] as num?)?.toInt() ?? 0,
+        modelId: decoded['modelId']?.toString() ?? '',
+        revision: decoded['revision']?.toString() ?? '',
+        runtime: decoded['runtime']?.toString() ?? '',
+        hashes: hashes.map(
+          (key, value) => MapEntry(key.toString(), value.toString()),
+        ),
       );
     } catch (_) {
-      return const {};
+      return null;
     }
   }
 
@@ -355,9 +434,10 @@ class ReazonFastModelService {
     final destination = File(p.join(dir.path, 'installed_manifest.json'));
     final temporary = File('${destination.path}.tmp');
     final payload = jsonEncode({
+      'schemaVersion': manifestSchemaVersion,
       'modelId': modelId,
       'revision': modelRevision,
-      'runtime': 'sherpa-onnx-1.13.8',
+      'runtime': runtimeId,
       'license': license,
       'sha256': hashes,
       'installedAt': DateTime.now().toUtc().toIso8601String(),
@@ -366,6 +446,22 @@ class ReazonFastModelService {
     if (await destination.exists()) await destination.delete();
     await temporary.rename(destination.path);
   }
+}
+
+class _InstalledManifest {
+  final int schemaVersion;
+  final String modelId;
+  final String revision;
+  final String runtime;
+  final Map<String, String> hashes;
+
+  const _InstalledManifest({
+    required this.schemaVersion,
+    required this.modelId,
+    required this.revision,
+    required this.runtime,
+    required this.hashes,
+  });
 }
 
 class _ModelFile {
