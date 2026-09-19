@@ -323,6 +323,8 @@ class TranslationService {
           final translated =
               await translate(texts[index], sourceLang: sourceLang);
           results[index] = translated;
+        } on LocalTranslationModelNotInstalledException {
+          rethrow;
         } catch (e) {
           _log.captureOutput('Translation batch item $index failed: $e');
           results[index] = texts[index];
