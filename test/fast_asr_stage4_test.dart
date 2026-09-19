@@ -174,6 +174,14 @@ void main() {
     );
   });
 
+  test('Auto stays on Compatibility until Fast is benchmark-approved',
+      () async {
+    final engine = await SpeechRecognitionCoordinator.instance.resolveEngine(
+      SpeechRecognitionProfile.auto,
+    );
+    expect(engine.profile, SpeechRecognitionProfile.compatibility);
+  });
+
   test('High Quality profile remains unavailable until benchmarked', () async {
     await expectLater(
       SpeechRecognitionCoordinator.instance.resolveEngine(
