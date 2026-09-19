@@ -224,7 +224,7 @@ extension TranslationSourceL10n on TranslationSource {
   String localizedName(BuildContext context) {
     final s = S.of(context);
     return switch (this) {
-      TranslationSource.freeOnline => 'Gratis Online (Tanpa API)',
+      TranslationSource.freeOnline => 'Gratis Online',
       TranslationSource.google => s.translationSourceGoogle,
       TranslationSource.youdao => s.translationSourceYoudao,
       TranslationSource.microsoft => s.translationSourceMicrosoft,

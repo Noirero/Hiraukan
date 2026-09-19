@@ -141,7 +141,7 @@ class TranslationService {
   /// 获取当前 locale 对应的默认 LLM prompt
   Future<String> getDefaultLLMPromptForCurrentLocale() async {
     final prefs = await SharedPreferences.getInstance();
-    final selectedSource = prefs.getString('translation_source') ?? TranslationSource.freeOnline.value;
+    final selectedSource = TranslationSource.fromStoredValue(prefs.getString('translation_source')).value;
     final languageConfig = _getLanguageConfig(prefs, selectedSource);
     return getDefaultLLMPrompt(
       languageConfig.targetLocale,
@@ -152,9 +152,10 @@ class TranslationService {
 
   Future<bool> isFreeOnlineSelected() async {
     final prefs = await SharedPreferences.getInstance();
-    return (prefs.getString('translation_source') ??
-            TranslationSource.freeOnline.value) ==
-        TranslationSource.freeOnline.value;
+    return TranslationSource.fromStoredValue(
+          prefs.getString('translation_source'),
+        ) ==
+        TranslationSource.freeOnline;
   }
 
   Future<(String engineId, String engineVersion)> freeOnlineEngineIdentity() async {
@@ -166,7 +167,7 @@ class TranslationService {
     if (text.isEmpty) return text;
 
     final prefs = await SharedPreferences.getInstance();
-    final selectedSource = prefs.getString('translation_source') ?? TranslationSource.freeOnline.value;
+    final selectedSource = TranslationSource.fromStoredValue(prefs.getString('translation_source')).value;
     final languageConfig = _getLanguageConfig(prefs, selectedSource);
     final cacheSourceLang = languageConfig.cacheSourceLang(sourceLang);
     final cacheTargetLang = languageConfig.cacheTargetLang();
@@ -319,7 +320,7 @@ class TranslationService {
 
     // 获取并发设置
     final prefs = await SharedPreferences.getInstance();
-    final source = prefs.getString('translation_source') ?? TranslationSource.freeOnline.value;
+    final source = TranslationSource.fromStoredValue(prefs.getString('translation_source')).value;
     int concurrency = 1;
     if (source == 'llm') {
       concurrency = LLMSettings.normalizeConcurrency(

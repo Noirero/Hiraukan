@@ -8,11 +8,17 @@ import 'package:kikoeru_flutter/src/providers/settings_provider.dart';
 import 'package:kikoeru_flutter/src/services/free_online_translation_engine.dart';
 
 void main() {
-  test('free online provider keeps legacy preference value and Indonesian target',
+  test('free online provider migrates legacy preference and keeps Indonesian target',
       () {
-    // Keep the persisted value so existing Beta users migrate automatically
-    // from the former Local AI option to the new free-online option.
-    expect(TranslationSource.freeOnline.value, 'local_ai');
+    expect(TranslationSource.freeOnline.value, 'free_online');
+    expect(
+      TranslationSource.fromStoredValue('local_ai'),
+      TranslationSource.freeOnline,
+    );
+    expect(
+      TranslationSource.fromStoredValue('free_online'),
+      TranslationSource.freeOnline,
+    );
     expect(TranslationTargetLanguage.indonesian.value, 'id');
     expect(
       TranslationTargetLanguage.indonesian.resolveLocale(

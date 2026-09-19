@@ -6,7 +6,7 @@ import '../../l10n/app_localizations.dart';
 import 'audio_format_settings_screen.dart';
 import 'blocked_items_screen.dart';
 import 'llm_settings_screen.dart';
-import 'local_ai_translation_settings_screen.dart';
+import 'online_translation_settings_screen.dart';
 import '../models/audio_gain_settings.dart';
 import '../models/audio_tap_playlist_mode.dart';
 import '../models/sort_options.dart';
@@ -465,12 +465,12 @@ class PreferencesScreen extends ConsumerWidget {
                 SettingsNavigationTile(
                   icon: Icons.cloud_outlined,
                   title: 'Terjemahan Gratis Online',
-                  subtitle: 'Tanpa API key/token · cache, konteks, dan glossary',
+                  subtitle: 'Tanpa API key/token pengguna · cache, konteks, dan glossary',
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (context) =>
-                            const LocalAiTranslationSettingsScreen(),
+                            const OnlineTranslationSettingsScreen(),
                       ),
                     );
                   },

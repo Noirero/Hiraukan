@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../providers/local_translation_provider.dart';
-import '../providers/local_translation_quality_provider.dart';
 import '../providers/translation_glossary_provider.dart';
+import '../providers/translation_provider.dart';
+import '../providers/translation_quality_provider.dart';
 import '../services/subtitle_translation_cache.dart';
 import 'translation_glossary_screen.dart';
 
-class LocalAiTranslationSettingsScreen extends ConsumerWidget {
-  const LocalAiTranslationSettingsScreen({super.key});
+class OnlineTranslationSettingsScreen extends ConsumerWidget {
+  const OnlineTranslationSettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final engine = ref.watch(freeOnlineTranslationEngineProvider);
     final cacheStats = ref.watch(translationDocumentCacheStatsProvider);
-    final quality = ref.watch(localTranslationQualityProvider);
+    final quality = ref.watch(translationQualityProvider);
     final glossary = ref.watch(translationGlossaryProvider);
 
     return Scaffold(
@@ -34,8 +34,8 @@ class LocalAiTranslationSettingsScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Gratis dan tidak memerlukan API key, token, akun, atau '
-                    'download model. Terjemahan membutuhkan koneksi internet.',
+                    'Gratis dan tidak memerlukan API key/token pengguna, akun, '
+                    'atau download model. Terjemahan membutuhkan koneksi internet.',
                   ),
                   const SizedBox(height: 8),
                   Text('Engine: ${engine.displayName}'),
@@ -62,7 +62,7 @@ class LocalAiTranslationSettingsScreen extends ConsumerWidget {
                   ),
                   value: quality.contextEnabled,
                   onChanged: (value) => ref
-                      .read(localTranslationQualityProvider.notifier)
+                      .read(translationQualityProvider.notifier)
                       .setContextEnabled(value),
                 ),
                 const Divider(height: 1),
@@ -75,7 +75,7 @@ class LocalAiTranslationSettingsScreen extends ConsumerWidget {
                   ),
                   value: quality.playbackPriorityEnabled,
                   onChanged: (value) => ref
-                      .read(localTranslationQualityProvider.notifier)
+                      .read(translationQualityProvider.notifier)
                       .setPlaybackPriorityEnabled(value),
                 ),
                 const Divider(height: 1),

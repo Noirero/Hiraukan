@@ -40,13 +40,30 @@ class TranslationGlossaryService {
   static final TranslationGlossaryService instance =
       TranslationGlossaryService._();
 
-  static const _entriesKey = 'local_translation_glossary_entries_v1';
-  static const _versionKey = 'local_translation_glossary_version_v1';
+  static const _entriesKey = 'online_translation_glossary_entries_v1';
+  static const _versionKey = 'online_translation_glossary_version_v1';
+  static const _legacyEntriesKey = 'local_translation_glossary_entries_v1';
+  static const _legacyVersionKey = 'local_translation_glossary_version_v1';
 
   Future<TranslationGlossarySnapshot> load() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_entriesKey);
-    final version = prefs.getInt(_versionKey) ?? 1;
+    var raw = prefs.getString(_entriesKey);
+    var version = prefs.getInt(_versionKey);
+
+    if (raw == null) {
+      final legacyRaw = prefs.getString(_legacyEntriesKey);
+      final legacyVersion = prefs.getInt(_legacyVersionKey);
+      if (legacyRaw != null) {
+        raw = legacyRaw;
+        version = legacyVersion ?? 1;
+        await prefs.setString(_entriesKey, legacyRaw);
+        await prefs.setInt(_versionKey, version);
+        await prefs.remove(_legacyEntriesKey);
+        await prefs.remove(_legacyVersionKey);
+      }
+    }
+
+    version ??= 1;
     if (raw == null || raw.isEmpty) {
       return TranslationGlossarySnapshot(
         version: version,
@@ -108,6 +125,8 @@ class TranslationGlossaryService {
       jsonEncode(normalized.map((entry) => entry.toJson()).toList()),
     );
     await prefs.setInt(_versionKey, nextVersion);
+    await prefs.remove(_legacyEntriesKey);
+    await prefs.remove(_legacyVersionKey);
     return TranslationGlossarySnapshot(
       version: nextVersion,
       entries: List.unmodifiable(normalized),

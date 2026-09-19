@@ -1,9 +1,9 @@
-import 'translation_engine.dart';
 import 'free_online_translation_engine.dart';
+import 'translation_engine.dart';
 import 'translation_glossary_service.dart';
 
-class LocalSubtitleTranslationService {
-  LocalSubtitleTranslationService({
+class ContextualSubtitleTranslationService {
+  ContextualSubtitleTranslationService({
     TranslationEngine? engine,
   }) : _engine = engine ?? FreeOnlineTranslationEngine.instance;
 
@@ -34,9 +34,9 @@ class LocalSubtitleTranslationService {
 
     try {
       final translated = await _engine.translate(
-          joined,
-          sourceLanguage: 'ja',
-          targetLanguage: 'id',
+        joined,
+        sourceLanguage: 'ja',
+        targetLanguage: 'id',
       );
       final translatedLines = translated.split('\n');
       final relativeIndex = index - start;
@@ -69,10 +69,10 @@ class LocalSubtitleTranslationService {
   ) async {
     final protected = _protectGlossary([source], glossary.entries);
     final translated = await _engine.translate(
-        protected.lines.first,
-        sourceLanguage: 'ja',
-        targetLanguage: 'id',
-      );
+      protected.lines.first,
+      sourceLanguage: 'ja',
+      targetLanguage: 'id',
+    );
     final expectedTokens = protected.tokensByLine.first;
     if (!_containsAllGlossaryTokens(translated, expectedTokens)) {
       return _translateUnprotected(source);
@@ -133,10 +133,10 @@ class LocalSubtitleTranslationService {
 
   Future<String> _translateUnprotected(String source) async {
     final translated = await _engine.translate(
-        source,
-        sourceLanguage: 'ja',
-        targetLanguage: 'id',
-      );
+      source,
+      sourceLanguage: 'ja',
+      targetLanguage: 'id',
+    );
     final trimmed = translated.trim();
     return trimmed.isEmpty ? source : trimmed;
   }
