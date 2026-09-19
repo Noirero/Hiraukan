@@ -379,8 +379,9 @@ class _KikoFluFeaturesSettingsScreenState
                       },
                     ),
                   ),
-                  if (_selectedAsrProfile == SpeechRecognitionProfile.fast ||
-                      _selectedAsrProfile == SpeechRecognitionProfile.auto)
+                  if (SpeechRecognitionCoordinator.fastProfileApproved &&
+                      (_selectedAsrProfile == SpeechRecognitionProfile.fast ||
+                       _selectedAsrProfile == SpeechRecognitionProfile.auto))
                     ListTile(
                       leading: const Icon(Icons.speed_rounded),
                       title: const Text('Fast ASR model'),
