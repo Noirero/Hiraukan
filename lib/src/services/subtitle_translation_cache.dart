@@ -128,7 +128,7 @@ class SubtitleTranslationCache {
     }
   }
 
-  Future<void> save({
+  Future<String?> save({
     required TrackIdentity track,
     required List<LyricLine> sourceLyrics,
     required List<LyricLine> translatedLyrics,
@@ -137,7 +137,7 @@ class SubtitleTranslationCache {
     String sourceLanguage = 'ja',
     String targetLanguage = 'id',
   }) async {
-    if (sourceLyrics.length != translatedLyrics.length) return;
+    if (sourceLyrics.length != translatedLyrics.length) return null;
 
     final dir = await _directory();
     final id = _cacheId(
@@ -171,6 +171,7 @@ class SubtitleTranslationCache {
       await destination.delete();
     }
     await temporary.rename(destination.path);
+    return destination.path;
   }
 
   Future<TranslationDocumentCacheStats> stats() async {
