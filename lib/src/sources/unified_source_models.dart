@@ -68,6 +68,31 @@ enum UnifiedSourceHealth {
   unknown,
 }
 
+/// Playback capability is separate from source health. This exception lets the
+/// UI distinguish an intentionally non-playable source set from a real source
+/// or playback failure.
+class SourcePlaybackUnavailableException implements Exception {
+  final List<UnifiedSourceKind> sources;
+  final bool unsupportedOnly;
+  final Object? lastError;
+
+  const SourcePlaybackUnavailableException({
+    required this.sources,
+    required this.unsupportedOnly,
+    this.lastError,
+  });
+
+  @override
+  String toString() {
+    if (unsupportedOnly) {
+      return 'Playback is not supported by the available source(s): '
+          '${sources.map((source) => source.label).join(', ')}';
+    }
+    return 'No playable source is currently available'
+        '${lastError == null ? '' : ': $lastError'}';
+  }
+}
+
 class UnifiedSourceRef extends Equatable {
   final UnifiedSourceKind source;
   final String localId;
