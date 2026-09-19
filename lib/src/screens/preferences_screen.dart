@@ -153,7 +153,7 @@ class PreferencesScreen extends ConsumerWidget {
             ),
         ],
         onChanged: (value) async {
-          if (value == TranslationSource.localAi) {
+          if (value == TranslationSource.freeOnline) {
             await ref
                 .read(translationLanguagePreferencesProvider.notifier)
                 .updateTargetLanguage(TranslationTargetLanguage.indonesian);
@@ -363,8 +363,8 @@ class PreferencesScreen extends ConsumerWidget {
   ) {
     final s = S.of(context);
     switch (source) {
-      case TranslationSource.localAi:
-        return 'Gratis · on-device · model diunduh terpisah · Jepang → Indonesia';
+      case TranslationSource.freeOnline:
+        return 'Gratis · online · tanpa API key/token pengguna · Jepang → Indonesia';
       case TranslationSource.google:
         return s.translationDescGoogle;
       case TranslationSource.youdao:
@@ -429,7 +429,7 @@ class PreferencesScreen extends ConsumerWidget {
                 icon: Icons.language,
                 title: S.of(context).translationTargetLanguage,
                 subtitle: S.of(context).currentSettingLabel(
-                      translationSource == TranslationSource.localAi
+                      translationSource == TranslationSource.freeOnline
                           ? 'Bahasa Indonesia'
                           : _targetLanguageLabel(
                               context,
@@ -438,11 +438,11 @@ class PreferencesScreen extends ConsumerWidget {
                             ),
                     ),
                 onTap: () {
-                  if (translationSource == TranslationSource.localAi) {
+                  if (translationSource == TranslationSource.freeOnline) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text(
-                          'Local Lite saat ini khusus Jepang → Indonesia.',
+                          'Terjemahan Gratis Online saat ini khusus Jepang → Indonesia.',
                         ),
                         behavior: SnackBarBehavior.floating,
                       ),
@@ -461,11 +461,11 @@ class PreferencesScreen extends ConsumerWidget {
                     .read(autoSaveTranslatedLyricsProvider.notifier)
                     .setEnabled(enabled),
               ),
-              if (translationSource == TranslationSource.localAi)
+              if (translationSource == TranslationSource.freeOnline)
                 SettingsNavigationTile(
-                  icon: Icons.memory,
-                  title: 'Model AI Translate Lokal',
-                  subtitle: 'Download / hapus model Jepang → Indonesia',
+                  icon: Icons.cloud_outlined,
+                  title: 'Terjemahan Gratis Online',
+                  subtitle: 'Tanpa API key/token · cache, konteks, dan glossary',
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(

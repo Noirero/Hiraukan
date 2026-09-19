@@ -7,9 +7,8 @@ import 'dart:convert';
 import 'youdao_translator.dart';
 import 'microsoft_translator.dart';
 import 'llm_translator.dart';
-import 'ai_heavy_job_queue.dart';
-import 'local_translation_engine.dart';
-import 'mlkit_local_translation_engine.dart';
+import 'translation_engine.dart';
+import 'free_online_translation_engine.dart';
 import 'log_service.dart';
 import '../providers/settings_provider.dart';
 import '../utils/global_keys.dart';
@@ -25,8 +24,8 @@ class TranslationService {
   final YoudaoTranslator _youdaoTranslator = YoudaoTranslator();
   final MicrosoftTranslator _microsoftTranslator = MicrosoftTranslator();
   final LLMTranslator _llmTranslator = LLMTranslator();
-  final LocalTranslationEngine _localTranslator =
-      MlKitLocalTranslationEngine.instance;
+  final TranslationEngine _freeOnlineTranslator =
+      FreeOnlineTranslationEngine.instance;
   static const String _cachePrefix = 'translation_cache_v2_';
 
   Locale _getEffectiveLocaleFromPreferences(SharedPreferences prefs) {
@@ -142,7 +141,7 @@ class TranslationService {
   /// 获取当前 locale 对应的默认 LLM prompt
   Future<String> getDefaultLLMPromptForCurrentLocale() async {
     final prefs = await SharedPreferences.getInstance();
-    final selectedSource = prefs.getString('translation_source') ?? TranslationSource.google.value;
+    final selectedSource = prefs.getString('translation_source') ?? TranslationSource.freeOnline.value;
     final languageConfig = _getLanguageConfig(prefs, selectedSource);
     return getDefaultLLMPrompt(
       languageConfig.targetLocale,
@@ -151,15 +150,15 @@ class TranslationService {
     );
   }
 
-  Future<bool> isLocalAiSelected() async {
+  Future<bool> isFreeOnlineSelected() async {
     final prefs = await SharedPreferences.getInstance();
     return (prefs.getString('translation_source') ??
-            TranslationSource.google.value) ==
-        TranslationSource.localAi.value;
+            TranslationSource.freeOnline.value) ==
+        TranslationSource.freeOnline.value;
   }
 
-  Future<(String engineId, String engineVersion)> localEngineIdentity() async {
-    return (_localTranslator.id, _localTranslator.version);
+  Future<(String engineId, String engineVersion)> freeOnlineEngineIdentity() async {
+    return (_freeOnlineTranslator.id, _freeOnlineTranslator.version);
   }
 
   /// 翻译文本到应用当前语言
@@ -167,22 +166,22 @@ class TranslationService {
     if (text.isEmpty) return text;
 
     final prefs = await SharedPreferences.getInstance();
-    final selectedSource = prefs.getString('translation_source') ?? TranslationSource.google.value;
+    final selectedSource = prefs.getString('translation_source') ?? TranslationSource.freeOnline.value;
     final languageConfig = _getLanguageConfig(prefs, selectedSource);
     final cacheSourceLang = languageConfig.cacheSourceLang(sourceLang);
     final cacheTargetLang = languageConfig.cacheTargetLang();
-    final targetLocale = selectedSource == TranslationSource.localAi.value
+    final targetLocale = selectedSource == TranslationSource.freeOnline.value
         ? const Locale('id')
         : languageConfig.targetLocale;
-    final engineCacheKey = selectedSource == TranslationSource.localAi.value
-        ? '${_localTranslator.id}:${_localTranslator.version}'
+    final engineCacheKey = selectedSource == TranslationSource.freeOnline.value
+        ? '${_freeOnlineTranslator.id}:${_freeOnlineTranslator.version}'
         : selectedSource;
 
     // 检查缓存
     final cachedTranslation = await _getCachedTranslation(
       text,
       cacheSourceLang,
-      selectedSource == TranslationSource.localAi.value ? 'id' : cacheTargetLang,
+      selectedSource == TranslationSource.freeOnline.value ? 'id' : cacheTargetLang,
       engineCacheKey,
     );
     if (cachedTranslation != null) {
@@ -192,17 +191,15 @@ class TranslationService {
     // 构建尝试列表
     final sourcesToTry = <String>[selectedSource];
 
-    // Local AI never falls back to an online provider without an explicit
-    // user choice. Missing models are surfaced to the UI as a model state.
-    if (selectedSource == TranslationSource.localAi.value) {
+    // Free Online never falls back to paid/API providers without an explicit
+    // user choice. Network failures are surfaced without affecting playback.
+    if (selectedSource == TranslationSource.freeOnline.value) {
       try {
-        final result = await AiHeavyJobQueue.instance.run(
-          () => _localTranslator.translate(
-            text,
-            sourceLanguage:
-                sourceLang == null || sourceLang == 'auto' ? 'ja' : sourceLang,
-            targetLanguage: 'id',
-          ),
+        final result = await _freeOnlineTranslator.translate(
+          text,
+          sourceLanguage:
+              sourceLang == null || sourceLang == 'auto' ? 'ja' : sourceLang,
+          targetLanguage: 'id',
         );
         await _cacheTranslation(
           text,
@@ -213,7 +210,7 @@ class TranslationService {
         );
         return result;
       } catch (error) {
-        _log.captureOutput('Local translation error: $error');
+        _log.captureOutput('Free online translation error: $error');
         rethrow;
       }
     }
@@ -322,7 +319,7 @@ class TranslationService {
 
     // 获取并发设置
     final prefs = await SharedPreferences.getInstance();
-    final source = prefs.getString('translation_source') ?? TranslationSource.google.value;
+    final source = prefs.getString('translation_source') ?? TranslationSource.freeOnline.value;
     int concurrency = 1;
     if (source == 'llm') {
       concurrency = LLMSettings.normalizeConcurrency(
@@ -346,8 +343,6 @@ class TranslationService {
             texts[index],
             sourceLang: sourceLang,
           );
-        } on LocalTranslationModelNotInstalledException {
-          rethrow;
         } catch (e) {
           _log.captureOutput('Translation batch item $index failed: $e');
           translated = texts[index];
@@ -477,7 +472,7 @@ class TranslationService {
         final data = json.decode(cached);
         final timestamp = data['timestamp'] as int;
         final isVersionedLocalEngine =
-            engineKey.startsWith('${_localTranslator.id}:');
+            engineKey.startsWith('${_freeOnlineTranslator.id}:');
         if (isVersionedLocalEngine ||
             DateTime.now().millisecondsSinceEpoch - timestamp <
                 7 * 24 * 60 * 60 * 1000) {
