@@ -12,7 +12,7 @@ class LocalAiTranslationSettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final engine = ref.watch(localTranslationEngineProvider);
+    final engine = ref.watch(freeOnlineTranslationEngineProvider);
     final cacheStats = ref.watch(translationDocumentCacheStatsProvider);
     final quality = ref.watch(localTranslationQualityProvider);
     final glossary = ref.watch(translationGlossaryProvider);
