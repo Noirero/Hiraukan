@@ -7,6 +7,7 @@ import '../models/subtitle/subtitle_segment.dart';
 import '../models/subtitle/timed_subtitle.dart';
 import 'ai_heavy_job_queue.dart';
 import 'audio_conversion_service.dart';
+import 'reazon_chunk_planner.dart';
 import 'reazon_fast_model_service.dart';
 import 'reazon_timestamp_segmenter.dart';
 import 'speech_recognition_engine.dart';
@@ -96,17 +97,16 @@ class ReazonSpeechFastEngine implements SpeechRecognitionEngine {
         );
       }
 
-      final samplesPerChunk =
-          wave.sampleRate * ReazonTimestampSegmenter.recommendedChunkSeconds;
+      final chunks = ReazonChunkPlanner.plan(
+        samples: wave.samples,
+        sampleRate: wave.sampleRate,
+      );
       final segments = <SubtitleSegment>[];
 
-      for (var start = 0;
-          start < wave.samples.length;
-          start += samplesPerChunk) {
-        final end = (start + samplesPerChunk < wave.samples.length)
-            ? start + samplesPerChunk
-            : wave.samples.length;
-        if (end <= start) break;
+      for (final chunk in chunks) {
+        final start = chunk.startSample;
+        final end = chunk.endSample;
+        if (end <= start) continue;
 
         final samples = Float32List.sublistView(
           wave.samples,
