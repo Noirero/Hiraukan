@@ -880,6 +880,43 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
           tooltip = S.of(context).translateLyrics;
         }
 
+        if (isTranslated && !isTranslating) {
+          return PopupMenuButton<SubtitleDisplayMode>(
+            tooltip: 'Mode subtitle',
+            initialValue: displayMode,
+            onSelected: (mode) {
+              ref
+                  .read(lyricControllerProvider.notifier)
+                  .setSubtitleDisplayMode(mode);
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: SubtitleDisplayMode.original,
+                child: Text('Original · Jepang'),
+              ),
+              PopupMenuItem(
+                value: SubtitleDisplayMode.translated,
+                child: Text('Terjemahan · Indonesia'),
+              ),
+              PopupMenuItem(
+                value: SubtitleDisplayMode.bilingual,
+                child: Text('Bilingual · Jepang + Indonesia'),
+              ),
+              PopupMenuItem(
+                value: SubtitleDisplayMode.off,
+                child: Text('Subtitle Mati'),
+              ),
+            ],
+            icon: Icon(
+              Icons.translate,
+              color: displayMode != SubtitleDisplayMode.original &&
+                      displayMode != SubtitleDisplayMode.off
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
+            ),
+          );
+        }
+
         return IconButton(
           onPressed: isTranslating
               ? null
