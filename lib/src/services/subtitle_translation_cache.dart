@@ -136,6 +136,7 @@ class SubtitleTranslationCache {
     required List<LyricLine> translatedLyrics,
     required String engineId,
     required String engineVersion,
+    required String glossaryFingerprint,
     String sourceLanguage = 'ja',
     String targetLanguage = 'id',
   }) async {
