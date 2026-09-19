@@ -21,6 +21,14 @@ class MlKitLocalTranslationEngine implements LocalTranslationEngine {
   String get displayName => 'Local Lite (ML Kit)';
 
   @override
+  LocalTranslationCapabilities get capabilities =>
+      const LocalTranslationCapabilities(
+        supportsNativeContextWindow: false,
+        supportsNativeGlossaryHints: false,
+        maxContextSegments: 0,
+      );
+
+  @override
   Future<LocalTranslationModelStatus> getModelStatus() async {
     final raw = await _channel.invokeMapMethod<String, dynamic>('getModelStatus');
     return _statusFromMap(raw);
