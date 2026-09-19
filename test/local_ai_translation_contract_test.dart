@@ -32,7 +32,6 @@ void main() {
     expect(status.message, contains('tidak membutuhkan model lokal'));
   });
 
-
   test('Android APK does not bundle ML Kit translation runtime or bridge', () {
     final gradle = File('android/app/build.gradle.kts').readAsStringSync();
     final activity = File(
@@ -49,7 +48,7 @@ void main() {
     );
   });
 
-test('track identity is stable across display-only track changes', () {
+  test('track identity is stable across display-only track changes', () {
     const original = AudioTrack(
       id: 'track-1',
       title: 'Display title A',
