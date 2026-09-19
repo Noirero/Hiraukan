@@ -61,7 +61,7 @@ class FreeOnlineTranslationEngine implements TranslationEngine {
   String get version => 'translator-1.0.0-online-v2';
 
   @override
-  String get displayName => 'Gratis Online (Tanpa API Key)';
+  String get displayName => 'Gratis Online';
 
   @override
   Future<String> translate(
