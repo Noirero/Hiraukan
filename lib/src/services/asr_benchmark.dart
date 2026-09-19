@@ -219,7 +219,6 @@ class AsrBenchmarkEvaluator {
     '…',
     '〜',
     '~',
-    'ー',
   };
 }
 
