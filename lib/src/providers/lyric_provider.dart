@@ -685,6 +685,7 @@ class LyricController extends StateNotifier<LyricState> {
           sourceLyrics: sourceLyrics,
           engineId: localIdentity.$1,
           engineVersion: localIdentity.$2,
+          glossaryFingerprint: localIdentity.$3,
         );
         if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
           return null;
@@ -759,6 +760,7 @@ class LyricController extends StateNotifier<LyricState> {
           translatedLyrics: translated,
           engineId: localIdentity.$1,
           engineVersion: localIdentity.$2,
+          glossaryFingerprint: localIdentity.$3,
         );
       } else {
         final shouldAutoSave = await ref
