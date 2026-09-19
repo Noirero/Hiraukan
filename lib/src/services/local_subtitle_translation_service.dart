@@ -47,11 +47,17 @@ class LocalSubtitleTranslationService {
       if (translatedLines.length == protected.lines.length &&
           relativeIndex >= 0 &&
           relativeIndex < translatedLines.length) {
-        final candidate = _restoreGlossary(
-          translatedLines[relativeIndex],
-          protected.replacements,
-        ).trim();
-        if (candidate.isNotEmpty) return candidate;
+        final rawCandidate = translatedLines[relativeIndex];
+        final expectedTokens = protected.tokensByLine[relativeIndex];
+        if (_containsAllGlossaryTokens(rawCandidate, expectedTokens)) {
+          final candidate = _restoreGlossary(
+            rawCandidate,
+            protected.replacements,
+          ).trim();
+          if (candidate.isNotEmpty && !candidate.contains('ZXQGLOSS')) {
+            return candidate;
+          }
+        }
       }
     } on LocalTranslationModelNotInstalledException {
       rethrow;
@@ -74,9 +80,17 @@ class LocalSubtitleTranslationService {
         targetLanguage: 'id',
       ),
     );
+    final expectedTokens = protected.tokensByLine.first;
+    if (!_containsAllGlossaryTokens(translated, expectedTokens)) {
+      return _translateUnprotected(source);
+    }
+
     final restored =
         _restoreGlossary(translated, protected.replacements).trim();
-    return restored.isEmpty ? source : restored;
+    if (restored.isEmpty || restored.contains('ZXQGLOSS')) {
+      return _translateUnprotected(source);
+    }
+    return restored;
   }
 
   _ProtectedGlossaryText _protectGlossary(
@@ -87,6 +101,9 @@ class LocalSubtitleTranslationService {
       return _ProtectedGlossaryText(
         lines: List<String>.from(sourceLines),
         replacements: const {},
+        tokensByLine: [
+          for (final _ in sourceLines) const <String>[],
+        ],
       );
     }
 
@@ -95,25 +112,54 @@ class LocalSubtitleTranslationService {
 
     final replacements = <String, String>{};
     final lines = <String>[];
+    final tokensByLine = <List<String>>[];
     var tokenCounter = 0;
 
     for (final original in sourceLines) {
       var text = original;
+      final lineTokens = <String>[];
       for (final entry in sorted) {
         if (entry.source.isEmpty || !text.contains(entry.source)) continue;
         while (text.contains(entry.source)) {
           final token = 'ZXQGLOSS${tokenCounter++}ZXQ';
           text = text.replaceFirst(entry.source, token);
           replacements[token] = entry.target;
+          lineTokens.add(token);
         }
       }
       lines.add(text);
+      tokensByLine.add(List.unmodifiable(lineTokens));
     }
 
     return _ProtectedGlossaryText(
       lines: lines,
       replacements: replacements,
+      tokensByLine: List.unmodifiable(tokensByLine),
     );
+  }
+
+  Future<String> _translateUnprotected(String source) async {
+    final translated = await AiHeavyJobQueue.instance.run(
+      () => _engine.translate(
+        source,
+        sourceLanguage: 'ja',
+        targetLanguage: 'id',
+      ),
+    );
+    final trimmed = translated.trim();
+    return trimmed.isEmpty ? source : trimmed;
+  }
+
+  bool _containsAllGlossaryTokens(
+    String translated,
+    List<String> expectedTokens,
+  ) {
+    for (final token in expectedTokens) {
+      if (translated.contains(token)) continue;
+      final spaced = token.split('').join(' ');
+      if (!translated.contains(spaced)) return false;
+    }
+    return true;
   }
 
   String _restoreGlossary(
@@ -133,9 +179,11 @@ class LocalSubtitleTranslationService {
 class _ProtectedGlossaryText {
   final List<String> lines;
   final Map<String, String> replacements;
+  final List<List<String>> tokensByLine;
 
   const _ProtectedGlossaryText({
     required this.lines,
     required this.replacements,
+    required this.tokensByLine,
   });
 }
