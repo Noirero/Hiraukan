@@ -24,7 +24,7 @@ class TranslationService {
   final YoudaoTranslator _youdaoTranslator = YoudaoTranslator();
   final MicrosoftTranslator _microsoftTranslator = MicrosoftTranslator();
   final LLMTranslator _llmTranslator = LLMTranslator();
-  final LocalTranslationEngine _localTranslator =
+  final LocalTranslationEngine _freeOnlineTranslator =
       FreeOnlineTranslationEngine.instance;
   static const String _cachePrefix = 'translation_cache_v2_';
 
@@ -158,7 +158,7 @@ class TranslationService {
   }
 
   Future<(String engineId, String engineVersion)> freeOnlineEngineIdentity() async {
-    return (_localTranslator.id, _localTranslator.version);
+    return (_freeOnlineTranslator.id, _freeOnlineTranslator.version);
   }
 
   /// 翻译文本到应用当前语言
@@ -174,7 +174,7 @@ class TranslationService {
         ? const Locale('id')
         : languageConfig.targetLocale;
     final engineCacheKey = selectedSource == TranslationSource.freeOnline.value
-        ? '${_localTranslator.id}:${_localTranslator.version}'
+        ? '${_freeOnlineTranslator.id}:${_freeOnlineTranslator.version}'
         : selectedSource;
 
     // 检查缓存
@@ -195,7 +195,7 @@ class TranslationService {
     // user choice. Network failures are surfaced without affecting playback.
     if (selectedSource == TranslationSource.freeOnline.value) {
       try {
-        final result = await _localTranslator.translate(
+        final result = await _freeOnlineTranslator.translate(
           text,
           sourceLanguage:
               sourceLang == null || sourceLang == 'auto' ? 'ja' : sourceLang,
@@ -474,7 +474,7 @@ class TranslationService {
         final data = json.decode(cached);
         final timestamp = data['timestamp'] as int;
         final isVersionedLocalEngine =
-            engineKey.startsWith('${_localTranslator.id}:');
+            engineKey.startsWith('${_freeOnlineTranslator.id}:');
         if (isVersionedLocalEngine ||
             DateTime.now().millisecondsSinceEpoch - timestamp <
                 7 * 24 * 60 * 60 * 1000) {
