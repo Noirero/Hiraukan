@@ -15,13 +15,12 @@ typedef FreeOnlineTranslateClient = Future<String> Function(
 /// The engine intentionally stays lightweight: no local model, no native AI
 /// runtime, and no automatic fallback to paid/API providers.
 class FreeOnlineTranslationEngine implements TranslationEngine {
-  FreeOnlineTranslationEngine._({
-    FreeOnlineTranslateClient? client,
-    this.requestTimeout = const Duration(seconds: 8),
-    this.maxAttempts = 2,
-    this.retryBaseDelay = const Duration(milliseconds: 300),
-    this.failureCooldown = const Duration(seconds: 30),
-  }) : _client = client ?? _defaultClient;
+  FreeOnlineTranslationEngine._()
+      : _client = _defaultClient,
+        requestTimeout = const Duration(seconds: 8),
+        maxAttempts = 2,
+        retryBaseDelay = const Duration(milliseconds: 300),
+        failureCooldown = const Duration(seconds: 30);
 
   /// Test-only constructor that does not require real network access.
   FreeOnlineTranslationEngine.forTesting({
