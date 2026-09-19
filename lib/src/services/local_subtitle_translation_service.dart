@@ -1,13 +1,13 @@
-import 'local_translation_engine.dart';
+import 'translation_engine.dart';
 import 'free_online_translation_engine.dart';
 import 'translation_glossary_service.dart';
 
 class LocalSubtitleTranslationService {
   LocalSubtitleTranslationService({
-    LocalTranslationEngine? engine,
+    TranslationEngine? engine,
   }) : _engine = engine ?? FreeOnlineTranslationEngine.instance;
 
-  final LocalTranslationEngine _engine;
+  final TranslationEngine _engine;
 
   Future<String> translateSegment({
     required List<String> sourceLines,
