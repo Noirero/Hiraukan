@@ -8,6 +8,7 @@ import '../models/subtitle/timed_subtitle.dart';
 import 'ai_heavy_job_queue.dart';
 import 'audio_conversion_service.dart';
 import 'reazon_fast_model_service.dart';
+import 'reazon_timestamp_segmenter.dart';
 import 'speech_recognition_engine.dart';
 
 class ReazonSpeechFastEngine implements SpeechRecognitionEngine {
@@ -16,7 +17,6 @@ class ReazonSpeechFastEngine implements SpeechRecognitionEngine {
   static final ReazonSpeechFastEngine instance = ReazonSpeechFastEngine._();
 
   static Future<void>? _bindingsFuture;
-  static const int _chunkSeconds = 20;
 
   @override
   String get id => 'reazonspeech_k2_v2';
@@ -96,7 +96,8 @@ class ReazonSpeechFastEngine implements SpeechRecognitionEngine {
         );
       }
 
-      final samplesPerChunk = wave.sampleRate * _chunkSeconds;
+      final samplesPerChunk =
+          wave.sampleRate * ReazonTimestampSegmenter.recommendedChunkSeconds;
       final segments = <SubtitleSegment>[];
 
       for (var start = 0;
@@ -125,15 +126,28 @@ class ReazonSpeechFastEngine implements SpeechRecognitionEngine {
 
           final startMs = (start * 1000 / wave.sampleRate).round();
           final endMs = (end * 1000 / wave.sampleRate).round();
-          segments.add(
-            SubtitleSegment(
-              id:
-                  '${request.trackIdentity.trackId}:reazon:$startMs:$endMs',
-              start: Duration(milliseconds: startMs),
-              end: Duration(milliseconds: endMs),
-              text: text,
-            ),
+          final spans = ReazonTimestampSegmenter.segment(
+            tokens: result.tokens,
+            timestamps: result.timestamps,
+            chunkStart: Duration(milliseconds: startMs),
+            chunkEnd: Duration(milliseconds: endMs),
+            fallbackText: text,
           );
+
+          for (var spanIndex = 0; spanIndex < spans.length; spanIndex++) {
+            final span = spans[spanIndex];
+            segments.add(
+              SubtitleSegment(
+                id:
+                    '${request.trackIdentity.trackId}:reazon:'
+                    '${span.start.inMilliseconds}:'
+                    '${span.end.inMilliseconds}:$spanIndex',
+                start: span.start,
+                end: span.end,
+                text: span.text,
+              ),
+            );
+          }
         } finally {
           stream.free();
         }
