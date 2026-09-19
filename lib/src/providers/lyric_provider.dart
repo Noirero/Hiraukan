@@ -18,11 +18,14 @@ import '../services/subtitle_database.dart';
 import '../services/log_service.dart';
 import '../utils/encoding_utils.dart';
 import '../services/translation_service.dart';
+import '../services/local_subtitle_translation_service.dart';
+import '../services/translation_glossary_service.dart';
 import '../services/subtitle_translation_cache.dart';
 import '../services/storage_service.dart';
 import 'auth_provider.dart';
 import 'audio_provider.dart';
 import 'settings_provider.dart';
+import 'local_translation_quality_provider.dart';
 import 'subtitle_display_mode_provider.dart';
 import '../subtitles/subtitle_controller.dart';
 
@@ -207,6 +210,42 @@ class LyricController extends StateNotifier<LyricState> {
     return activeTrack != null &&
         generation.requestId == requestId &&
         generation.track == TrackIdentity.fromTrack(activeTrack);
+  }
+
+  int _pickNextTranslationIndex(
+    Set<int> pending,
+    List<LyricLine> lyrics,
+    Duration playbackPosition,
+  ) {
+    if (pending.length == 1) return pending.first;
+
+    var currentIndex = 0;
+    for (var i = 0; i < lyrics.length; i++) {
+      if (playbackPosition >= lyrics[i].startTime) {
+        currentIndex = i;
+      } else {
+        break;
+      }
+    }
+
+    int score(int index) {
+      final delta = index - currentIndex;
+      if (delta == 0) return 0;
+      if (delta > 0 && delta <= 12) return delta;
+      if (delta < 0 && -delta <= 4) return 20 + (-delta);
+      return 100 + delta.abs() * 2 + (delta < 0 ? 1 : 0);
+    }
+
+    var best = pending.first;
+    var bestScore = score(best);
+    for (final index in pending.skip(1)) {
+      final candidateScore = score(index);
+      if (candidateScore < bestScore) {
+        best = index;
+        bestScore = candidateScore;
+      }
+    }
+    return best;
   }
 
   // 根据音频轨道查找并加载字幕
@@ -651,6 +690,14 @@ class LyricController extends StateNotifier<LyricState> {
       final isLocalAi = await translationService.isLocalAiSelected();
       final localIdentity =
           isLocalAi ? await translationService.localEngineIdentity() : null;
+      final localQuality = ref.read(localTranslationQualityProvider);
+      final glossary =
+          isLocalAi ? await TranslationGlossaryService.instance.load() : null;
+      final translationStrategy = isLocalAi
+          ? (localQuality.contextEnabled
+              ? 'local-lite-context-v1'
+              : 'local-lite-segment-v1')
+          : 'legacy-provider-v1';
       if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
         return null;
       }
@@ -685,6 +732,9 @@ class LyricController extends StateNotifier<LyricState> {
           sourceLyrics: sourceLyrics,
           engineId: localIdentity.$1,
           engineVersion: localIdentity.$2,
+          glossaryVersion: glossary?.version ??
+              SubtitleTranslationCache.defaultGlossaryVersion,
+          translationStrategy: translationStrategy,
         );
         if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
           return null;
@@ -708,47 +758,102 @@ class LyricController extends StateNotifier<LyricState> {
       }
 
       final progressive = List<LyricLine>.from(sourceLyrics);
+      final translated = List<LyricLine>.from(sourceLyrics);
       var switchedToTranslatedMode = false;
 
-      final translatedTexts = await translationService.translateBatch(
-        textsToTranslate,
-        sourceLang: 'ja',
-        onItemTranslated: (itemIndex, translatedText, completed, total) {
-          if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
-            return;
-          }
-          final lyricIndex = indexMap[itemIndex];
-          progressive[lyricIndex] =
-              sourceLyrics[lyricIndex].copyWith(text: translatedText);
+      void publishProgress(
+        int lyricIndex,
+        String translatedText,
+        int completed,
+        int total,
+      ) {
+        if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
+          return;
+        }
+        progressive[lyricIndex] =
+            sourceLyrics[lyricIndex].copyWith(text: translatedText);
+        translated[lyricIndex] = progressive[lyricIndex];
 
-          if (!switchedToTranslatedMode) {
-            switchedToTranslatedMode = true;
-            unawaited(
-              ref
-                  .read(subtitleDisplayModeProvider.notifier)
-                  .setMode(SubtitleDisplayMode.translated),
-            );
-          }
-
-          // Publish a copied list so the UI can safely show incremental output
-          // without observing later mutations of the working buffer.
-          state = state.copyWith(
-            translatedLyrics: List<LyricLine>.unmodifiable(progressive),
-            showTranslated: true,
-            isTranslating: true,
-            translatedCount: completed,
-            translationTotal: total,
+        if (!switchedToTranslatedMode) {
+          switchedToTranslatedMode = true;
+          unawaited(
+            ref
+                .read(subtitleDisplayModeProvider.notifier)
+                .setMode(SubtitleDisplayMode.translated),
           );
-        },
-      );
-      if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
-        return null;
+        }
+
+        state = state.copyWith(
+          translatedLyrics: List<LyricLine>.unmodifiable(progressive),
+          showTranslated: true,
+          isTranslating: true,
+          translatedCount: completed,
+          translationTotal: total,
+        );
       }
 
-      final translated = List<LyricLine>.from(sourceLyrics);
-      for (int i = 0; i < indexMap.length; i++) {
-        final idx = indexMap[i];
-        translated[idx] = sourceLyrics[idx].copyWith(text: translatedTexts[i]);
+      if (isLocalAi && glossary != null) {
+        final localSubtitleTranslator = LocalSubtitleTranslationService();
+        final allSourceTexts =
+            sourceLyrics.map((line) => line.text).toList(growable: false);
+        final pending = indexMap.toSet();
+        var completed = 0;
+
+        while (pending.isNotEmpty) {
+          if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
+            return null;
+          }
+
+          final rawPlaybackPosition =
+              ref.read(positionProvider).value ?? Duration.zero;
+          final effectivePlaybackPosition =
+              rawPlaybackPosition - sourceOffset;
+          final lyricIndex = localQuality.playbackPriorityEnabled
+              ? _pickNextTranslationIndex(
+                  pending,
+                  sourceLyrics,
+                  effectivePlaybackPosition,
+                )
+              : pending.first;
+
+          final translatedText =
+              await localSubtitleTranslator.translateSegment(
+            sourceLines: allSourceTexts,
+            index: lyricIndex,
+            glossary: glossary,
+            contextEnabled: localQuality.contextEnabled,
+          );
+          if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
+            return null;
+          }
+
+          pending.remove(lyricIndex);
+          completed++;
+          publishProgress(
+            lyricIndex,
+            translatedText,
+            completed,
+            textsToTranslate.length,
+          );
+        }
+      } else {
+        await translationService.translateBatch(
+          textsToTranslate,
+          sourceLang: 'ja',
+          onItemTranslated: (itemIndex, translatedText, completed, total) {
+            final lyricIndex = indexMap[itemIndex];
+            publishProgress(
+              lyricIndex,
+              translatedText,
+              completed,
+              total,
+            );
+          },
+        );
+      }
+
+      if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
+        return null;
       }
 
       String? savedPath;
@@ -759,6 +864,9 @@ class LyricController extends StateNotifier<LyricState> {
           translatedLyrics: translated,
           engineId: localIdentity.$1,
           engineVersion: localIdentity.$2,
+          glossaryVersion: glossary?.version ??
+              SubtitleTranslationCache.defaultGlossaryVersion,
+          translationStrategy: translationStrategy,
         );
       } else {
         final shouldAutoSave = await ref
