@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/translation_glossary_provider.dart';
+import '../providers/local_translation_provider.dart';
 import '../services/translation_glossary_service.dart';
 
 class TranslationGlossaryScreen extends ConsumerWidget {
@@ -71,6 +72,7 @@ class TranslationGlossaryScreen extends ConsumerWidget {
           entry,
           previousSource: existing?.source,
         );
+    ref.invalidate(translationDocumentCacheStatsProvider);
   }
 
   @override
@@ -165,6 +167,9 @@ class TranslationGlossaryScreen extends ConsumerWidget {
                         await ref
                             .read(translationGlossaryProvider.notifier)
                             .clear();
+                        ref.invalidate(
+                          translationDocumentCacheStatsProvider,
+                        );
                       }
                     },
                     icon: const Icon(Icons.delete_sweep_outlined),
@@ -186,9 +191,14 @@ class TranslationGlossaryScreen extends ConsumerWidget {
                   ),
                   trailing: IconButton(
                     tooltip: 'Hapus',
-                    onPressed: () => ref
-                        .read(translationGlossaryProvider.notifier)
-                        .remove(entry.source),
+                    onPressed: () async {
+                      await ref
+                          .read(translationGlossaryProvider.notifier)
+                          .remove(entry.source);
+                      ref.invalidate(
+                        translationDocumentCacheStatsProvider,
+                      );
+                    },
                     icon: const Icon(Icons.delete_outline),
                   ),
                 ),
