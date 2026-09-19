@@ -31,6 +31,10 @@ class SpeechRecognitionCoordinator {
   static final SpeechRecognitionCoordinator instance =
       SpeechRecognitionCoordinator._();
 
+  // Fast stays unavailable to normal profile routing until real Android/ASMR
+  // benchmark results pass the acceptance policy in asr_benchmark.dart.
+  static const bool fastProfileApproved = false;
+
   SpeechRecognitionProfile profileFromName(String value) {
     return SpeechRecognitionProfile.values.firstWhere(
       (profile) => profile.name == value,
@@ -45,6 +49,12 @@ class SpeechRecognitionCoordinator {
       case SpeechRecognitionProfile.compatibility:
         return const WhisperCompatibilityEngine();
       case SpeechRecognitionProfile.fast:
+        if (!fastProfileApproved) {
+          throw const SpeechRecognitionProfileUnavailableException(
+            SpeechRecognitionProfile.fast,
+            'Fast ASR masih eksperimental sampai benchmark Android/ASMR lulus.',
+          );
+        }
         return ReazonSpeechFastEngine.instance;
       case SpeechRecognitionProfile.highQuality:
         throw const SpeechRecognitionProfileUnavailableException(
@@ -52,6 +62,9 @@ class SpeechRecognitionCoordinator {
           'High Quality ASR belum diaktifkan sampai engine HQ lolos benchmark.',
         );
       case SpeechRecognitionProfile.auto:
+        if (!fastProfileApproved) {
+          return const WhisperCompatibilityEngine();
+        }
         final fast = await ReazonFastModelService.instance.status();
         if (fast.isReady) return ReazonSpeechFastEngine.instance;
         return const WhisperCompatibilityEngine();
