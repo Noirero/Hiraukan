@@ -54,8 +54,8 @@ jobs:
 
             echo "mode=standalone" >> "$GITHUB_OUTPUT"
             echo "app_id=com.meteor.kikoeruflutter.mainbuild" >> "$GITHUB_OUTPUT"
-            echo "apk_name=Hiraukan-main-standalone-arm64-v8a.apk" >> "$GITHUB_OUTPUT"
-            echo "artifact_name=Hiraukan-main-standalone-arm64-v8a" >> "$GITHUB_OUTPUT"
+            echo "apk_name=Hiraukan-main-NOT-UPDATE-standalone-arm64-v8a.apk" >> "$GITHUB_OUTPUT"
+            echo "artifact_name=Hiraukan-main-NOT-UPDATE-standalone-arm64-v8a" >> "$GITHUB_OUTPUT"
             echo "::warning::Production signing credentials are incomplete. Building a separate-install APK instead of reusing the production applicationId."
           fi
 
@@ -111,6 +111,18 @@ jobs:
           package_line="$(printf '%s\n' "$badging" | sed -n '1p')"
           package_name="$(sed -n "s/.*package: name='\([^']*\)'.*/\1/p" <<< "$package_line")"
           native_code="$(printf '%s\n' "$badging" | sed -n "s/^native-code: //p" | head -n 1)"
+          version_code="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<< "$package_line")"
+          pubspec_build_number="$(sed -nE 's/^version: [0-9]+\.[0-9]+\.[0-9]+\+([0-9]+)$/\1/p' pubspec.yaml)"
+
+          if [ -z "$pubspec_build_number" ]; then
+            echo "::error::pubspec.yaml must include an explicit +buildNumber for Android update safety."
+            exit 1
+          fi
+          expected_arm64_code=$((pubspec_build_number + 2000))
+          if [ "$version_code" -ne "$expected_arm64_code" ]; then
+            echo "::error::Unexpected ARM64 versionCode: $version_code (expected $expected_arm64_code)."
+            exit 1
+          fi
 
           if [ "$package_name" != "$EXPECTED_PACKAGE_ID" ]; then
             echo "::error::Unexpected package id: $package_name (expected $EXPECTED_PACKAGE_ID)"
@@ -161,6 +173,7 @@ jobs:
           fi
 
           echo "applicationId=$package_name"
+          echo "versionCode=$version_code"
           echo "native-code=$native_code"
           echo "certificate-sha256=$actual_cert"
 
