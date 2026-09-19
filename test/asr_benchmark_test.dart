@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:kikoeru_flutter/src/services/android_ai_telemetry_service.dart';
 import 'package:kikoeru_flutter/src/services/asr_benchmark.dart';
 
 void main() {
@@ -53,6 +54,21 @@ void main() {
     expect(categories, contains(AsrBenchmarkCategory.longSilence));
     expect(categories, contains(AsrBenchmarkCategory.informalJapanese));
     expect(categories, contains(AsrBenchmarkCategory.multiCharacter));
+  });
+
+  test('Android telemetry snapshot tolerates partial device metrics', () {
+    final snapshot = AndroidAiTelemetrySnapshot.fromMap({
+      'sdkInt': 35,
+      'thermalStatus': 2,
+      'batteryPercent': 78.5,
+      'batteryTemperatureTenthsC': 341,
+    });
+
+    expect(snapshot.sdkInt, 35);
+    expect(snapshot.thermalStatus, 2);
+    expect(snapshot.batteryPercent, 78.5);
+    expect(snapshot.batteryTemperatureTenthsC, 341);
+    expect(snapshot.batteryEnergyCounterNanoWh, isNull);
   });
 
   test('invalid benchmark category fails closed', () {
