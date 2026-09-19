@@ -6,6 +6,7 @@ import '../subtitles/subtitle_controller.dart';
 import '../subtitles/subtitle_format_adapter.dart';
 import 'audio_provider.dart';
 import 'lyric_provider.dart';
+import 'subtitle_display_mode_provider.dart';
 
 /// Transitional bridge that mirrors the existing LyricController state into
 /// the new universal subtitle model.
@@ -47,13 +48,39 @@ final subtitleControllerProvider =
         track: track,
         lyrics: lyricState.lyrics,
         origin: origin,
+        language: 'ja',
       ),
     );
-    controller.setLoading(lyricState.isLoading);
+
+    final translatedLyrics = lyricState.translatedLyrics;
+    if (translatedLyrics != null) {
+      controller.setTranslated(
+        SubtitleFormatAdapter.fromLegacyLyrics(
+          track: track,
+          lyrics: translatedLyrics,
+          origin: SubtitleOrigin.aiGenerated,
+          language: 'id',
+          isComplete: !lyricState.isTranslating,
+        ),
+      );
+    } else {
+      controller.clearTranslated();
+    }
+
+    controller.setDisplayMode(ref.read(subtitleDisplayModeProvider));
+    controller.setLoading(
+      lyricState.isLoading || lyricState.isTranslating,
+      statusMessage: lyricState.isTranslating
+          ? 'Menerjemahkan ${lyricState.translatedCount}/${lyricState.translationTotal}'
+          : null,
+    );
   }
 
   ref.listen(currentTrackProvider, (_, __) => syncLegacyState());
   ref.listen(lyricControllerProvider, (_, __) => syncLegacyState());
+  ref.listen(subtitleDisplayModeProvider, (_, mode) {
+    controller.setDisplayMode(mode);
+  });
 
   // The provider can be first read after a track/subtitle is already active.
   // Seed it immediately instead of waiting for the next stream change.
