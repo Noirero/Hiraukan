@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -71,6 +72,14 @@ void main() {
       ReazonChunkPlanner.hardMaxSeconds,
       lessThan(ReazonTimestampSegmenter.modelMaxClipSeconds),
     );
+  });
+
+  test('sherpa runtime dependency matches the pinned model manifest runtime',
+      () {
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+    expect(pubspec, contains('sherpa_onnx: 1.13.8'));
+    expect(pubspec, isNot(contains('sherpa_onnx: ^1.13.8')));
+    expect(ReazonFastModelService.runtimeId, 'sherpa-onnx-1.13.8');
   });
 
   test('pinned Fast ASR weights keep the reviewed footprint', () {
