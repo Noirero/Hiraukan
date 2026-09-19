@@ -680,7 +680,9 @@ class LyricController extends StateNotifier<LyricState> {
               timelineOffset: sourceOffset,
             )
           : null;
-      if (!_isCurrentTranslationRequest(requestId)) return null;
+      if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
+        return null;
+      }
 
       state = state.copyWith(
         translatedLyrics: translated,
