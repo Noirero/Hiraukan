@@ -688,9 +688,9 @@ class LyricController extends StateNotifier<LyricState> {
 
       state = state.copyWith(translationTotal: textsToTranslate.length);
 
-      // A complete Free Online document cache survives model deletion and avoids
-      // re-running inference. Its key includes source content and engine
-      // version, so changed Japanese subtitles cannot reuse stale Indonesian.
+      // A complete Free Online document cache avoids repeated network requests.
+      // Its key includes source content and engine version, so changed Japanese
+      // subtitles cannot reuse stale Indonesian output.
       if (isFreeOnline && currentTrack != null && freeOnlineIdentity != null) {
         final cached = await SubtitleTranslationCache.instance.load(
           track: TrackIdentity.fromTrack(currentTrack),
