@@ -94,6 +94,7 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          EXPECTED_CERT_SHA256: b49fcc1a879b7dab15f223f7431dfbee447dbe268d1578fc549340c430ddc87f
         run: |
           set -euo pipefail
           missing=()
@@ -113,7 +114,19 @@ jobs:
           keyPassword=$ANDROID_KEY_PASSWORD
           EOF
           chmod 600 android/app/release-key.jks android/key.properties
-          keytool -list -keystore android/app/release-key.jks -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" >/dev/null
+          cert_output="$(keytool -list -v -keystore android/app/release-key.jks -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" 2>&1)"
+          actual_cert="$(printf '%s\n' "$cert_output" |
+            sed -nE '/SHA256:/I { s/.*SHA256:[[:space:]]*//I; p; q; }' |
+            tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+          if [ -z "$actual_cert" ]; then
+            echo "::error::Unable to read production keystore certificate."
+            exit 1
+          fi
+          if [ "$actual_cert" != "$EXPECTED_CERT_SHA256" ]; then
+            echo "::error::Wrong Android signing certificate: $actual_cert. Expected historical production certificate $EXPECTED_CERT_SHA256."
+            exit 1
+          fi
+          echo "Production signing certificate verified before build."
           echo "configured=true" >> "$GITHUB_OUTPUT"
 
       - name: Setup Java
