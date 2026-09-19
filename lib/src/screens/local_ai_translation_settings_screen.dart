@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/local_translation_provider.dart';
+import '../providers/local_translation_quality_provider.dart';
+import '../providers/translation_glossary_provider.dart';
 import '../services/local_translation_engine.dart';
 import '../services/subtitle_translation_cache.dart';
+import 'translation_glossary_screen.dart';
 
 class LocalAiTranslationSettingsScreen extends ConsumerWidget {
   const LocalAiTranslationSettingsScreen({super.key});
@@ -12,6 +15,8 @@ class LocalAiTranslationSettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncStatus = ref.watch(localTranslationModelProvider);
     final cacheStats = ref.watch(translationDocumentCacheStatsProvider);
+    final quality = ref.watch(localTranslationQualityProvider);
+    final glossary = ref.watch(translationGlossaryProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('AI Translate Lokal')),
@@ -53,6 +58,60 @@ class LocalAiTranslationSettingsScreen extends ConsumerWidget {
                   ref.read(localTranslationModelProvider.notifier).refresh(),
             ),
             data: (status) => _buildStatusCard(context, ref, status),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Column(
+              children: [
+                SwitchListTile(
+                  secondary: const Icon(Icons.forum_outlined),
+                  title: const Text('Gunakan konteks baris sekitar'),
+                  subtitle: const Text(
+                    'Mencoba baris sebelum/sesudah untuk memahami kalimat '
+                    'Jepang yang menghilangkan subjek. Jika mapping berubah, '
+                    'otomatis kembali ke terjemahan 1:1.',
+                  ),
+                  value: quality.contextEnabled,
+                  onChanged: (value) => ref
+                      .read(localTranslationQualityProvider.notifier)
+                      .setContextEnabled(value),
+                ),
+                const Divider(height: 1),
+                SwitchListTile(
+                  secondary: const Icon(Icons.play_circle_outline),
+                  title: const Text('Prioritaskan posisi playback'),
+                  subtitle: const Text(
+                    'Terjemahkan subtitle dekat posisi yang sedang diputar '
+                    'atau setelah seek lebih dahulu.',
+                  ),
+                  value: quality.playbackPriorityEnabled,
+                  onChanged: (value) => ref
+                      .read(localTranslationQualityProvider.notifier)
+                      .setPlaybackPriorityEnabled(value),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.menu_book_outlined),
+                  title: const Text('Glossary / istilah khusus'),
+                  subtitle: Text(
+                    glossary.when(
+                      data: (value) =>
+                          '${value.entries.length} istilah · versi ${value.version}',
+                      loading: () => 'Memuat...',
+                      error: (_, __) => 'Tidak tersedia',
+                    ),
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const TranslationGlossaryScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 16),
           cacheStats.when(
