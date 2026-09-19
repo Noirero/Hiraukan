@@ -260,7 +260,7 @@ class ReazonFastModelService {
           await _verifyFile(
             destination,
             spec,
-            recordedHash: existingManifest.hashes[spec.name],
+            recordedHash: existingManifest?.hashes[spec.name],
           )) {
         final length = await destination.length();
         completedBytes += length;
