@@ -6,6 +6,7 @@ import '../../providers/audio_provider.dart';
 import '../../providers/lyric_provider.dart';
 import '../../providers/subtitle_controller_provider.dart';
 import '../../providers/player_lyric_style_provider.dart';
+import '../../subtitles/subtitle_controller.dart';
 import '../../../l10n/app_localizations.dart';
 
 /// 小字幕显示组件（在封面下方显示当前字幕）
@@ -16,41 +17,82 @@ class LyricDisplay extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Keep the universal subtitle bridge alive while the legacy lyric renderer
-    // remains the visible player surface.
-    ref.watch(subtitleControllerProvider);
-
-    final currentLyric = ref.watch(currentLyricTextProvider);
+    final subtitleState = ref.watch(subtitleControllerProvider);
     final lyricState = ref.watch(lyricControllerProvider);
+    final position = ref.watch(positionProvider);
     final lyricSettings = ref.watch(playerLyricSettingsProvider);
 
-    // 如果有字幕，显示字幕
-    if (lyricState.lyrics.isNotEmpty) {
+    if (lyricState.lyrics.isNotEmpty &&
+        subtitleState.displayMode != SubtitleDisplayMode.off) {
+      final originalLyrics = lyricState.adjustedLyrics;
+      final translatedLyrics = lyricState.translatedLyrics == null
+          ? null
+          : lyricState.translatedLyrics!
+              .map((line) => line.applyOffset(lyricState.timelineOffset))
+              .toList(growable: false);
+
+      final currentTexts = position.when(
+        data: (pos) {
+          final original =
+              LyricParser.getCurrentLyric(originalLyrics, pos) ?? '♪';
+          final translated = translatedLyrics == null
+              ? null
+              : LyricParser.getCurrentLyric(translatedLyrics, pos);
+          return (original: original, translated: translated);
+        },
+        loading: () => (original: '♪', translated: null),
+        error: (_, __) => (original: '♪', translated: null),
+      );
+
+      final primaryText = switch (subtitleState.displayMode) {
+        SubtitleDisplayMode.translated =>
+          currentTexts.translated ?? currentTexts.original,
+        _ => currentTexts.original,
+      };
+      final secondaryText =
+          subtitleState.displayMode == SubtitleDisplayMode.bilingual &&
+                  currentTexts.translated != null &&
+                  currentTexts.translated != currentTexts.original
+              ? currentTexts.translated
+              : null;
+
       return AnimatedSize(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeInOut,
         child: Container(
-          constraints: const BoxConstraints(
-            minHeight: 23,
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+          constraints: const BoxConstraints(minHeight: 23),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Center(
-            child: Text(
-              currentLyric ?? '♪',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.bold,
-                    height: lyricSettings.smallLineHeight,
-                    fontSize: lyricSettings.smallFontSize,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  primaryText,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                        height: lyricSettings.smallLineHeight,
+                        fontSize: lyricSettings.smallFontSize,
+                      ),
+                  textAlign: TextAlign.center,
+                ),
+                if (secondaryText != null)
+                  Text(
+                    secondaryText,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant,
+                          height: lyricSettings.smallLineHeight,
+                        ),
+                    textAlign: TextAlign.center,
                   ),
-              textAlign: TextAlign.center,
+              ],
             ),
           ),
         ),
       );
     }
 
-    // 没有字幕时显示专辑名
     if (albumName != null) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
