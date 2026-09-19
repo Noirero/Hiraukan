@@ -4,11 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kikoeru_flutter/src/models/ai_job_identity.dart';
 import 'package:kikoeru_flutter/src/models/audio_track.dart';
 import 'package:kikoeru_flutter/src/providers/settings_provider.dart';
-import 'package:kikoeru_flutter/src/services/local_translation_engine.dart';
+import 'package:kikoeru_flutter/src/services/free_online_translation_engine.dart';
 
 void main() {
-  test('Local AI provider is explicit and Indonesian target is available', () {
-    expect(TranslationSource.localAi.value, 'local_ai');
+  test('free online provider keeps legacy preference value and Indonesian target',
+      () {
+    // Keep the persisted value so existing Beta users migrate automatically
+    // from the former Local AI option to the new free-online option.
+    expect(TranslationSource.freeOnline.value, 'local_ai');
     expect(TranslationTargetLanguage.indonesian.value, 'id');
     expect(
       TranslationTargetLanguage.indonesian.resolveLocale(
@@ -16,6 +19,16 @@ void main() {
       ).languageCode,
       'id',
     );
+  });
+
+  test('free online engine requires no local model manager', () async {
+    final engine = FreeOnlineTranslationEngine.instance;
+    expect(engine.id, 'google_web_no_key');
+    expect(engine.displayName, contains('Gratis Online'));
+
+    final status = await engine.getModelStatus();
+    expect(status.isReady, isTrue);
+    expect(status.message, contains('tidak membutuhkan model lokal'));
   });
 
   test('track identity is stable across display-only track changes', () {
@@ -66,25 +79,5 @@ void main() {
       TrackIdentity.fromTrack(first),
       isNot(TrackIdentity.fromTrack(second)),
     );
-  });
-
-  test('model status is only ready when both language models are installed', () {
-    const incomplete = LocalTranslationModelStatus(
-      state: LocalModelState.ready,
-      engineId: 'test',
-      engineVersion: '1',
-      sourceModelInstalled: true,
-      targetModelInstalled: false,
-    );
-    const ready = LocalTranslationModelStatus(
-      state: LocalModelState.ready,
-      engineId: 'test',
-      engineVersion: '1',
-      sourceModelInstalled: true,
-      targetModelInstalled: true,
-    );
-
-    expect(incomplete.isReady, isFalse);
-    expect(ready.isReady, isTrue);
   });
 }
