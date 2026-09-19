@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/ai_job_identity.dart';
+import 'android_ai_telemetry_service.dart';
 import 'speech_recognition_engine.dart';
 
 enum AsrBenchmarkCategory {
@@ -77,6 +78,8 @@ class AsrBenchmarkMeasurement {
   final int rssAfterBytes;
   final int? processPeakRssBeforeBytes;
   final int? processPeakRssAfterBytes;
+  final AndroidAiTelemetrySnapshot? telemetryBefore;
+  final AndroidAiTelemetrySnapshot? telemetryAfter;
 
   const AsrBenchmarkMeasurement({
     required this.caseId,
@@ -91,6 +94,8 @@ class AsrBenchmarkMeasurement {
     required this.rssAfterBytes,
     this.processPeakRssBeforeBytes,
     this.processPeakRssAfterBytes,
+    this.telemetryBefore,
+    this.telemetryAfter,
   });
 
   Map<String, dynamic> toJson() => {
@@ -106,6 +111,8 @@ class AsrBenchmarkMeasurement {
         'rssAfterBytes': rssAfterBytes,
         'processPeakRssBeforeBytes': processPeakRssBeforeBytes,
         'processPeakRssAfterBytes': processPeakRssAfterBytes,
+        'telemetryBefore': telemetryBefore?.toJson(),
+        'telemetryAfter': telemetryAfter?.toJson(),
       };
 }
 
@@ -239,6 +246,7 @@ class AsrBenchmarkRunner {
     }
 
     final identity = await _identityForFile(audio);
+    final telemetryBefore = await AndroidAiTelemetryService.instance.snapshot();
     final peakBefore = await _readLinuxProcessPeakRssBytes();
     final rssBefore = ProcessInfo.currentRss;
     final stopwatch = Stopwatch()..start();
@@ -255,6 +263,7 @@ class AsrBenchmarkRunner {
     stopwatch.stop();
     final rssAfter = ProcessInfo.currentRss;
     final peakAfter = await _readLinuxProcessPeakRssBytes();
+    final telemetryAfter = await AndroidAiTelemetryService.instance.snapshot();
     final hypothesis = subtitle?.segments
             .map((segment) => segment.text.trim())
             .where((text) => text.isNotEmpty)
@@ -278,6 +287,8 @@ class AsrBenchmarkRunner {
       rssAfterBytes: rssAfter,
       processPeakRssBeforeBytes: peakBefore,
       processPeakRssAfterBytes: peakAfter,
+      telemetryBefore: telemetryBefore,
+      telemetryAfter: telemetryAfter,
     );
   }
 
