@@ -246,15 +246,27 @@ enum AudioFormat {
 
 /// 翻译源
 enum TranslationSource {
-  freeOnline('Gratis Online (Tanpa API)', 'local_ai'),
+  freeOnline('Gratis Online (Tanpa API)', 'free_online'),
   google('Google 翻译', 'google'),
   youdao('Youdao 翻译', 'youdao'),
   microsoft('Microsoft 翻译', 'microsoft'),
   llm('LLM 翻译', 'llm');
 
+  static const String legacyFreeOnlineValue = 'local_ai';
+
   final String displayName;
   final String value;
   const TranslationSource(this.displayName, this.value);
+
+  static TranslationSource fromStoredValue(String? value) {
+    if (value == legacyFreeOnlineValue) {
+      return TranslationSource.freeOnline;
+    }
+    return TranslationSource.values.firstWhere(
+      (source) => source.value == value,
+      orElse: () => TranslationSource.freeOnline,
+    );
+  }
 }
 
 /// 翻译目标语言
@@ -452,11 +464,11 @@ class TranslationSourceNotifier extends StateNotifier<TranslationSource> {
       final savedValue = prefs.getString(_preferenceKey);
 
       if (savedValue != null) {
-        final source = TranslationSource.values.firstWhere(
-          (s) => s.value == savedValue,
-          orElse: () => TranslationSource.freeOnline,
-        );
+        final source = TranslationSource.fromStoredValue(savedValue);
         state = source;
+        if (savedValue != source.value) {
+          await prefs.setString(_preferenceKey, source.value);
+        }
       }
     } catch (e) {
       state = TranslationSource.freeOnline;
