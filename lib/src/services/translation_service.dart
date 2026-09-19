@@ -156,7 +156,8 @@ class TranslationService {
     if (text.isEmpty) return text;
 
     final prefs = await SharedPreferences.getInstance();
-    final selectedSource = prefs.getString('translation_source') ?? 'google';
+    final selectedSource = prefs.getString('translation_source') ??
+        TranslationSource.localAi.value;
     final languageConfig = _getLanguageConfig(prefs, selectedSource);
     final cacheSourceLang = languageConfig.cacheSourceLang(sourceLang);
     final cacheTargetLang = languageConfig.cacheTargetLang();
@@ -294,13 +295,17 @@ class TranslationService {
   }
 
   /// 批量翻译
-  Future<List<String>> translateBatch(List<String> texts,
-      {String? sourceLang}) async {
+  Future<List<String>> translateBatch(
+    List<String> texts, {
+    String? sourceLang,
+    void Function(int current, int total)? onProgress,
+  }) async {
     if (texts.isEmpty) return [];
 
     // 获取并发设置
     final prefs = await SharedPreferences.getInstance();
-    final source = prefs.getString('translation_source') ?? 'google';
+    final source = prefs.getString('translation_source') ??
+        TranslationSource.localAi.value;
     int concurrency = 1;
     if (source == 'llm') {
       concurrency = LLMSettings.normalizeConcurrency(
@@ -324,6 +329,11 @@ class TranslationService {
         } catch (e) {
           _log.captureOutput('Translation batch item $index failed: $e');
           results[index] = texts[index];
+        } finally {
+          onProgress?.call(
+            results.where((value) => value.isNotEmpty).length,
+            texts.length,
+          );
         }
       }
     }
