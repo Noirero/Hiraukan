@@ -153,6 +153,223 @@ class AsrBenchmarkSummary {
       };
 }
 
+enum AsrBenchmarkGateState {
+  passed,
+  failed,
+  incomplete,
+}
+
+class AsrBenchmarkGateResult {
+  final AsrBenchmarkGateState state;
+  final List<String> reasons;
+
+  const AsrBenchmarkGateResult({
+    required this.state,
+    required this.reasons,
+  });
+
+  bool get passed => state == AsrBenchmarkGateState.passed;
+}
+
+class AsrFastAcceptancePolicy {
+  final double maxMeanCerRegression;
+  final double maxCriticalCerRegression;
+  final double maxSingleCaseCerRegression;
+  final double maxMeanRealTimeFactor;
+  final double requiredSpeedupFraction;
+  final int maxRssRegressionBytes;
+  final int criticalThermalStatus;
+
+  const AsrFastAcceptancePolicy({
+    this.maxMeanCerRegression = 0.08,
+    this.maxCriticalCerRegression = 0.12,
+    this.maxSingleCaseCerRegression = 0.20,
+    this.maxMeanRealTimeFactor = 1.0,
+    this.requiredSpeedupFraction = 0.10,
+    this.maxRssRegressionBytes = 384 * 1024 * 1024,
+    this.criticalThermalStatus = 4,
+  });
+}
+
+/// Compares a Fast-ASR candidate against the existing Compatibility engine.
+///
+/// These gates intentionally use relative quality/resource regressions instead
+/// of claiming one absolute CER is correct for every ASMR corpus or device.
+/// A candidate only earns the Fast profile when it is materially faster while
+/// remaining close to the compatibility baseline on whisper-heavy content.
+class AsrFastAcceptanceEvaluator {
+  const AsrFastAcceptanceEvaluator._();
+
+  static const criticalCategories = <AsrBenchmarkCategory>{
+    AsrBenchmarkCategory.softWhisper,
+    AsrBenchmarkCategory.closeMic,
+    AsrBenchmarkCategory.binaural,
+    AsrBenchmarkCategory.breathHeavy,
+    AsrBenchmarkCategory.longSilence,
+    AsrBenchmarkCategory.informalJapanese,
+    AsrBenchmarkCategory.multiCharacter,
+  };
+
+  static AsrBenchmarkGateResult evaluate({
+    required AsrBenchmarkSummary candidate,
+    required AsrBenchmarkSummary compatibility,
+    AsrFastAcceptancePolicy policy = const AsrFastAcceptancePolicy(),
+  }) {
+    if (candidate.measurements.isEmpty || compatibility.measurements.isEmpty) {
+      return const AsrBenchmarkGateResult(
+        state: AsrBenchmarkGateState.incomplete,
+        reasons: ['Candidate and compatibility benchmark results are required.'],
+      );
+    }
+
+    final candidateById = {
+      for (final item in candidate.measurements) item.caseId: item,
+    };
+    final compatibilityById = {
+      for (final item in compatibility.measurements) item.caseId: item,
+    };
+
+    if (candidateById.length != candidate.measurements.length ||
+        compatibilityById.length != compatibility.measurements.length) {
+      return const AsrBenchmarkGateResult(
+        state: AsrBenchmarkGateState.incomplete,
+        reasons: ['Benchmark case IDs must be unique for both engines.'],
+      );
+    }
+
+    final candidateIds = candidateById.keys.toSet();
+    final compatibilityIds = compatibilityById.keys.toSet();
+    if (candidateIds.length != compatibilityIds.length ||
+        !candidateIds.containsAll(compatibilityIds)) {
+      return const AsrBenchmarkGateResult(
+        state: AsrBenchmarkGateState.incomplete,
+        reasons: ['Fast and Compatibility must run the exact same case IDs.'],
+      );
+    }
+
+    final coveredCategories =
+        candidate.measurements.map((item) => item.category).toSet();
+    final missingCategories =
+        criticalCategories.difference(coveredCategories).map((e) => e.name);
+    if (missingCategories.isNotEmpty) {
+      return AsrBenchmarkGateResult(
+        state: AsrBenchmarkGateState.incomplete,
+        reasons: [
+          'Missing critical ASMR categories: ${missingCategories.join(', ')}',
+        ],
+      );
+    }
+
+    final reasons = <String>[];
+    final meanCerRegression =
+        candidate.meanCharacterErrorRate - compatibility.meanCharacterErrorRate;
+    if (meanCerRegression > policy.maxMeanCerRegression) {
+      reasons.add(
+        'Mean CER regression ${meanCerRegression.toStringAsFixed(3)} exceeds '
+        '${policy.maxMeanCerRegression.toStringAsFixed(3)}.',
+      );
+    }
+
+    final candidateCritical = candidate.measurements
+        .where((item) => criticalCategories.contains(item.category))
+        .toList(growable: false);
+    final compatibilityCritical = compatibility.measurements
+        .where((item) => criticalCategories.contains(item.category))
+        .toList(growable: false);
+    final candidateCriticalMean = _meanCer(candidateCritical);
+    final compatibilityCriticalMean = _meanCer(compatibilityCritical);
+    final criticalRegression =
+        candidateCriticalMean - compatibilityCriticalMean;
+    if (criticalRegression > policy.maxCriticalCerRegression) {
+      reasons.add(
+        'Critical-category CER regression '
+        '${criticalRegression.toStringAsFixed(3)} exceeds '
+        '${policy.maxCriticalCerRegression.toStringAsFixed(3)}.',
+      );
+    }
+
+    for (final id in candidateIds) {
+      final fast = candidateById[id]!;
+      final baseline = compatibilityById[id]!;
+      if (!criticalCategories.contains(fast.category)) continue;
+      if (fast.category != baseline.category) {
+        return AsrBenchmarkGateResult(
+          state: AsrBenchmarkGateState.incomplete,
+          reasons: ['Case $id has mismatched benchmark categories.'],
+        );
+      }
+      final regression =
+          fast.characterErrorRate - baseline.characterErrorRate;
+      if (regression > policy.maxSingleCaseCerRegression) {
+        reasons.add(
+          'Case $id CER regression ${regression.toStringAsFixed(3)} exceeds '
+          '${policy.maxSingleCaseCerRegression.toStringAsFixed(3)}.',
+        );
+      }
+    }
+
+    if (candidate.meanRealTimeFactor > policy.maxMeanRealTimeFactor) {
+      reasons.add(
+        'Fast ASR mean RTF ${candidate.meanRealTimeFactor.toStringAsFixed(3)} '
+        'is slower than the real-time limit '
+        '${policy.maxMeanRealTimeFactor.toStringAsFixed(3)}.',
+      );
+    }
+
+    final speedLimit =
+        compatibility.meanRealTimeFactor * (1 - policy.requiredSpeedupFraction);
+    if (candidate.meanRealTimeFactor > speedLimit) {
+      reasons.add(
+        'Fast ASR does not reach the required '
+        '${(policy.requiredSpeedupFraction * 100).round()}% speedup over '
+        'Compatibility.',
+      );
+    }
+
+    final candidateMaxRss = candidate.measurements
+        .map((item) => item.rssAfterBytes)
+        .reduce(mathMaxInt);
+    final compatibilityMaxRss = compatibility.measurements
+        .map((item) => item.rssAfterBytes)
+        .reduce(mathMaxInt);
+    if (candidateMaxRss >
+        compatibilityMaxRss + policy.maxRssRegressionBytes) {
+      reasons.add(
+        'Fast ASR RSS exceeds Compatibility by more than '
+        '${policy.maxRssRegressionBytes ~/ (1024 * 1024)} MiB.',
+      );
+    }
+
+    for (final measurement in candidate.measurements) {
+      final before = measurement.telemetryBefore?.thermalStatus;
+      final after = measurement.telemetryAfter?.thermalStatus;
+      if (after != null &&
+          after >= policy.criticalThermalStatus &&
+          (before == null || after > before)) {
+        reasons.add(
+          'Case ${measurement.caseId} reached critical thermal status $after.',
+        );
+      }
+    }
+
+    return AsrBenchmarkGateResult(
+      state: reasons.isEmpty
+          ? AsrBenchmarkGateState.passed
+          : AsrBenchmarkGateState.failed,
+      reasons: List.unmodifiable(reasons),
+    );
+  }
+
+  static double _meanCer(List<AsrBenchmarkMeasurement> measurements) {
+    return measurements
+            .map((item) => item.characterErrorRate)
+            .reduce((a, b) => a + b) /
+        measurements.length;
+  }
+
+  static int mathMaxInt(int a, int b) => a > b ? a : b;
+}
+
 class AsrBenchmarkEvaluator {
   const AsrBenchmarkEvaluator._();
 
