@@ -208,13 +208,48 @@ class _FullLyricDisplayState extends ConsumerState<FullLyricDisplay> {
     return verticalPadding + textHeight + verticalMargin;
   }
 
-  /// 计算到目标索引的累积偏移量
+  ({String primary, String? secondary}) _textsForIndex(
+    int index,
+    LyricState lyricState,
+    SubtitleDisplayMode mode,
+  ) {
+    final original = lyricState.adjustedLyrics[index].text;
+    final translatedSource = lyricState.translatedLyrics;
+    final translated = translatedSource != null && index < translatedSource.length
+        ? translatedSource[index].text
+        : null;
+
+    return switch (mode) {
+      SubtitleDisplayMode.translated => (
+          primary: translated ?? original,
+          secondary: null,
+        ),
+      SubtitleDisplayMode.bilingual => (
+          primary: original,
+          secondary: translated != null && translated != original
+              ? translated
+              : null,
+        ),
+      _ => (primary: original, secondary: null),
+    };
+  }
+
+  /// Estimate the fallback scroll offset using the actual selected display mode.
   double _calculateOffsetToIndex(
-      int targetIndex, List<LyricLine> lyrics, BuildContext context) {
+    int targetIndex,
+    LyricState lyricState,
+    SubtitleDisplayMode mode,
+    BuildContext context,
+  ) {
     double offset = 20.0;
+    final lyrics = lyricState.adjustedLyrics;
 
     for (int i = 0; i < targetIndex && i < lyrics.length; i++) {
-      offset += _estimateItemHeight(lyrics[i].text, context, false);
+      final texts = _textsForIndex(i, lyricState, mode);
+      final combined = texts.secondary == null
+          ? texts.primary
+          : '${texts.primary}\n${texts.secondary}';
+      offset += _estimateItemHeight(combined, context, false);
     }
 
     return offset;
@@ -235,8 +270,9 @@ class _FullLyricDisplayState extends ConsumerState<FullLyricDisplay> {
       );
     } else if (force && mounted) {
       final lyricState = ref.read(lyricControllerProvider);
+      final mode = ref.read(subtitleControllerProvider).displayMode;
       final targetOffset =
-          _calculateOffsetToIndex(index, lyricState.lyrics, context);
+          _calculateOffsetToIndex(index, lyricState, mode, context);
       final maxScroll = _scrollController.position.maxScrollExtent;
       final clampedOffset = targetOffset.clamp(0.0, maxScroll);
 
@@ -258,9 +294,9 @@ class _FullLyricDisplayState extends ConsumerState<FullLyricDisplay> {
 
   void _onLyricTap(int index) {
     final lyricState = ref.read(lyricControllerProvider);
-    final displayLyrics = lyricState.displayLyrics;
-    if (index >= 0 && index < displayLyrics.length) {
-      final targetTime = displayLyrics[index].startTime;
+    final originalLyrics = lyricState.adjustedLyrics;
+    if (index >= 0 && index < originalLyrics.length) {
+      final targetTime = originalLyrics[index].startTime;
       ref
           .read(audioPlayerControllerProvider.notifier)
           .seekAndPersist(targetTime);
@@ -282,16 +318,20 @@ class _FullLyricDisplayState extends ConsumerState<FullLyricDisplay> {
   @override
   Widget build(BuildContext context) {
     final lyricState = ref.watch(lyricControllerProvider);
+    final subtitleState = ref.watch(subtitleControllerProvider);
     final position = ref.watch(positionProvider);
     final lyricSettings = ref.watch(playerLyricSettingsProvider);
 
+    if (subtitleState.displayMode == SubtitleDisplayMode.off) {
+      return const SizedBox.shrink();
+    }
+
     return position.when(
       data: (pos) {
-        // 使用显示用歌词（翻译后 > 原文）
-        final displayLyrics = lyricState.displayLyrics;
+        final originalLyrics = lyricState.adjustedLyrics;
         final displayPosition = widget.seekingPosition ?? pos;
         final currentIndex =
-            _getCurrentLyricIndex(displayPosition, displayLyrics);
+            _getCurrentLyricIndex(displayPosition, originalLyrics);
 
         if (currentIndex != _currentLyricIndex && currentIndex >= 0) {
           final previousIndex = _currentLyricIndex;
@@ -310,9 +350,13 @@ class _FullLyricDisplayState extends ConsumerState<FullLyricDisplay> {
           child: ListView.builder(
             controller: _scrollController,
             padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
-            itemCount: displayLyrics.length,
+            itemCount: originalLyrics.length,
             itemBuilder: (context, index) {
-              final lyric = displayLyrics[index];
+              final texts = _textsForIndex(
+                index,
+                lyricState,
+                subtitleState.displayMode,
+              );
               final isActive = index == currentIndex;
               final isPast = index < currentIndex;
 
@@ -333,27 +377,57 @@ class _FullLyricDisplayState extends ConsumerState<FullLyricDisplay> {
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text(
-                    lyric.text,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: isActive
-                              ? Theme.of(context).colorScheme.primary
-                              : isPast
-                                  ? Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant
-                                      .withValues(alpha: 0.5)
-                                  : Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                          fontWeight:
-                              isActive ? FontWeight.bold : FontWeight.normal,
-                          fontSize: isActive
-                              ? lyricSettings.fullActiveFontSize
-                              : lyricSettings.fullInactiveFontSize,
-                          height: lyricSettings.fullLineHeight,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        texts.primary,
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                              color: isActive
+                                  ? Theme.of(context).colorScheme.primary
+                                  : isPast
+                                      ? Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant
+                                          .withValues(alpha: 0.5)
+                                      : Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                              fontWeight: isActive
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                              fontSize: isActive
+                                  ? lyricSettings.fullActiveFontSize
+                                  : lyricSettings.fullInactiveFontSize,
+                              height: lyricSettings.fullLineHeight,
+                            ),
+                        textAlign: TextAlign.center,
+                      ),
+                      if (texts.secondary != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          texts.secondary!,
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: isActive
+                                        ? Theme.of(context)
+                                            .colorScheme
+                                            .onPrimaryContainer
+                                        : Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant
+                                            .withValues(
+                                              alpha: isPast ? 0.45 : 0.8,
+                                            ),
+                                    fontSize: lyricSettings
+                                            .fullInactiveFontSize *
+                                        0.88,
+                                    height: lyricSettings.fullLineHeight,
+                                  ),
+                          textAlign: TextAlign.center,
                         ),
-                    textAlign: TextAlign.center,
+                      ],
+                    ],
                   ),
                 ),
               );
