@@ -1,13 +1,13 @@
 import 'package:translator/translator.dart';
 
-import 'local_translation_engine.dart';
+import 'translation_engine.dart';
 
 /// Online Japanese -> Indonesian translation without an API key or bundled model.
 ///
 /// This uses the same lightweight Google Translate web client approach already
 /// used by KikoFlu/Hiraukan's legacy Google provider. It requires internet
 /// access and intentionally has no paid/API fallback.
-class FreeOnlineTranslationEngine implements LocalTranslationEngine {
+class FreeOnlineTranslationEngine implements TranslationEngine {
   FreeOnlineTranslationEngine._();
 
   static final FreeOnlineTranslationEngine instance =
@@ -23,28 +23,6 @@ class FreeOnlineTranslationEngine implements LocalTranslationEngine {
 
   @override
   String get displayName => 'Gratis Online (Tanpa API)';
-
-  LocalTranslationModelStatus get _readyStatus =>
-      LocalTranslationModelStatus(
-        state: LocalModelState.ready,
-        engineId: id,
-        engineVersion: version,
-        sourceModelInstalled: true,
-        targetModelInstalled: true,
-        message: 'Online; tidak membutuhkan model lokal.',
-      );
-
-  @override
-  Future<LocalTranslationModelStatus> getModelStatus() async => _readyStatus;
-
-  @override
-  Future<LocalTranslationModelStatus> downloadModels({
-    bool wifiOnly = true,
-  }) async =>
-      _readyStatus;
-
-  @override
-  Future<LocalTranslationModelStatus> deleteModels() async => _readyStatus;
 
   @override
   Future<String> translate(
