@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' show Locale;
@@ -17,10 +18,13 @@ import '../services/subtitle_database.dart';
 import '../services/log_service.dart';
 import '../utils/encoding_utils.dart';
 import '../services/translation_service.dart';
+import '../services/subtitle_translation_cache.dart';
 import '../services/storage_service.dart';
 import 'auth_provider.dart';
 import 'audio_provider.dart';
 import 'settings_provider.dart';
+import 'subtitle_display_mode_provider.dart';
+import '../subtitles/subtitle_controller.dart';
 
 final _log = LogService.instance;
 
@@ -578,23 +582,39 @@ class LyricController extends StateNotifier<LyricState> {
     state = state.copyWith(timelineOffset: Duration.zero);
   }
 
-  /// 切换歌词翻译（已有翻译时在原文/翻译间切换）。
+  /// Cycle original -> translated -> bilingual once a translation exists.
   Future<void> toggleTranslation() async {
     if (state.lyrics.isEmpty || state.isTranslating) return;
 
     if (state.isTranslated) {
-      state = state.copyWith(showTranslated: !state.showTranslated);
+      final mode = await ref
+          .read(subtitleDisplayModeProvider.notifier)
+          .cycleTranslatedModes();
+      if (!mounted) return;
+      state = state.copyWith(
+        showTranslated:
+            mode == SubtitleDisplayMode.translated ||
+            mode == SubtitleDisplayMode.bilingual,
+      );
       return;
     }
 
     await translateAndSaveCurrentLyrics();
   }
 
-  /// 翻译当前播放字幕，完成后立即显示翻译，并按偏好设置保存到字幕库。
+  /// Translate the active subtitle without ever blocking playback.
+  ///
+  /// Local AI uses a durable document cache outside the subtitle library so
+  /// Indonesian output can never be mistaken for the Japanese source on the
+  /// next playback. Online providers retain the legacy optional library export.
   Future<String?> translateAndSaveCurrentLyrics() async {
     if (state.lyrics.isEmpty || state.isTranslating) return null;
 
     if (state.isTranslated) {
+      await ref
+          .read(subtitleDisplayModeProvider.notifier)
+          .setMode(SubtitleDisplayMode.translated);
+      if (!mounted) return state.translatedSubtitlePath;
       state = state.copyWith(showTranslated: true);
       return state.translatedSubtitlePath;
     }
@@ -618,11 +638,17 @@ class LyricController extends StateNotifier<LyricState> {
 
     try {
       final translationService = TranslationService();
+      final isLocalAi = await translationService.isLocalAiSelected();
+      final localIdentity =
+          isLocalAi ? await translationService.localEngineIdentity() : null;
+      if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
+        return null;
+      }
 
-      // 收集需要翻译的文本（跳过空行和音符占位）
+      // Collect translatable subtitle segments while preserving a stable
+      // mapping back to the original timed lines.
       final textsToTranslate = <String>[];
       final indexMap = <int>[];
-
       for (int i = 0; i < sourceLyrics.length; i++) {
         final text = sourceLyrics[i].text;
         if (text.isNotEmpty && text != '♪ - ♪') {
@@ -638,48 +664,112 @@ class LyricController extends StateNotifier<LyricState> {
         return null;
       }
 
-      // Translate one subtitle segment at a time in the first Local Lite
-      // implementation. This preserves a strict 1:1 segment mapping and keeps
-      // timing/segment order immutable. Context-window translation can be
-      // layered on later without changing this contract.
+      state = state.copyWith(translationTotal: textsToTranslate.length);
+
+      // A complete Local AI document cache survives model deletion and avoids
+      // re-running inference. Its key includes source content and engine
+      // version, so changed Japanese subtitles cannot reuse stale Indonesian.
+      if (isLocalAi && currentTrack != null && localIdentity != null) {
+        final cached = await SubtitleTranslationCache.instance.load(
+          track: TrackIdentity.fromTrack(currentTrack),
+          sourceLyrics: sourceLyrics,
+          engineId: localIdentity.$1,
+          engineVersion: localIdentity.$2,
+        );
+        if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
+          return null;
+        }
+        if (cached != null) {
+          await ref
+              .read(subtitleDisplayModeProvider.notifier)
+              .setMode(SubtitleDisplayMode.translated);
+          if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
+            return null;
+          }
+          state = state.copyWith(
+            translatedLyrics: cached,
+            showTranslated: true,
+            isTranslating: false,
+            translatedCount: textsToTranslate.length,
+            translationTotal: textsToTranslate.length,
+          );
+          return state.translatedSubtitlePath;
+        }
+      }
+
+      final progressive = List<LyricLine>.from(sourceLyrics);
+      var switchedToTranslatedMode = false;
+
       final translatedTexts = await translationService.translateBatch(
         textsToTranslate,
         sourceLang: 'ja',
-        onProgress: (current, total) {
-          if (_isCurrentGeneration(generation, requestId, currentTrack)) {
-            state = state.copyWith(
-              translatedCount: current,
-              translationTotal: total,
+        onItemTranslated: (itemIndex, translatedText, completed, total) {
+          if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
+            return;
+          }
+          final lyricIndex = indexMap[itemIndex];
+          progressive[lyricIndex] =
+              sourceLyrics[lyricIndex].copyWith(text: translatedText);
+
+          if (!switchedToTranslatedMode) {
+            switchedToTranslatedMode = true;
+            unawaited(
+              ref
+                  .read(subtitleDisplayModeProvider.notifier)
+                  .setMode(SubtitleDisplayMode.translated),
             );
           }
+
+          // Publish a copied list so the UI can safely show incremental output
+          // without observing later mutations of the working buffer.
+          state = state.copyWith(
+            translatedLyrics: List<LyricLine>.unmodifiable(progressive),
+            showTranslated: true,
+            isTranslating: true,
+            translatedCount: completed,
+            translationTotal: total,
+          );
         },
       );
       if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
         return null;
       }
 
-      // 构建翻译后的歌词列表（保留原时间戳）
       final translated = List<LyricLine>.from(sourceLyrics);
       for (int i = 0; i < indexMap.length; i++) {
         final idx = indexMap[i];
         translated[idx] = sourceLyrics[idx].copyWith(text: translatedTexts[i]);
       }
 
-      final shouldAutoSave = await ref
-          .read(autoSaveTranslatedLyricsProvider.notifier)
-          .resolvedEnabled();
+      String? savedPath;
+      if (isLocalAi && currentTrack != null && localIdentity != null) {
+        savedPath = await SubtitleTranslationCache.instance.save(
+          track: TrackIdentity.fromTrack(currentTrack),
+          sourceLyrics: sourceLyrics,
+          translatedLyrics: translated,
+          engineId: localIdentity.$1,
+          engineVersion: localIdentity.$2,
+        );
+      } else {
+        final shouldAutoSave = await ref
+            .read(autoSaveTranslatedLyricsProvider.notifier)
+            .resolvedEnabled();
+        if (shouldAutoSave) {
+          savedPath = await _saveTranslatedLyricsToLibrary(
+            translated,
+            requestId: requestId,
+            currentTrack: currentTrack,
+            timelineOffset: sourceOffset,
+          );
+        }
+      }
       if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
         return null;
       }
 
-      final savedPath = shouldAutoSave
-          ? await _saveTranslatedLyricsToLibrary(
-              translated,
-              requestId: requestId,
-              currentTrack: currentTrack,
-              timelineOffset: sourceOffset,
-            )
-          : null;
+      await ref
+          .read(subtitleDisplayModeProvider.notifier)
+          .setMode(SubtitleDisplayMode.translated);
       if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
         return null;
       }
@@ -688,8 +778,8 @@ class LyricController extends StateNotifier<LyricState> {
         translatedLyrics: translated,
         showTranslated: true,
         isTranslating: false,
-        translatedCount: state.translationTotal,
-        translationTotal: state.translationTotal,
+        translatedCount: textsToTranslate.length,
+        translationTotal: textsToTranslate.length,
         translatedSubtitlePath: savedPath,
       );
       return savedPath;
