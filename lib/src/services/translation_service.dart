@@ -11,6 +11,7 @@ import 'ai_heavy_job_queue.dart';
 import 'local_translation_engine.dart';
 import 'mlkit_local_translation_engine.dart';
 import 'log_service.dart';
+import 'translation_glossary_service.dart';
 import '../providers/settings_provider.dart';
 import '../utils/global_keys.dart';
 
@@ -158,8 +159,17 @@ class TranslationService {
         TranslationSource.localAi.value;
   }
 
-  Future<(String engineId, String engineVersion)> localEngineIdentity() async {
-    return (_localTranslator.id, _localTranslator.version);
+  Future<(
+    String engineId,
+    String engineVersion,
+    String glossaryFingerprint,
+  )> localEngineIdentity() async {
+    final glossary = await TranslationGlossaryService.instance.snapshot();
+    return (
+      _localTranslator.id,
+      _localTranslator.version,
+      glossary.fingerprint,
+    );
   }
 
   /// 翻译文本到应用当前语言
@@ -171,18 +181,22 @@ class TranslationService {
     final languageConfig = _getLanguageConfig(prefs, selectedSource);
     final cacheSourceLang = languageConfig.cacheSourceLang(sourceLang);
     final cacheTargetLang = languageConfig.cacheTargetLang();
-    final targetLocale = selectedSource == TranslationSource.localAi.value
-        ? const Locale('id')
-        : languageConfig.targetLocale;
-    final engineCacheKey = selectedSource == TranslationSource.localAi.value
-        ? '${_localTranslator.id}:${_localTranslator.version}'
+    final isLocalAi = selectedSource == TranslationSource.localAi.value;
+    final targetLocale =
+        isLocalAi ? const Locale('id') : languageConfig.targetLocale;
+    final glossary = isLocalAi
+        ? await TranslationGlossaryService.instance.snapshot()
+        : null;
+    final engineCacheKey = isLocalAi
+        ? '${_localTranslator.id}:${_localTranslator.version}:'
+            'g:${glossary!.fingerprint}'
         : selectedSource;
 
     // 检查缓存
     final cachedTranslation = await _getCachedTranslation(
       text,
       cacheSourceLang,
-      selectedSource == TranslationSource.localAi.value ? 'id' : cacheTargetLang,
+      isLocalAi ? 'id' : cacheTargetLang,
       engineCacheKey,
     );
     if (cachedTranslation != null) {
@@ -194,16 +208,18 @@ class TranslationService {
 
     // Local AI never falls back to an online provider without an explicit
     // user choice. Missing models are surfaced to the UI as a model state.
-    if (selectedSource == TranslationSource.localAi.value) {
+    if (isLocalAi) {
       try {
-        final result = await AiHeavyJobQueue.instance.run(
+        final protected = glossary!.protect(text);
+        final rawResult = await AiHeavyJobQueue.instance.run(
           () => _localTranslator.translate(
-            text,
+            protected.text,
             sourceLanguage:
                 sourceLang == null || sourceLang == 'auto' ? 'ja' : sourceLang,
             targetLanguage: 'id',
           ),
         );
+        final result = protected.restore(rawResult);
         await _cacheTranslation(
           text,
           result,

@@ -30,7 +30,6 @@ class SubtitleTranslationCache {
 
   static const int schemaVersion = 1;
   static const int postProcessingVersion = 1;
-  static const int glossaryVersion = 1;
 
   Future<Directory> _directory() async {
     final support = await getApplicationSupportDirectory();
@@ -58,6 +57,7 @@ class SubtitleTranslationCache {
     required List<LyricLine> sourceLyrics,
     required String engineId,
     required String engineVersion,
+    required String glossaryFingerprint,
     required String sourceLanguage,
     required String targetLanguage,
   }) {
@@ -72,7 +72,7 @@ class SubtitleTranslationCache {
       'engineVersion=$engineVersion',
       'from=$sourceLanguage',
       'to=$targetLanguage',
-      'glossary=$glossaryVersion',
+      'glossary=$glossaryFingerprint',
       'post=$postProcessingVersion',
     ].join('|');
     return sha256.convert(utf8.encode(payload)).toString();
@@ -83,6 +83,7 @@ class SubtitleTranslationCache {
     required List<LyricLine> sourceLyrics,
     required String engineId,
     required String engineVersion,
+    required String glossaryFingerprint,
     String sourceLanguage = 'ja',
     String targetLanguage = 'id',
   }) async {
@@ -92,6 +93,7 @@ class SubtitleTranslationCache {
       sourceLyrics: sourceLyrics,
       engineId: engineId,
       engineVersion: engineVersion,
+      glossaryFingerprint: glossaryFingerprint,
       sourceLanguage: sourceLanguage,
       targetLanguage: targetLanguage,
     );
@@ -134,6 +136,7 @@ class SubtitleTranslationCache {
     required List<LyricLine> translatedLyrics,
     required String engineId,
     required String engineVersion,
+    required String glossaryFingerprint,
     String sourceLanguage = 'ja',
     String targetLanguage = 'id',
   }) async {
@@ -145,6 +148,7 @@ class SubtitleTranslationCache {
       sourceLyrics: sourceLyrics,
       engineId: engineId,
       engineVersion: engineVersion,
+      glossaryFingerprint: glossaryFingerprint,
       sourceLanguage: sourceLanguage,
       targetLanguage: targetLanguage,
     );
@@ -156,9 +160,9 @@ class SubtitleTranslationCache {
       'sourceContentHash': sourceContentHash(sourceLyrics),
       'engineId': engineId,
       'engineVersion': engineVersion,
+      'glossaryFingerprint': glossaryFingerprint,
       'sourceLanguage': sourceLanguage,
       'targetLanguage': targetLanguage,
-      'glossaryVersion': glossaryVersion,
       'postProcessingVersion': postProcessingVersion,
       'createdAt': DateTime.now().toUtc().toIso8601String(),
       'lines': [
