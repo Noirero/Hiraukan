@@ -61,6 +61,7 @@ class SubtitleTranslationCache {
     required String sourceLanguage,
     required String targetLanguage,
     required int glossaryVersion,
+    required String translationStrategy,
   }) {
     final payload = [
       'schema=$schemaVersion',
@@ -74,6 +75,7 @@ class SubtitleTranslationCache {
       'from=$sourceLanguage',
       'to=$targetLanguage',
       'glossary=$glossaryVersion',
+      'strategy=$translationStrategy',
       'post=$postProcessingVersion',
     ].join('|');
     return sha256.convert(utf8.encode(payload)).toString();
@@ -87,6 +89,7 @@ class SubtitleTranslationCache {
     String sourceLanguage = 'ja',
     String targetLanguage = 'id',
     int glossaryVersion = defaultGlossaryVersion,
+    String translationStrategy = 'segment-v1',
   }) async {
     final dir = await _directory();
     final id = _cacheId(
@@ -97,6 +100,7 @@ class SubtitleTranslationCache {
       sourceLanguage: sourceLanguage,
       targetLanguage: targetLanguage,
       glossaryVersion: glossaryVersion,
+      translationStrategy: translationStrategy,
     );
     final file = File(p.join(dir.path, '$id.json'));
     if (!await file.exists()) return null;
@@ -140,6 +144,7 @@ class SubtitleTranslationCache {
     String sourceLanguage = 'ja',
     String targetLanguage = 'id',
     int glossaryVersion = defaultGlossaryVersion,
+    String translationStrategy = 'segment-v1',
   }) async {
     if (sourceLyrics.length != translatedLyrics.length) return null;
 
@@ -152,6 +157,7 @@ class SubtitleTranslationCache {
       sourceLanguage: sourceLanguage,
       targetLanguage: targetLanguage,
       glossaryVersion: glossaryVersion,
+      translationStrategy: translationStrategy,
     );
     final destination = File(p.join(dir.path, '$id.json'));
     final temporary = File('${destination.path}.tmp');
@@ -164,6 +170,7 @@ class SubtitleTranslationCache {
       'sourceLanguage': sourceLanguage,
       'targetLanguage': targetLanguage,
       'glossaryVersion': glossaryVersion,
+      'translationStrategy': translationStrategy,
       'postProcessingVersion': postProcessingVersion,
       'createdAt': DateTime.now().toUtc().toIso8601String(),
       'lines': [
