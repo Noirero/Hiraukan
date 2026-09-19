@@ -246,7 +246,7 @@ enum AudioFormat {
 
 /// 翻译源
 enum TranslationSource {
-  freeOnline('Gratis Online (Tanpa API)', 'free_online'),
+  freeOnline('Gratis Online', 'free_online'),
   google('Google 翻译', 'google'),
   youdao('Youdao 翻译', 'youdao'),
   microsoft('Microsoft 翻译', 'microsoft'),
