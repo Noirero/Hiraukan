@@ -16,6 +16,8 @@ class KikoFluFeatureSettings {
 
   bool get aiTranscriptionEnabled =>
       StorageService.getBool('${_prefix}ai_transcription') ?? false;
+  String get asrProfile =>
+      StorageService.getString('${_prefix}asr_profile') ?? 'compatibility';
   String get whisperModel =>
       StorageService.getString('${_prefix}whisper_model') ?? 'base';
   int get whisperThreads =>
@@ -38,6 +40,8 @@ class KikoFluFeatureSettings {
 
   Future<void> setAiTranscriptionEnabled(bool value) =>
       StorageService.setBool('${_prefix}ai_transcription', value);
+  Future<void> setAsrProfile(String value) =>
+      StorageService.setString('${_prefix}asr_profile', value);
   Future<void> setWhisperModel(String value) =>
       StorageService.setString('${_prefix}whisper_model', value);
   Future<void> setWhisperThreads(int value) => StorageService.setInt(

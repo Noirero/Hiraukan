@@ -61,6 +61,16 @@ class AiTranscriptionService {
 
   Stream<TranscriptionSavedEvent> get savedLyrics => _savedController.stream;
 
+  void notifySavedTranscription({
+    required String audioPath,
+    required String lrcPath,
+  }) {
+    if (_savedController.isClosed) return;
+    _savedController.add(
+      TranscriptionSavedEvent(audioPath: audioPath, lrcPath: lrcPath),
+    );
+  }
+
   WhisperController? _controller;
   WhisperController get _ctrl => _controller ??= WhisperController();
 

@@ -53,6 +53,8 @@ dependencies:
   ffmpeg_kit_flutter_new_min: ^3.1.0
   whisper_ggml_plus: ^1.5.2
   whisper_ggml_plus_ffmpeg: ^1.0.0
+  # Fast Japanese ASR runtime only; ReazonSpeech weights are downloaded on demand.
+  sherpa_onnx: 1.13.8
   wakelock_plus: ^1.5.2
 
   # Notifications. Firebase is initialized only when Hiraukan has its own

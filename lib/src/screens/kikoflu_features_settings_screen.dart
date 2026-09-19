@@ -12,6 +12,9 @@ import '../services/hi_res_audio_service.dart';
 import '../services/kikoflu_feature_coordinator.dart';
 import '../services/kikoflu_feature_settings.dart';
 import '../services/kikoflu_notification_service.dart';
+import '../services/speech_recognition_coordinator.dart';
+import '../services/speech_recognition_engine.dart';
+import 'fast_asr_model_settings_screen.dart';
 
 class KikoFluFeaturesSettingsScreen extends StatefulWidget {
   const KikoFluFeaturesSettingsScreen({super.key});
@@ -35,6 +38,11 @@ class _KikoFluFeaturesSettingsScreenState
 
   WhisperModel get _selectedModel => AiTranscriptionService.instance
       .modelFromName(_settings.whisperModel);
+
+  SpeechRecognitionProfile get _selectedAsrProfile =>
+      SpeechRecognitionCoordinator.instance.profileFromName(
+        _settings.asrProfile,
+      );
 
   String _transparencyModeLabel(int mode) {
     return switch (mode) {
@@ -75,10 +83,23 @@ class _KikoFluFeaturesSettingsScreenState
     final path = await FilePicker.platform.getDirectoryPath();
     if (!mounted || path == null) return;
 
-    final installed = await AiTranscriptionService.instance
-        .isModelInstalled(_selectedModel);
-    if (!installed) {
-      setState(() => _status = 'Download the selected Whisper model first.');
+    final profile = _selectedAsrProfile;
+    try {
+      final engine =
+          await SpeechRecognitionCoordinator.instance.resolveEngine(profile);
+      final installed =
+          await engine.isModelInstalled(_settings.whisperModel);
+      if (!installed) {
+        if (!mounted) return;
+        setState(() {
+          _status = profile == SpeechRecognitionProfile.fast
+              ? 'Download Fast ASR model terlebih dahulu.'
+              : 'Download model Whisper Compatibility terlebih dahulu.';
+        });
+        return;
+      }
+    } on SpeechRecognitionProfileUnavailableException catch (error) {
+      setState(() => _status = error.message);
       return;
     }
 
@@ -88,9 +109,11 @@ class _KikoFluFeaturesSettingsScreenState
     });
 
     try {
-      final result = await AiTranscriptionService.instance.transcribeDirectory(
+      final result =
+          await SpeechRecognitionCoordinator.instance.transcribeDirectory(
         Directory(path),
-        model: _selectedModel,
+        profile: profile,
+        whisperModel: _settings.whisperModel,
         threads: _settings.whisperThreads,
         skipExisting: true,
         onProgress: (done, total, file) {
@@ -310,7 +333,8 @@ class _KikoFluFeaturesSettingsScreenState
                   secondary: const Icon(Icons.graphic_eq_rounded),
                   title: const Text('On-device AI transcription'),
                   subtitle: const Text(
-                    'Whisper models are downloaded separately, not bundled in the APK.',
+                    'Pilih profile ASR. Model Fast dan Whisper tetap didownload '
+                    'terpisah dan tidak dibundel di APK.',
                   ),
                   value: _settings.aiTranscriptionEnabled,
                   onChanged: (value) async {
@@ -320,11 +344,68 @@ class _KikoFluFeaturesSettingsScreenState
                 ),
                 if (_settings.aiTranscriptionEnabled) ...[
                   Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _settings.asrProfile,
+                      decoration:
+                          const InputDecoration(labelText: 'ASR profile'),
+                      items: [
+                        DropdownMenuItem(
+                          value: 'auto',
+                          child: Text('Auto'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'fast',
+                          enabled:
+                              SpeechRecognitionCoordinator.fastProfileApproved,
+                          child: Text(
+                            'Fast · ReazonSpeech · menunggu benchmark',
+                          ),
+                        ),
+                        DropdownMenuItem(
+                          value: 'highQuality',
+                          enabled: false,
+                          child: Text('High Quality · belum tersedia'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'compatibility',
+                          child: Text('Compatibility · Whisper'),
+                        ),
+                      ],
+                      onChanged: (value) async {
+                        if (value == null) return;
+                        await _settings.setAsrProfile(value);
+                        _refresh();
+                      },
+                    ),
+                  ),
+                  if (SpeechRecognitionCoordinator.fastProfileApproved &&
+                      (_selectedAsrProfile == SpeechRecognitionProfile.fast ||
+                       _selectedAsrProfile == SpeechRecognitionProfile.auto))
+                    ListTile(
+                      leading: const Icon(Icons.speed_rounded),
+                      title: const Text('Fast ASR model'),
+                      subtitle: const Text(
+                        'ReazonSpeech K2 v2 · sekitar 162 MiB · optional download',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      enabled: !_busy,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                const FastAsrModelSettingsScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                  if (_selectedAsrProfile != SpeechRecognitionProfile.fast)
+                    Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: DropdownButtonFormField<String>(
                       initialValue: _settings.whisperModel,
                       decoration:
-                          const InputDecoration(labelText: 'Whisper model'),
+                          const InputDecoration(labelText: 'Whisper Compatibility model'),
                       items: const [
                         'tiny',
                         'base',
@@ -345,9 +426,10 @@ class _KikoFluFeaturesSettingsScreenState
                       },
                     ),
                   ),
-                  ListTile(
+                  if (_selectedAsrProfile != SpeechRecognitionProfile.fast)
+                    ListTile(
                     leading: const Icon(Icons.download_rounded),
-                    title: const Text('Download selected model'),
+                    title: const Text('Download Whisper Compatibility model'),
                     subtitle: _modelProgress == null
                         ? null
                         : LinearProgressIndicator(value: _modelProgress),

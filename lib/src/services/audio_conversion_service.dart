@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new_min/return_code.dart';
 import 'package:ffmpeg_kit_flutter_new_min/session.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'log_service.dart';
 
@@ -96,6 +97,48 @@ class AudioConversionService {
       case WavConversionFormat.none:
         return const [];
     }
+  }
+
+  /// Create a temporary PCM16 mono 16 kHz WAV for local speech recognition.
+  ///
+  /// The source audio is never modified or deleted. Callers own the returned
+  /// temporary path and should delete it after inference.
+  Future<String?> prepareSpeechRecognitionWav(String input) async {
+    if (!Platform.isAndroid) return null;
+    final source = File(input);
+    if (!await source.exists()) return null;
+
+    final tempRoot = await getTemporaryDirectory();
+    final dir = Directory(
+      '${tempRoot.path}${Platform.pathSeparator}hiraukan_ai_asr',
+    );
+    if (!await dir.exists()) await dir.create(recursive: true);
+
+    final safeId =
+        '${input.hashCode.abs()}-${DateTime.now().microsecondsSinceEpoch}';
+    final output =
+        '${dir.path}${Platform.pathSeparator}asr-$safeId.wav';
+    final escapedInput = input.replaceAll('"', '\\"');
+    final escapedOutput = output.replaceAll('"', '\\"');
+    final command =
+        '-hide_banner -loglevel error -i "$escapedInput" '
+        '-vn -ac 1 -ar 16000 -c:a pcm_s16le -f wav -y "$escapedOutput"';
+
+    final session = await FFmpegKit.execute(command);
+    final code = await session.getReturnCode();
+    final out = File(output);
+    if (ReturnCode.isSuccess(code) &&
+        await out.exists() &&
+        await out.length() > 44) {
+      return output;
+    }
+
+    if (await out.exists()) {
+      try {
+        await out.delete();
+      } catch (_) {}
+    }
+    return null;
   }
 
   Future<String?> convert(
