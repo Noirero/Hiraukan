@@ -103,7 +103,9 @@ class WorksGridView extends ConsumerWidget {
           ? constraints.maxHeight.clamp(0.0, mediaSize.height).toDouble()
           : mediaSize.height;
       final isLandscape = availableWidth > availableHeight;
-      final spacing = isLandscape ? 24.0 : 8.0;
+      // More breathing room around cover artwork keeps the multi-source feed
+      // aligned with the calmer Hiraukan visual language.
+      final spacing = isLandscape ? 20.0 : 12.0;
       final defaultPadding = spacing;
       final collectionPadding = padding ?? EdgeInsets.all(defaultPadding);
       final resolvedPadding =

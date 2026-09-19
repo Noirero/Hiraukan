@@ -16,7 +16,7 @@ class MainBottomNavigationBar extends StatelessWidget {
     this.onLayoutExtentChanged,
   });
 
-  static const double navigationBarHeight = 58;
+  static const double navigationBarHeight = 64;
 
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
@@ -41,16 +41,59 @@ class MainBottomNavigationBar extends StatelessWidget {
       );
     }
 
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         miniPlayer,
-        NavigationBar(
-          height: navigationBarHeight,
-          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-          selectedIndex: selectedIndex,
-          onDestinationSelected: onDestinationSelected,
-          destinations: destinations,
+        SafeArea(
+          top: false,
+          minimum: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: scheme.outlineVariant.withValues(
+                  alpha: isDark ? 0.34 : 0.52,
+                ),
+                width: 0.7,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: scheme.shadow.withValues(
+                    alpha: isDark ? 0.28 : 0.10,
+                  ),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+                BoxShadow(
+                  color: scheme.primary.withValues(
+                    alpha: isDark ? 0.10 : 0.06,
+                  ),
+                  blurRadius: 20,
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: NavigationBar(
+                height: navigationBarHeight,
+                backgroundColor: scheme.surfaceContainer.withValues(
+                  alpha: isDark ? 0.96 : 0.98,
+                ),
+                elevation: 0,
+                shadowColor: Colors.transparent,
+                surfaceTintColor: Colors.transparent,
+                labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                selectedIndex: selectedIndex,
+                onDestinationSelected: onDestinationSelected,
+                destinations: destinations,
+              ),
+            ),
+          ),
         ),
       ],
     );
