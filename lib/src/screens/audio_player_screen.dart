@@ -12,7 +12,6 @@ import '../providers/auth_provider.dart';
 import '../providers/lyric_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/subtitle_display_mode_provider.dart';
-import '../services/local_translation_engine.dart';
 import '../subtitles/subtitle_controller.dart';
 import '../utils/local_file_url.dart';
 import '../utils/system_ui_style.dart';
@@ -23,7 +22,6 @@ import '../widgets/player/playlist_dialog.dart';
 import '../widgets/work_bookmark_manager.dart';
 import '../widgets/confirmation_dialog.dart';
 import 'work_detail_screen.dart';
-import 'local_ai_translation_settings_screen.dart';
 import '../../l10n/app_localizations.dart';
 
 /// 音频播放器主屏幕
@@ -937,52 +935,19 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
                     final savedPath =
                         await controller.translateAndSaveCurrentLyrics();
                     if (context.mounted) {
-                      final localAi =
+                      final freeOnline =
                           ref.read(translationSourceProvider) ==
-                              TranslationSource.localAi;
+                              TranslationSource.freeOnline;
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
-                            localAi
+                            freeOnline
                                 ? 'Terjemahan Indonesia siap dan disimpan di cache lokal.'
                                 : savedPath != null
                                     ? S.of(context).savedToSubtitleLibrary
                                     : S.of(context).translatedLyricsNotSaved,
                           ),
                           behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    }
-                  } on LocalTranslationModelNotInstalledException {
-                    if (!context.mounted) return;
-                    final openManager = await showDialog<bool>(
-                      context: context,
-                      builder: (dialogContext) => AlertDialog(
-                        title: const Text('Model AI belum diunduh'),
-                        content: const Text(
-                          'AI Translate Lokal membutuhkan model Jepang dan '
-                          'Indonesia. Model tidak termasuk di APK dan hanya '
-                          'diunduh jika Anda memilihnya.',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () =>
-                                Navigator.of(dialogContext).pop(false),
-                            child: const Text('Nanti'),
-                          ),
-                          FilledButton(
-                            onPressed: () =>
-                                Navigator.of(dialogContext).pop(true),
-                            child: const Text('Buka Model Manager'),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (openManager == true && context.mounted) {
-                      await Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              const LocalAiTranslationSettingsScreen(),
                         ),
                       );
                     }
