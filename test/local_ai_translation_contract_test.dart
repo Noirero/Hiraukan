@@ -22,14 +22,10 @@ void main() {
     );
   });
 
-  test('free online engine requires no local model manager', () async {
+  test('free online engine has no local model lifecycle', () {
     final engine = FreeOnlineTranslationEngine.instance;
     expect(engine.id, 'google_web_no_key');
     expect(engine.displayName, contains('Gratis Online'));
-
-    final status = await engine.getModelStatus();
-    expect(status.isReady, isTrue);
-    expect(status.message, contains('tidak membutuhkan model lokal'));
   });
 
   test('Android APK does not bundle ML Kit translation runtime or bridge', () {
