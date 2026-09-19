@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -31,7 +32,24 @@ void main() {
     expect(status.message, contains('tidak membutuhkan model lokal'));
   });
 
-  test('track identity is stable across display-only track changes', () {
+
+  test('Android APK does not bundle ML Kit translation runtime or bridge', () {
+    final gradle = File('android/app/build.gradle.kts').readAsStringSync();
+    final activity = File(
+      'android/app/src/main/kotlin/com/meteor/kikoeruflutter/MainActivity.kt',
+    ).readAsStringSync();
+
+    expect(gradle, isNot(contains('com.google.mlkit:translate')));
+    expect(activity, isNot(contains('LocalTranslationBridge')));
+    expect(
+      File(
+        'android/app/src/main/kotlin/com/meteor/kikoeruflutter/LocalTranslationBridge.kt',
+      ).existsSync(),
+      isFalse,
+    );
+  });
+
+test('track identity is stable across display-only track changes', () {
     const original = AudioTrack(
       id: 'track-1',
       title: 'Display title A',
