@@ -1,14 +1,13 @@
-import 'ai_heavy_job_queue.dart';
-import 'local_translation_engine.dart';
-import 'mlkit_local_translation_engine.dart';
+import 'translation_engine.dart';
+import 'free_online_translation_engine.dart';
 import 'translation_glossary_service.dart';
 
 class LocalSubtitleTranslationService {
   LocalSubtitleTranslationService({
-    LocalTranslationEngine? engine,
-  }) : _engine = engine ?? MlKitLocalTranslationEngine.instance;
+    TranslationEngine? engine,
+  }) : _engine = engine ?? FreeOnlineTranslationEngine.instance;
 
-  final LocalTranslationEngine _engine;
+  final TranslationEngine _engine;
 
   Future<String> translateSegment({
     required List<String> sourceLines,
@@ -34,12 +33,10 @@ class LocalSubtitleTranslationService {
     final joined = protected.lines.join('\n');
 
     try {
-      final translated = await AiHeavyJobQueue.instance.run(
-        () => _engine.translate(
+      final translated = await _engine.translate(
           joined,
           sourceLanguage: 'ja',
           targetLanguage: 'id',
-        ),
       );
       final translatedLines = translated.split('\n');
       final relativeIndex = index - start;
@@ -59,8 +56,6 @@ class LocalSubtitleTranslationService {
           }
         }
       }
-    } on LocalTranslationModelNotInstalledException {
-      rethrow;
     } catch (_) {
       // Context is a quality optimization only. Fall back to strict 1:1.
     }
@@ -73,13 +68,11 @@ class LocalSubtitleTranslationService {
     TranslationGlossarySnapshot glossary,
   ) async {
     final protected = _protectGlossary([source], glossary.entries);
-    final translated = await AiHeavyJobQueue.instance.run(
-      () => _engine.translate(
+    final translated = await _engine.translate(
         protected.lines.first,
         sourceLanguage: 'ja',
         targetLanguage: 'id',
-      ),
-    );
+      );
     final expectedTokens = protected.tokensByLine.first;
     if (!_containsAllGlossaryTokens(translated, expectedTokens)) {
       return _translateUnprotected(source);
@@ -139,13 +132,11 @@ class LocalSubtitleTranslationService {
   }
 
   Future<String> _translateUnprotected(String source) async {
-    final translated = await AiHeavyJobQueue.instance.run(
-      () => _engine.translate(
+    final translated = await _engine.translate(
         source,
         sourceLanguage: 'ja',
         targetLanguage: 'id',
-      ),
-    );
+      );
     final trimmed = translated.trim();
     return trimmed.isEmpty ? source : trimmed;
   }

@@ -618,7 +618,7 @@ class LyricController extends StateNotifier<LyricState> {
 
   /// Translate the active subtitle without ever blocking playback.
   ///
-  /// Local AI uses a durable document cache outside the subtitle library so
+  /// Free Online uses a durable document cache outside the subtitle library so
   /// Indonesian output can never be mistaken for the Japanese source on the
   /// next playback. Online providers retain the legacy optional library export.
   Future<String?> translateAndSaveCurrentLyrics() async {
@@ -652,16 +652,16 @@ class LyricController extends StateNotifier<LyricState> {
 
     try {
       final translationService = TranslationService();
-      final isLocalAi = await translationService.isLocalAiSelected();
-      final localIdentity =
-          isLocalAi ? await translationService.localEngineIdentity() : null;
+      final isFreeOnline = await translationService.isFreeOnlineSelected();
+      final freeOnlineIdentity =
+          isFreeOnline ? await translationService.freeOnlineEngineIdentity() : null;
       final localQuality = ref.read(localTranslationQualityProvider);
       final glossary =
-          isLocalAi ? await TranslationGlossaryService.instance.load() : null;
-      final translationStrategy = isLocalAi
+          isFreeOnline ? await TranslationGlossaryService.instance.load() : null;
+      final translationStrategy = isFreeOnline
           ? (localQuality.contextEnabled
-              ? 'local-lite-context-v1'
-              : 'local-lite-segment-v1')
+              ? 'free-online-context-v1'
+              : 'free-online-segment-v1')
           : 'legacy-provider-v1';
       if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
         return null;
@@ -688,15 +688,15 @@ class LyricController extends StateNotifier<LyricState> {
 
       state = state.copyWith(translationTotal: textsToTranslate.length);
 
-      // A complete Local AI document cache survives model deletion and avoids
-      // re-running inference. Its key includes source content and engine
-      // version, so changed Japanese subtitles cannot reuse stale Indonesian.
-      if (isLocalAi && currentTrack != null && localIdentity != null) {
+      // A complete Free Online document cache avoids repeated network requests.
+      // Its key includes source content and engine version, so changed Japanese
+      // subtitles cannot reuse stale Indonesian output.
+      if (isFreeOnline && currentTrack != null && freeOnlineIdentity != null) {
         final cached = await SubtitleTranslationCache.instance.load(
           track: TrackIdentity.fromTrack(currentTrack),
           sourceLyrics: sourceLyrics,
-          engineId: localIdentity.$1,
-          engineVersion: localIdentity.$2,
+          engineId: freeOnlineIdentity.$1,
+          engineVersion: freeOnlineIdentity.$2,
           glossaryVersion: glossary?.version ??
               SubtitleTranslationCache.defaultGlossaryVersion,
           translationStrategy: translationStrategy,
@@ -757,7 +757,7 @@ class LyricController extends StateNotifier<LyricState> {
         );
       }
 
-      if (isLocalAi && glossary != null) {
+      if (isFreeOnline && glossary != null) {
         final localSubtitleTranslator = LocalSubtitleTranslationService();
         final allSourceTexts =
             sourceLyrics.map((line) => line.text).toList(growable: false);
@@ -822,13 +822,13 @@ class LyricController extends StateNotifier<LyricState> {
       }
 
       String? savedPath;
-      if (isLocalAi && currentTrack != null && localIdentity != null) {
+      if (isFreeOnline && currentTrack != null && freeOnlineIdentity != null) {
         savedPath = await SubtitleTranslationCache.instance.save(
           track: TrackIdentity.fromTrack(currentTrack),
           sourceLyrics: sourceLyrics,
           translatedLyrics: translated,
-          engineId: localIdentity.$1,
-          engineVersion: localIdentity.$2,
+          engineId: freeOnlineIdentity.$1,
+          engineVersion: freeOnlineIdentity.$2,
           glossaryVersion: glossary?.version ??
               SubtitleTranslationCache.defaultGlossaryVersion,
           translationStrategy: translationStrategy,

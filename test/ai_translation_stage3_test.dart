@@ -3,11 +3,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kikoeru_flutter/src/models/lyric.dart';
 import 'package:kikoeru_flutter/src/services/local_subtitle_translation_service.dart';
-import 'package:kikoeru_flutter/src/services/local_translation_engine.dart';
+import 'package:kikoeru_flutter/src/services/translation_engine.dart';
 import 'package:kikoeru_flutter/src/services/subtitle_translation_planner.dart';
 import 'package:kikoeru_flutter/src/services/translation_glossary_service.dart';
 
-class _FakeTranslationEngine implements LocalTranslationEngine {
+class _FakeTranslationEngine implements TranslationEngine {
   _FakeTranslationEngine(this.handler);
 
   final Future<String> Function(String text) handler;
@@ -21,34 +21,6 @@ class _FakeTranslationEngine implements LocalTranslationEngine {
 
   @override
   String get displayName => 'Fake';
-
-  @override
-  Future<LocalTranslationModelStatus> getModelStatus() async {
-    return const LocalTranslationModelStatus(
-      state: LocalModelState.ready,
-      engineId: 'fake',
-      engineVersion: '1',
-      sourceModelInstalled: true,
-      targetModelInstalled: true,
-    );
-  }
-
-  @override
-  Future<LocalTranslationModelStatus> downloadModels({
-    bool wifiOnly = true,
-  }) =>
-      getModelStatus();
-
-  @override
-  Future<LocalTranslationModelStatus> deleteModels() async {
-    return const LocalTranslationModelStatus(
-      state: LocalModelState.notInstalled,
-      engineId: 'fake',
-      engineVersion: '1',
-      sourceModelInstalled: false,
-      targetModelInstalled: false,
-    );
-  }
 
   @override
   Future<String> translate(
