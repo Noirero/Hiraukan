@@ -21,6 +21,7 @@ import '../services/translation_service.dart';
 import '../services/local_subtitle_translation_service.dart';
 import '../services/translation_glossary_service.dart';
 import '../services/subtitle_translation_cache.dart';
+import '../services/subtitle_translation_planner.dart';
 import '../services/storage_service.dart';
 import 'auth_provider.dart';
 import 'audio_provider.dart';
@@ -210,42 +211,6 @@ class LyricController extends StateNotifier<LyricState> {
     return activeTrack != null &&
         generation.requestId == requestId &&
         generation.track == TrackIdentity.fromTrack(activeTrack);
-  }
-
-  int _pickNextTranslationIndex(
-    Set<int> pending,
-    List<LyricLine> lyrics,
-    Duration playbackPosition,
-  ) {
-    if (pending.length == 1) return pending.first;
-
-    var currentIndex = 0;
-    for (var i = 0; i < lyrics.length; i++) {
-      if (playbackPosition >= lyrics[i].startTime) {
-        currentIndex = i;
-      } else {
-        break;
-      }
-    }
-
-    int score(int index) {
-      final delta = index - currentIndex;
-      if (delta == 0) return 0;
-      if (delta > 0 && delta <= 12) return delta;
-      if (delta < 0 && -delta <= 4) return 20 + (-delta);
-      return 100 + delta.abs() * 2 + (delta < 0 ? 1 : 0);
-    }
-
-    var best = pending.first;
-    var bestScore = score(best);
-    for (final index in pending.skip(1)) {
-      final candidateScore = score(index);
-      if (candidateScore < bestScore) {
-        best = index;
-        bestScore = candidateScore;
-      }
-    }
-    return best;
   }
 
   // 根据音频轨道查找并加载字幕
@@ -809,10 +774,10 @@ class LyricController extends StateNotifier<LyricState> {
           final effectivePlaybackPosition =
               rawPlaybackPosition - sourceOffset;
           final lyricIndex = localQuality.playbackPriorityEnabled
-              ? _pickNextTranslationIndex(
-                  pending,
-                  sourceLyrics,
-                  effectivePlaybackPosition,
+              ? SubtitleTranslationPlanner.pickNextIndex(
+                  pending: pending,
+                  lyrics: sourceLyrics,
+                  playbackPosition: effectivePlaybackPosition,
                 )
               : pending.first;
 
