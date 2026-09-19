@@ -442,7 +442,7 @@ final llmSettingsProvider =
 class TranslationSourceNotifier extends StateNotifier<TranslationSource> {
   static const String _preferenceKey = 'translation_source';
 
-  TranslationSourceNotifier() : super(TranslationSource.google) {
+  TranslationSourceNotifier() : super(TranslationSource.freeOnline) {
     _loadPreference();
   }
 
@@ -454,12 +454,12 @@ class TranslationSourceNotifier extends StateNotifier<TranslationSource> {
       if (savedValue != null) {
         final source = TranslationSource.values.firstWhere(
           (s) => s.value == savedValue,
-          orElse: () => TranslationSource.google,
+          orElse: () => TranslationSource.freeOnline,
         );
         state = source;
       }
     } catch (e) {
-      state = TranslationSource.google;
+      state = TranslationSource.freeOnline;
     }
   }
 
