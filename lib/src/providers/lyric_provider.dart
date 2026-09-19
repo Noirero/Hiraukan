@@ -582,6 +582,16 @@ class LyricController extends StateNotifier<LyricState> {
     state = state.copyWith(timelineOffset: Duration.zero);
   }
 
+  Future<void> setSubtitleDisplayMode(SubtitleDisplayMode mode) async {
+    await ref.read(subtitleDisplayModeProvider.notifier).setMode(mode);
+    if (!mounted) return;
+    state = state.copyWith(
+      showTranslated:
+          mode == SubtitleDisplayMode.translated ||
+          mode == SubtitleDisplayMode.bilingual,
+    );
+  }
+
   /// Cycle original -> translated -> bilingual once a translation exists.
   Future<void> toggleTranslation() async {
     if (state.lyrics.isEmpty || state.isTranslating) return;
@@ -848,8 +858,13 @@ class LyricController extends StateNotifier<LyricState> {
     return filePath;
   }
 
-  /// 清除翻译结果
+  /// 清除当前内存中的翻译结果；持久缓存由 Model Manager 单独管理。
   void clearTranslation() {
+    unawaited(
+      ref
+          .read(subtitleDisplayModeProvider.notifier)
+          .setMode(SubtitleDisplayMode.original),
+    );
     state = LyricState(
       lyrics: state.lyrics,
       isLoading: state.isLoading,
