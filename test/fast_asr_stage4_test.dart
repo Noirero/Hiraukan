@@ -163,6 +163,17 @@ void main() {
     );
   });
 
+  test('Fast profile cannot become user-facing before benchmark approval',
+      () async {
+    expect(SpeechRecognitionCoordinator.fastProfileApproved, isFalse);
+    await expectLater(
+      SpeechRecognitionCoordinator.instance.resolveEngine(
+        SpeechRecognitionProfile.fast,
+      ),
+      throwsA(isA<SpeechRecognitionProfileUnavailableException>()),
+    );
+  });
+
   test('High Quality profile remains unavailable until benchmarked', () async {
     await expectLater(
       SpeechRecognitionCoordinator.instance.resolveEngine(
