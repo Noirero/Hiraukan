@@ -30,7 +30,7 @@ class SubtitleTranslationCache {
 
   static const int schemaVersion = 1;
   static const int postProcessingVersion = 1;
-  static const int glossaryVersion = 1;
+  static const int defaultGlossaryVersion = 1;
 
   Future<Directory> _directory() async {
     final support = await getApplicationSupportDirectory();
@@ -60,6 +60,7 @@ class SubtitleTranslationCache {
     required String engineVersion,
     required String sourceLanguage,
     required String targetLanguage,
+    required int glossaryVersion,
   }) {
     final payload = [
       'schema=$schemaVersion',
@@ -85,6 +86,7 @@ class SubtitleTranslationCache {
     required String engineVersion,
     String sourceLanguage = 'ja',
     String targetLanguage = 'id',
+    int glossaryVersion = defaultGlossaryVersion,
   }) async {
     final dir = await _directory();
     final id = _cacheId(
@@ -94,6 +96,7 @@ class SubtitleTranslationCache {
       engineVersion: engineVersion,
       sourceLanguage: sourceLanguage,
       targetLanguage: targetLanguage,
+      glossaryVersion: glossaryVersion,
     );
     final file = File(p.join(dir.path, '$id.json'));
     if (!await file.exists()) return null;
@@ -136,6 +139,7 @@ class SubtitleTranslationCache {
     required String engineVersion,
     String sourceLanguage = 'ja',
     String targetLanguage = 'id',
+    int glossaryVersion = defaultGlossaryVersion,
   }) async {
     if (sourceLyrics.length != translatedLyrics.length) return null;
 
@@ -147,6 +151,7 @@ class SubtitleTranslationCache {
       engineVersion: engineVersion,
       sourceLanguage: sourceLanguage,
       targetLanguage: targetLanguage,
+      glossaryVersion: glossaryVersion,
     );
     final destination = File(p.join(dir.path, '$id.json'));
     final temporary = File('${destination.path}.tmp');
