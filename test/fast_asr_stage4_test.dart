@@ -24,6 +24,38 @@ void main() {
     expect(ReazonFastModelService.expectedWeightBytes, 169134945);
   });
 
+  test('Fast model manifest distinguishes update from incompatibility', () {
+    expect(
+      ReazonFastModelService.classifyManifest(
+        schemaVersion: ReazonFastModelService.manifestSchemaVersion,
+        installedModelId: ReazonFastModelService.modelId,
+        installedRevision: ReazonFastModelService.modelRevision,
+        installedRuntime: ReazonFastModelService.runtimeId,
+      ),
+      FastAsrManifestCompatibility.compatible,
+    );
+
+    expect(
+      ReazonFastModelService.classifyManifest(
+        schemaVersion: ReazonFastModelService.manifestSchemaVersion,
+        installedModelId: ReazonFastModelService.modelId,
+        installedRevision: 'older-revision',
+        installedRuntime: ReazonFastModelService.runtimeId,
+      ),
+      FastAsrManifestCompatibility.updateAvailable,
+    );
+
+    expect(
+      ReazonFastModelService.classifyManifest(
+        schemaVersion: ReazonFastModelService.manifestSchemaVersion,
+        installedModelId: ReazonFastModelService.modelId,
+        installedRevision: ReazonFastModelService.modelRevision,
+        installedRuntime: 'unsupported-runtime',
+      ),
+      FastAsrManifestCompatibility.incompatible,
+    );
+  });
+
   test('token timestamps split subtitle around a meaningful silence gap', () {
     final spans = ReazonTimestampSegmenter.segment(
       tokens: const ['お', 'は', 'よ', 'う', '好', 'き'],
