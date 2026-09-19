@@ -109,6 +109,7 @@ jobs:
             test/subtitle_foundation_test.dart \
             test/unified_source_playback_capability_test.dart \
             test/locale_default_indonesian_test.dart \
+            test/local_ai_translation_contract_test.dart \
             test/unified_source_service_test.dart
 
       - name: Build Android ARM64 Beta APK
@@ -185,6 +186,14 @@ jobs:
           )"
           if [ "$actual_cert" != "$EXPECTED_CERT_SHA256" ]; then
             echo "::error::Unexpected Beta signing certificate: $actual_cert"
+            exit 1
+          fi
+
+          apk_size_bytes="$(stat -c%s "$apk")"
+          apk_size_mib=$(( (apk_size_bytes + 1048575) / 1048576 ))
+          echo "Beta release APK size before any downloaded AI model: ${apk_size_mib} MiB"
+          if [ "$apk_size_bytes" -gt $((95 * 1024 * 1024)) ]; then
+            echo "::error::Beta release APK exceeds 95 MiB before AI model downloads: ${apk_size_mib} MiB"
             exit 1
           fi
 
