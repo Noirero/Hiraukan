@@ -141,8 +141,7 @@ class TranslationService {
   /// 获取当前 locale 对应的默认 LLM prompt
   Future<String> getDefaultLLMPromptForCurrentLocale() async {
     final prefs = await SharedPreferences.getInstance();
-    final selectedSource = prefs.getString('translation_source') ??
-        TranslationSource.localAi.value;
+    final selectedSource = prefs.getString('translation_source') ?? TranslationSource.google.value;
     final languageConfig = _getLanguageConfig(prefs, selectedSource);
     return getDefaultLLMPrompt(
       languageConfig.targetLocale,
@@ -156,8 +155,7 @@ class TranslationService {
     if (text.isEmpty) return text;
 
     final prefs = await SharedPreferences.getInstance();
-    final selectedSource = prefs.getString('translation_source') ??
-        TranslationSource.localAi.value;
+    final selectedSource = prefs.getString('translation_source') ?? TranslationSource.google.value;
     final languageConfig = _getLanguageConfig(prefs, selectedSource);
     final cacheSourceLang = languageConfig.cacheSourceLang(sourceLang);
     final cacheTargetLang = languageConfig.cacheTargetLang();
@@ -304,8 +302,7 @@ class TranslationService {
 
     // 获取并发设置
     final prefs = await SharedPreferences.getInstance();
-    final source = prefs.getString('translation_source') ??
-        TranslationSource.localAi.value;
+    final source = prefs.getString('translation_source') ?? TranslationSource.google.value;
     int concurrency = 1;
     if (source == 'llm') {
       concurrency = LLMSettings.normalizeConcurrency(
