@@ -246,7 +246,7 @@ class ReazonFastModelService {
             FastAsrManifestCompatibility.compatible;
     final installedHashes = <String, String>{};
     var completedBytes = 0;
-    final estimatedTokenBytes = 46 * 1024;
+    const estimatedTokenBytes = 46 * 1024;
     final totalBytes = expectedWeightBytes + estimatedTokenBytes;
 
     for (final spec in files) {
@@ -260,7 +260,7 @@ class ReazonFastModelService {
           await _verifyFile(
             destination,
             spec,
-            recordedHash: existingManifest?.hashes[spec.name],
+            recordedHash: existingManifest.hashes[spec.name],
           )) {
         final length = await destination.length();
         completedBytes += length;
