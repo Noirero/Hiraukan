@@ -7,6 +7,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:whisper_ggml_plus/whisper_ggml_plus.dart';
 import 'package:whisper_ggml_plus_ffmpeg/whisper_ggml_plus_ffmpeg.dart';
 
+import 'ai_heavy_job_queue.dart';
 import 'log_service.dart';
 
 final _log = LogService.instance;
@@ -160,13 +161,15 @@ class AiTranscriptionService {
 
     try {
       await WakelockPlus.enable();
-      final result = await _ctrl.transcribe(
-        model: model,
-        audioPath: audioPath,
-        lang: 'ja',
-        withTimestamps: true,
-        splitOnWord: splitOnWord,
-        threads: threads.clamp(1, 16).toInt(),
+      final result = await AiHeavyJobQueue.instance.run(
+        () => _ctrl.transcribe(
+          model: model,
+          audioPath: audioPath,
+          lang: 'ja',
+          withTimestamps: true,
+          splitOnWord: splitOnWord,
+          threads: threads.clamp(1, 16).toInt(),
+        ),
       );
       if (result == null || result.transcription.text.trim().isEmpty) return null;
 
