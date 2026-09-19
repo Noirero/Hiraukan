@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'youdao_translator.dart';
 import 'microsoft_translator.dart';
 import 'llm_translator.dart';
+import 'ai_heavy_job_queue.dart';
 import 'local_translation_engine.dart';
 import 'mlkit_local_translation_engine.dart';
 import 'log_service.dart';
@@ -184,11 +185,13 @@ class TranslationService {
     // user choice. Missing models are surfaced to the UI as a model state.
     if (selectedSource == TranslationSource.localAi.value) {
       try {
-        final result = await _localTranslator.translate(
-          text,
-          sourceLanguage:
-              sourceLang == null || sourceLang == 'auto' ? 'ja' : sourceLang,
-          targetLanguage: 'id',
+        final result = await AiHeavyJobQueue.instance.run(
+          () => _localTranslator.translate(
+            text,
+            sourceLanguage:
+                sourceLang == null || sourceLang == 'auto' ? 'ja' : sourceLang,
+            targetLanguage: 'id',
+          ),
         );
         await _cacheTranslation(
           text,
