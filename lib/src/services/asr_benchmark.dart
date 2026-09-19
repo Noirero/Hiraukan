@@ -200,6 +200,17 @@ class AsrFastAcceptancePolicy {
 class AsrFastAcceptanceEvaluator {
   const AsrFastAcceptanceEvaluator._();
 
+  static const requiredCategories = <AsrBenchmarkCategory>{
+    AsrBenchmarkCategory.cleanSpeech,
+    AsrBenchmarkCategory.softWhisper,
+    AsrBenchmarkCategory.closeMic,
+    AsrBenchmarkCategory.binaural,
+    AsrBenchmarkCategory.breathHeavy,
+    AsrBenchmarkCategory.longSilence,
+    AsrBenchmarkCategory.informalJapanese,
+    AsrBenchmarkCategory.multiCharacter,
+  };
+
   static const criticalCategories = <AsrBenchmarkCategory>{
     AsrBenchmarkCategory.softWhisper,
     AsrBenchmarkCategory.closeMic,
@@ -250,12 +261,12 @@ class AsrFastAcceptanceEvaluator {
     final coveredCategories =
         candidate.measurements.map((item) => item.category).toSet();
     final missingCategories =
-        criticalCategories.difference(coveredCategories).map((e) => e.name);
+        requiredCategories.difference(coveredCategories).map((e) => e.name);
     if (missingCategories.isNotEmpty) {
       return AsrBenchmarkGateResult(
         state: AsrBenchmarkGateState.incomplete,
         reasons: [
-          'Missing critical ASMR categories: ${missingCategories.join(', ')}',
+          'Missing required ASR categories: ${missingCategories.join(', ')}',
         ],
       );
     }
