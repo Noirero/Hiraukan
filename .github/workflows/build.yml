@@ -110,6 +110,7 @@ jobs:
             test/unified_source_playback_capability_test.dart \
             test/locale_default_indonesian_test.dart \
             test/local_ai_translation_contract_test.dart \
+            test/online_translation_hardening_test.dart \
             test/ai_subtitle_stage2_test.dart \
             test/ai_translation_stage3_test.dart \
             test/unified_source_service_test.dart
