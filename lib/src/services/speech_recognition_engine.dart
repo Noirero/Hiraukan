@@ -28,6 +28,7 @@ abstract interface class SpeechRecognitionEngine {
   String get id;
   String get version;
   SpeechRecognitionProfile get profile;
+  String get defaultModelName;
 
   Future<bool> isModelInstalled(String modelName);
 
