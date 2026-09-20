@@ -319,6 +319,20 @@ class _KikoFluFeaturesSettingsScreenState
                   },
                 ),
                 if (_settings.aiTranscriptionEnabled) ...[
+                  SwitchListTile(
+                    secondary: const Icon(Icons.subtitles_outlined),
+                    title: const Text('Auto subtitle Jepang → Indonesia'),
+                    subtitle: const Text(
+                      'Jika subtitle resmi tidak ada: Whisper membuat subtitle '
+                      'Jepang, lalu Terjemahan Gratis Online menerjemahkannya '
+                      'ke Indonesia. Model Whisper tetap diunduh terpisah.',
+                    ),
+                    value: _settings.autoAsrTranslateFallback,
+                    onChanged: (value) async {
+                      await _settings.setAutoAsrTranslateFallback(value);
+                      _refresh();
+                    },
+                  ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: DropdownButtonFormField<String>(
