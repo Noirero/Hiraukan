@@ -6,6 +6,7 @@ import '../providers/translation_provider.dart';
 import '../providers/translation_quality_provider.dart';
 import '../services/subtitle_translation_cache.dart';
 import 'translation_glossary_screen.dart';
+import 'kikoflu_features_settings_screen.dart';
 
 class OnlineTranslationSettingsScreen extends ConsumerWidget {
   const OnlineTranslationSettingsScreen({super.key});
@@ -100,6 +101,41 @@ class OnlineTranslationSettingsScreen extends ConsumerWidget {
                   },
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Audio tanpa subtitle',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Aktifkan fallback ASR agar Whisper membuat subtitle Jepang '
+                    'ketika subtitle resmi tidak tersedia. Setelah subtitle '
+                    'Jepang siap, Terjemahan Gratis Online akan menerjemahkannya '
+                    'ke Indonesia secara otomatis.',
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              const KikoFluFeaturesSettingsScreen(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.graphic_eq_rounded),
+                    label: const Text('Atur ASR / Whisper'),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 16),
