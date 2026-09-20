@@ -10,6 +10,8 @@ import '../models/lyric.dart';
 import '../models/audio_track.dart';
 import '../models/ai_job_identity.dart';
 import '../services/cache_service.dart';
+import '../services/asr_subtitle_fallback_service.dart';
+import '../services/kikoflu_feature_settings.dart';
 import '../services/download_service.dart';
 import '../services/local_work_metadata_service.dart';
 import '../services/offline_local_file_scanner.dart';
@@ -45,6 +47,9 @@ class LyricState {
   final int translatedCount;
   final int translationTotal;
   final String? translatedSubtitlePath;
+  final bool isGeneratingSubtitle;
+  final String? subtitleGenerationStatus;
+  final bool subtitleGeneratedByAsr;
 
   LyricState({
     this.lyrics = const [],
@@ -58,6 +63,9 @@ class LyricState {
     this.translatedCount = 0,
     this.translationTotal = 0,
     this.translatedSubtitlePath,
+    this.isGeneratingSubtitle = false,
+    this.subtitleGenerationStatus,
+    this.subtitleGeneratedByAsr = false,
   });
 
   LyricState copyWith({
@@ -72,6 +80,9 @@ class LyricState {
     int? translatedCount,
     int? translationTotal,
     String? translatedSubtitlePath,
+    bool? isGeneratingSubtitle,
+    String? subtitleGenerationStatus,
+    bool? subtitleGeneratedByAsr,
   }) {
     return LyricState(
       lyrics: lyrics ?? this.lyrics,
@@ -86,6 +97,12 @@ class LyricState {
       translationTotal: translationTotal ?? this.translationTotal,
       translatedSubtitlePath:
           translatedSubtitlePath ?? this.translatedSubtitlePath,
+      isGeneratingSubtitle:
+          isGeneratingSubtitle ?? this.isGeneratingSubtitle,
+      subtitleGenerationStatus:
+          subtitleGenerationStatus ?? this.subtitleGenerationStatus,
+      subtitleGeneratedByAsr:
+          subtitleGeneratedByAsr ?? this.subtitleGeneratedByAsr,
     );
   }
 
@@ -260,6 +277,12 @@ class LyricController extends StateNotifier<LyricState> {
         }
 
         _log.captureOutput('[Lyric] 未找到匹配字幕: track="${track.title}"');
+        final handledByAsr = await _tryAutomaticAsrFallback(
+          track,
+          requestId,
+        );
+        if (handledByAsr) return;
+
         _setStateForLoadRequest(
           requestId,
           LyricState(lyrics: [], isLoading: false),
@@ -374,6 +397,126 @@ class LyricController extends StateNotifier<LyricState> {
           error: '加载字幕失败: $e',
         ),
       );
+    }
+  }
+
+  Future<bool> _tryAutomaticAsrFallback(
+    AudioTrack track,
+    int requestId,
+  ) async {
+    final settings = KikoFluFeatureSettings.instance;
+    if (!settings.aiTranscriptionEnabled ||
+        !settings.autoAsrTranslateFallback) {
+      return false;
+    }
+
+    _setStateForLoadRequest(
+      requestId,
+      LyricState(
+        lyrics: const [],
+        isLoading: false,
+        isGeneratingSubtitle: true,
+        subtitleGenerationStatus: 'Menyiapkan subtitle Jepang dengan ASR…',
+        subtitleGeneratedByAsr: true,
+      ),
+    );
+
+    bool cancelled() => !_isCurrentLoadRequest(requestId);
+
+    try {
+      final playbackActive = ref.read(isPlayingProvider);
+      final asrThreads = playbackActive
+          ? settings.whisperThreads.clamp(1, 2).toInt()
+          : settings.whisperThreads;
+
+      final result = await AsrSubtitleFallbackService.instance.generate(
+        track: track,
+        modelName: settings.whisperModel,
+        threads: asrThreads,
+        isCancelled: cancelled,
+        onStatus: (status) {
+          if (!_isCurrentLoadRequest(requestId)) return;
+          state = state.copyWith(
+            isGeneratingSubtitle: true,
+            subtitleGenerationStatus: status,
+            subtitleGeneratedByAsr: true,
+          );
+        },
+      );
+
+      if (!_isCurrentLoadRequest(requestId)) return true;
+
+      if (result == null || result.lyrics.isEmpty) {
+        _setStateForLoadRequest(
+          requestId,
+          LyricState(
+            lyrics: const [],
+            isLoading: false,
+            subtitleGenerationStatus:
+                'ASR tidak menghasilkan subtitle Jepang.',
+            subtitleGeneratedByAsr: true,
+          ),
+        );
+        return true;
+      }
+
+      _setStateForLoadRequest(
+        requestId,
+        LyricState(
+          lyrics: result.lyrics,
+          isLoading: false,
+          lyricUrl:
+              'asr://whisper/${result.modelName}',
+          subtitleGenerationStatus: result.fromCache
+              ? 'Subtitle Jepang dimuat dari cache ASR.'
+              : 'Subtitle Jepang dibuat oleh Whisper.',
+          subtitleGeneratedByAsr: true,
+        ),
+      );
+
+      final translationService = TranslationService();
+      final shouldTranslate = await translationService.isFreeOnlineSelected();
+      if (!_isCurrentLoadRequest(requestId)) return true;
+
+      if (shouldTranslate) {
+        unawaited(
+          translateAndSaveCurrentLyrics().catchError((error) {
+            _log.captureOutput(
+              '[Lyric] Terjemahan otomatis setelah ASR gagal: $error',
+            );
+            return null;
+          }),
+        );
+      }
+      return true;
+    } on AsrModelNotInstalledException catch (error) {
+      if (!_isCurrentLoadRequest(requestId)) return true;
+      _setStateForLoadRequest(
+        requestId,
+        LyricState(
+          lyrics: const [],
+          isLoading: false,
+          subtitleGenerationStatus:
+              'Model Whisper ${error.modelName} belum diunduh. '
+              'Buka Advanced Audio & AI untuk mengunduh model.',
+          subtitleGeneratedByAsr: true,
+        ),
+      );
+      return true;
+    } catch (error) {
+      _log.captureOutput('[Lyric] ASR fallback gagal: $error');
+      if (!_isCurrentLoadRequest(requestId)) return true;
+      _setStateForLoadRequest(
+        requestId,
+        LyricState(
+          lyrics: const [],
+          isLoading: false,
+          subtitleGenerationStatus:
+              'Gagal membuat subtitle Jepang dengan ASR.',
+          subtitleGeneratedByAsr: true,
+        ),
+      );
+      return true;
     }
   }
 
