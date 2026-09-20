@@ -34,6 +34,20 @@ class AsrSubtitleCache {
     return dir;
   }
 
+  String cacheIdentity({
+    required TrackIdentity track,
+    required String engineId,
+    required String engineVersion,
+    required String modelName,
+  }) {
+    return _cacheId(
+      track: track,
+      engineId: engineId,
+      engineVersion: engineVersion,
+      modelName: modelName,
+    );
+  }
+
   String _cacheId({
     required TrackIdentity track,
     required String engineId,
