@@ -13,9 +13,15 @@ class AsrSubtitleCache {
 
   static final AsrSubtitleCache instance = AsrSubtitleCache._();
 
-  static const int schemaVersion = 1;
-  static const String engineId = 'whisper_existing';
-  static const String engineVersion = 'compat-v1';
+  static const int schemaVersion = 2;
+  static const int legacySchemaVersion = 1;
+  static const String legacyEngineId = 'whisper_existing';
+  static const String legacyEngineVersion = 'compat-v1';
+
+  // Kept as aliases so existing contracts/tests that reference the Stage 1
+  // cache identity remain source-compatible while schema v2 becomes dynamic.
+  static const String engineId = legacyEngineId;
+  static const String engineVersion = legacyEngineVersion;
 
   Future<Directory> _directory() async {
     final support = await getApplicationSupportDirectory();
@@ -30,10 +36,13 @@ class AsrSubtitleCache {
 
   String _cacheId({
     required TrackIdentity track,
+    required String engineId,
+    required String engineVersion,
     required String modelName,
+    int schema = schemaVersion,
   }) {
     final payload = [
-      'schema=$schemaVersion',
+      'schema=$schema',
       'track=${track.trackId}',
       'source=${track.sourceKey}',
       'work=${track.sourceWorkId}',
@@ -48,24 +57,91 @@ class AsrSubtitleCache {
 
   Future<List<LyricLine>?> load({
     required TrackIdentity track,
+    required String engineId,
+    required String engineVersion,
     required String modelName,
   }) async {
     final dir = await _directory();
-    final file = File(
+    final current = File(
       p.join(
         dir.path,
-        '${_cacheId(track: track, modelName: modelName)}.json',
+        '${_cacheId(
+          track: track,
+          engineId: engineId,
+          engineVersion: engineVersion,
+          modelName: modelName,
+        )}.json',
       ),
     );
+
+    final currentLines = await _read(
+      current,
+      expectedSchema: schemaVersion,
+      expectedEngineId: engineId,
+      expectedEngineVersion: engineVersion,
+      expectedModelName: modelName,
+    );
+    if (currentLines != null) return currentLines;
+
+    // Stage 1 used a fixed Compatibility identity. Preserve those cached
+    // Japanese subtitles and migrate them lazily into the dynamic v2 cache.
+    if (engineId == legacyEngineId && engineVersion == legacyEngineVersion) {
+      final legacy = File(
+        p.join(
+          dir.path,
+          '${_cacheId(
+            track: track,
+            engineId: legacyEngineId,
+            engineVersion: legacyEngineVersion,
+            modelName: modelName,
+            schema: legacySchemaVersion,
+          )}.json',
+        ),
+      );
+      final legacyLines = await _read(
+        legacy,
+        expectedSchema: legacySchemaVersion,
+        expectedEngineId: legacyEngineId,
+        expectedEngineVersion: legacyEngineVersion,
+        expectedModelName: modelName,
+      );
+      if (legacyLines != null) {
+        await save(
+          track: track,
+          engineId: engineId,
+          engineVersion: engineVersion,
+          modelName: modelName,
+          lines: legacyLines,
+        );
+        try {
+          if (await legacy.exists()) await legacy.delete();
+        } catch (_) {
+          // Migration success must not depend on deleting the legacy file.
+        }
+        return legacyLines;
+      }
+    }
+
+    return null;
+  }
+
+  Future<List<LyricLine>?> _read(
+    File file, {
+    required int expectedSchema,
+    required String expectedEngineId,
+    required String expectedEngineVersion,
+    required String expectedModelName,
+  }) async {
     if (!await file.exists()) return null;
 
     try {
       final decoded = jsonDecode(await file.readAsString());
       if (decoded is! Map<String, dynamic>) return null;
-      if (decoded['schemaVersion'] != schemaVersion ||
-          decoded['engineId'] != engineId ||
-          decoded['engineVersion'] != engineVersion ||
-          decoded['modelName'] != modelName) {
+      if (decoded['schemaVersion'] != expectedSchema ||
+          decoded['engineId'] != expectedEngineId ||
+          decoded['engineVersion'] != expectedEngineVersion ||
+          decoded['modelName'] != expectedModelName ||
+          decoded['language'] != 'ja') {
         return null;
       }
 
@@ -88,6 +164,7 @@ class AsrSubtitleCache {
           ),
         );
       }
+
       return lines.isEmpty ? null : List.unmodifiable(lines);
     } catch (_) {
       return null;
@@ -96,6 +173,8 @@ class AsrSubtitleCache {
 
   Future<void> save({
     required TrackIdentity track,
+    required String engineId,
+    required String engineVersion,
     required String modelName,
     required List<LyricLine> lines,
   }) async {
@@ -105,7 +184,12 @@ class AsrSubtitleCache {
     final destination = File(
       p.join(
         dir.path,
-        '${_cacheId(track: track, modelName: modelName)}.json',
+        '${_cacheId(
+          track: track,
+          engineId: engineId,
+          engineVersion: engineVersion,
+          modelName: modelName,
+        )}.json',
       ),
     );
     final temporary = File('${destination.path}.tmp');
