@@ -381,6 +381,185 @@ class AsrFastAcceptanceEvaluator {
   static int mathMaxInt(int a, int b) => a > b ? a : b;
 }
 
+class AsrHighQualityAcceptancePolicy {
+  final double requiredMeanCerImprovement;
+  final double requiredCriticalCerImprovement;
+  final double maxSingleCriticalCerRegression;
+  final double maxMeanRealTimeFactor;
+  final int maxRssRegressionBytes;
+  final int criticalThermalStatus;
+
+  const AsrHighQualityAcceptancePolicy({
+    this.requiredMeanCerImprovement = 0.02,
+    this.requiredCriticalCerImprovement = 0.01,
+    this.maxSingleCriticalCerRegression = 0.05,
+    this.maxMeanRealTimeFactor = 2.0,
+    this.maxRssRegressionBytes = 768 * 1024 * 1024,
+    this.criticalThermalStatus = 4,
+  });
+}
+
+/// Quality-first acceptance gate for an optional High Quality profile.
+///
+/// The candidate must show measurable CER improvement over Compatibility
+/// across the same complete ASMR corpus, without catastrophic regressions on
+/// whisper-heavy cases or unacceptable Android resource/thermal cost.
+class AsrHighQualityAcceptanceEvaluator {
+  const AsrHighQualityAcceptanceEvaluator._();
+
+  static const requiredCategories = AsrFastAcceptanceEvaluator.requiredCategories;
+  static const criticalCategories = AsrFastAcceptanceEvaluator.criticalCategories;
+
+  static AsrBenchmarkGateResult evaluate({
+    required AsrBenchmarkSummary candidate,
+    required AsrBenchmarkSummary compatibility,
+    AsrHighQualityAcceptancePolicy policy =
+        const AsrHighQualityAcceptancePolicy(),
+  }) {
+    if (candidate.measurements.isEmpty || compatibility.measurements.isEmpty) {
+      return const AsrBenchmarkGateResult(
+        state: AsrBenchmarkGateState.incomplete,
+        reasons: ['Candidate and compatibility benchmark results are required.'],
+      );
+    }
+
+    final candidateById = {
+      for (final item in candidate.measurements) item.caseId: item,
+    };
+    final compatibilityById = {
+      for (final item in compatibility.measurements) item.caseId: item,
+    };
+
+    if (candidateById.length != candidate.measurements.length ||
+        compatibilityById.length != compatibility.measurements.length) {
+      return const AsrBenchmarkGateResult(
+        state: AsrBenchmarkGateState.incomplete,
+        reasons: ['Benchmark case IDs must be unique for both engines.'],
+      );
+    }
+
+    final candidateIds = candidateById.keys.toSet();
+    final compatibilityIds = compatibilityById.keys.toSet();
+    if (candidateIds.length != compatibilityIds.length ||
+        !candidateIds.containsAll(compatibilityIds)) {
+      return const AsrBenchmarkGateResult(
+        state: AsrBenchmarkGateState.incomplete,
+        reasons: ['High Quality and Compatibility must run the exact same case IDs.'],
+      );
+    }
+
+    final coveredCategories =
+        candidate.measurements.map((item) => item.category).toSet();
+    final missingCategories =
+        requiredCategories.difference(coveredCategories).map((e) => e.name);
+    if (missingCategories.isNotEmpty) {
+      return AsrBenchmarkGateResult(
+        state: AsrBenchmarkGateState.incomplete,
+        reasons: [
+          'Missing required ASR categories: ${missingCategories.join(', ')}',
+        ],
+      );
+    }
+
+    final reasons = <String>[];
+    final meanImprovement =
+        compatibility.meanCharacterErrorRate - candidate.meanCharacterErrorRate;
+    if (meanImprovement < policy.requiredMeanCerImprovement) {
+      reasons.add(
+        'Mean CER improvement ${meanImprovement.toStringAsFixed(3)} is below '
+        '${policy.requiredMeanCerImprovement.toStringAsFixed(3)}.',
+      );
+    }
+
+    final candidateCritical = candidate.measurements
+        .where((item) => criticalCategories.contains(item.category))
+        .toList(growable: false);
+    final compatibilityCritical = compatibility.measurements
+        .where((item) => criticalCategories.contains(item.category))
+        .toList(growable: false);
+    final criticalImprovement =
+        _meanCer(compatibilityCritical) - _meanCer(candidateCritical);
+    if (criticalImprovement < policy.requiredCriticalCerImprovement) {
+      reasons.add(
+        'Critical-category CER improvement '
+        '${criticalImprovement.toStringAsFixed(3)} is below '
+        '${policy.requiredCriticalCerImprovement.toStringAsFixed(3)}.',
+      );
+    }
+
+    for (final id in candidateIds) {
+      final hq = candidateById[id]!;
+      final baseline = compatibilityById[id]!;
+      if (!criticalCategories.contains(hq.category)) continue;
+      if (hq.category != baseline.category) {
+        return AsrBenchmarkGateResult(
+          state: AsrBenchmarkGateState.incomplete,
+          reasons: ['Case $id has mismatched benchmark categories.'],
+        );
+      }
+
+      final regression = hq.characterErrorRate - baseline.characterErrorRate;
+      if (regression > policy.maxSingleCriticalCerRegression) {
+        reasons.add(
+          'Case $id critical CER regression '
+          '${regression.toStringAsFixed(3)} exceeds '
+          '${policy.maxSingleCriticalCerRegression.toStringAsFixed(3)}.',
+        );
+      }
+    }
+
+    if (candidate.meanRealTimeFactor > policy.maxMeanRealTimeFactor) {
+      reasons.add(
+        'High Quality mean RTF '
+        '${candidate.meanRealTimeFactor.toStringAsFixed(3)} exceeds '
+        '${policy.maxMeanRealTimeFactor.toStringAsFixed(3)}.',
+      );
+    }
+
+    final candidateMaxRss = candidate.measurements
+        .map((item) => item.rssAfterBytes)
+        .reduce(_maxInt);
+    final compatibilityMaxRss = compatibility.measurements
+        .map((item) => item.rssAfterBytes)
+        .reduce(_maxInt);
+    if (candidateMaxRss >
+        compatibilityMaxRss + policy.maxRssRegressionBytes) {
+      reasons.add(
+        'High Quality RSS exceeds Compatibility by more than '
+        '${policy.maxRssRegressionBytes ~/ (1024 * 1024)} MiB.',
+      );
+    }
+
+    for (final measurement in candidate.measurements) {
+      final before = measurement.telemetryBefore?.thermalStatus;
+      final after = measurement.telemetryAfter?.thermalStatus;
+      if (after != null &&
+          after >= policy.criticalThermalStatus &&
+          (before == null || after > before)) {
+        reasons.add(
+          'Case ${measurement.caseId} reached critical thermal status $after.',
+        );
+      }
+    }
+
+    return AsrBenchmarkGateResult(
+      state: reasons.isEmpty
+          ? AsrBenchmarkGateState.passed
+          : AsrBenchmarkGateState.failed,
+      reasons: List.unmodifiable(reasons),
+    );
+  }
+
+  static double _meanCer(List<AsrBenchmarkMeasurement> measurements) {
+    return measurements
+            .map((item) => item.characterErrorRate)
+            .reduce((a, b) => a + b) /
+        measurements.length;
+  }
+
+  static int _maxInt(int a, int b) => a > b ? a : b;
+}
+
 class AsrBenchmarkEvaluator {
   const AsrBenchmarkEvaluator._();
 
