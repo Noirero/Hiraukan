@@ -424,10 +424,16 @@ class LyricController extends StateNotifier<LyricState> {
     bool cancelled() => !_isCurrentLoadRequest(requestId);
 
     try {
+      final playbackActive =
+          ref.read(isPlayingProvider).valueOrNull ?? false;
+      final asrThreads = playbackActive
+          ? settings.whisperThreads.clamp(1, 2).toInt()
+          : settings.whisperThreads;
+
       final result = await AsrSubtitleFallbackService.instance.generate(
         track: track,
         modelName: settings.whisperModel,
-        threads: settings.whisperThreads,
+        threads: asrThreads,
         isCancelled: cancelled,
         onStatus: (status) {
           if (!_isCurrentLoadRequest(requestId)) return;
