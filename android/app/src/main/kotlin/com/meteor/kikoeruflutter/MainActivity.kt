@@ -1,6 +1,11 @@
 package com.meteor.kikoeruflutter
 
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
+import android.os.Build
+import android.os.PowerManager
 import android.view.WindowManager
 import com.ryanheise.audioservice.AudioServiceFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -16,6 +21,7 @@ class MainActivity : AudioServiceFragmentActivity() {
     private var subtitleDirectoryPicker: SubtitleDirectoryPicker? = null
     private val screenAwakeChannelName = "com.meteor.kikoeruflutter/screen_awake"
     private val systemProxyChannelName = "com.meteor.kikoeruflutter/system_proxy"
+    private val aiBenchmarkChannelName = "com.meteor.kikoeruflutter/ai_benchmark"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -66,6 +72,86 @@ class MainActivity : AudioServiceFragmentActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            aiBenchmarkChannelName
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getTelemetry" -> result.success(getAiBenchmarkTelemetry())
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun getAiBenchmarkTelemetry(): Map<String, Any?> {
+        val batteryManager =
+            getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+        val powerManager =
+            getSystemService(Context.POWER_SERVICE) as PowerManager
+        val batteryIntent = registerReceiver(
+            null,
+            IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+        )
+
+        fun validInt(value: Int): Int? =
+            if (value == Int.MIN_VALUE) null else value
+
+        fun validLong(value: Long): Long? =
+            if (value == Long.MIN_VALUE) null else value
+
+        val batteryLevel = batteryIntent?.getIntExtra(
+            BatteryManager.EXTRA_LEVEL,
+            Int.MIN_VALUE
+        )
+        val batteryScale = batteryIntent?.getIntExtra(
+            BatteryManager.EXTRA_SCALE,
+            Int.MIN_VALUE
+        )
+
+        val batteryPercent = if (
+            batteryLevel != null &&
+            batteryScale != null &&
+            batteryLevel != Int.MIN_VALUE &&
+            batteryScale > 0
+        ) {
+            (batteryLevel * 100.0 / batteryScale)
+        } else {
+            validInt(
+                batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            )?.toDouble()
+        }
+
+        return mapOf(
+            "sdkInt" to Build.VERSION.SDK_INT,
+            "thermalStatus" to if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                powerManager.currentThermalStatus
+            } else {
+                null
+            },
+            "batteryPercent" to batteryPercent,
+            "batteryCurrentMicroAmps" to validInt(
+                batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
+            ),
+            "batteryChargeCounterMicroAh" to validInt(
+                batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
+            ),
+            "batteryEnergyCounterNanoWh" to validLong(
+                batteryManager.getLongProperty(BatteryManager.BATTERY_PROPERTY_ENERGY_COUNTER)
+            ),
+            "batteryTemperatureTenthsC" to batteryIntent?.getIntExtra(
+                BatteryManager.EXTRA_TEMPERATURE,
+                Int.MIN_VALUE
+            )?.takeIf { it != Int.MIN_VALUE },
+            "batteryVoltageMv" to batteryIntent?.getIntExtra(
+                BatteryManager.EXTRA_VOLTAGE,
+                Int.MIN_VALUE
+            )?.takeIf { it != Int.MIN_VALUE },
+            "batteryPlugged" to batteryIntent?.getIntExtra(
+                BatteryManager.EXTRA_PLUGGED,
+                0
+            )
+        )
     }
 
     private fun getSystemProxy(): String? {
