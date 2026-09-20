@@ -62,6 +62,7 @@ jobs:
             test/online_translation_contract_test.dart \
             test/online_translation_hardening_test.dart \
             test/ai_subtitle_stage2_test.dart \
+            test/auto_asr_translate_fallback_test.dart \
             test/ai_translation_stage3_test.dart \
             test/unified_source_service_test.dart
 
