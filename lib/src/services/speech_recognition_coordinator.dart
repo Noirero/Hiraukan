@@ -1,6 +1,7 @@
 import 'speech_recognition_engine.dart';
 import 'whisper_compatibility_engine.dart';
 import 'whisper_fast_candidate_engine.dart';
+import 'whisper_high_quality_candidate_engine.dart';
 
 class SpeechRecognitionProfileUnavailableException implements Exception {
   final SpeechRecognitionProfile profile;
@@ -26,6 +27,11 @@ class SpeechRecognitionCoordinator {
   // from silently promoting an experimental model to user-facing routing.
   static final bool fastProfileApproved = false;
 
+  // High Quality is independently benchmark-gated. Small is not promoted just
+  // because it is a larger model; it must show a meaningful Japanese/ASMR
+  // quality improvement within Android resource limits.
+  static final bool highQualityProfileApproved = false;
+
   SpeechRecognitionProfile profileFromName(String value) {
     return SpeechRecognitionProfile.values.firstWhere(
       (profile) => profile.name == value,
@@ -48,10 +54,13 @@ class SpeechRecognitionCoordinator {
         }
         return const WhisperFastCandidateEngine();
       case SpeechRecognitionProfile.highQuality:
-        throw const SpeechRecognitionProfileUnavailableException(
-          SpeechRecognitionProfile.highQuality,
-          'High Quality ASR belum diaktifkan sampai engine HQ lolos benchmark.',
-        );
+        if (!highQualityProfileApproved) {
+          throw const SpeechRecognitionProfileUnavailableException(
+            SpeechRecognitionProfile.highQuality,
+            'High Quality ASR masih eksperimental sampai benchmark Android/ASMR lulus.',
+          );
+        }
+        return const WhisperHighQualityCandidateEngine();
       case SpeechRecognitionProfile.auto:
         if (!fastProfileApproved) {
           return const WhisperCompatibilityEngine();
