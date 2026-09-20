@@ -18,6 +18,12 @@ class KikoFluFeatureSettings {
       StorageService.getBool('${_prefix}ai_transcription') ?? false;
   bool get autoAsrTranslateFallback =>
       StorageService.getBool('${_prefix}auto_asr_translate_fallback') ?? false;
+  String get asrProfile {
+    final value = StorageService.getString('${_prefix}asr_profile') ?? 'auto';
+    return const {'auto', 'fast', 'highQuality', 'compatibility'}.contains(value)
+        ? value
+        : 'auto';
+  }
   String get whisperModel =>
       StorageService.getString('${_prefix}whisper_model') ?? 'base';
   int get whisperThreads =>
@@ -42,6 +48,13 @@ class KikoFluFeatureSettings {
       StorageService.setBool('${_prefix}ai_transcription', value);
   Future<void> setAutoAsrTranslateFallback(bool value) =>
       StorageService.setBool('${_prefix}auto_asr_translate_fallback', value);
+  Future<void> setAsrProfile(String value) {
+    final safe =
+        const {'auto', 'fast', 'highQuality', 'compatibility'}.contains(value)
+            ? value
+            : 'auto';
+    return StorageService.setString('${_prefix}asr_profile', safe);
+  }
   Future<void> setWhisperModel(String value) =>
       StorageService.setString('${_prefix}whisper_model', value);
   Future<void> setWhisperThreads(int value) => StorageService.setInt(
