@@ -12,6 +12,7 @@ import '../services/hi_res_audio_service.dart';
 import '../services/kikoflu_feature_coordinator.dart';
 import '../services/kikoflu_feature_settings.dart';
 import '../services/kikoflu_notification_service.dart';
+import '../services/speech_recognition_coordinator.dart';
 
 class KikoFluFeaturesSettingsScreen extends StatefulWidget {
   const KikoFluFeaturesSettingsScreen({super.key});
@@ -35,6 +36,19 @@ class _KikoFluFeaturesSettingsScreenState
 
   WhisperModel get _selectedModel => AiTranscriptionService.instance
       .modelFromName(_settings.whisperModel);
+
+  String _profileLabel(String value) {
+    return switch (value) {
+      'fast' => SpeechRecognitionCoordinator.fastProfileApproved
+          ? 'Fast · Whisper Tiny'
+          : 'Fast · Whisper Tiny · menunggu benchmark',
+      'highQuality' => SpeechRecognitionCoordinator.highQualityProfileApproved
+          ? 'High Quality · Whisper Small'
+          : 'High Quality · Whisper Small · menunggu benchmark',
+      'compatibility' => 'Compatibility · model manual',
+      _ => 'Auto · aman / Compatibility saat ini',
+    };
+  }
 
   String _transparencyModeLabel(int mode) {
     return switch (mode) {
@@ -319,6 +333,44 @@ class _KikoFluFeaturesSettingsScreenState
                   },
                 ),
                 if (_settings.aiTranscriptionEnabled) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _settings.asrProfile,
+                      decoration: const InputDecoration(
+                        labelText: 'Profil ASR otomatis',
+                        helperText:
+                            'Fast/HQ tetap terkunci sampai benchmark Android/ASMR lulus.',
+                      ),
+                      items: [
+                        DropdownMenuItem(
+                          value: 'auto',
+                          child: Text(_profileLabel('auto')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'fast',
+                          enabled:
+                              SpeechRecognitionCoordinator.fastProfileApproved,
+                          child: Text(_profileLabel('fast')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'highQuality',
+                          enabled: SpeechRecognitionCoordinator
+                              .highQualityProfileApproved,
+                          child: Text(_profileLabel('highQuality')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'compatibility',
+                          child: Text(_profileLabel('compatibility')),
+                        ),
+                      ],
+                      onChanged: (value) async {
+                        if (value == null) return;
+                        await _settings.setAsrProfile(value);
+                        _refresh();
+                      },
+                    ),
+                  ),
                   SwitchListTile(
                     secondary: const Icon(Icons.subtitles_outlined),
                     title: const Text('Auto subtitle Jepang → Indonesia'),
@@ -337,8 +389,9 @@ class _KikoFluFeaturesSettingsScreenState
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: DropdownButtonFormField<String>(
                       initialValue: _settings.whisperModel,
-                      decoration:
-                          const InputDecoration(labelText: 'Whisper model'),
+                      decoration: const InputDecoration(
+                        labelText: 'Model Compatibility / batch manual',
+                      ),
                       items: const [
                         'tiny',
                         'base',
