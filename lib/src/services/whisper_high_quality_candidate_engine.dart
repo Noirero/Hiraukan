@@ -20,6 +20,9 @@ class WhisperHighQualityCandidateEngine implements SpeechRecognitionEngine {
   SpeechRecognitionProfile get profile => SpeechRecognitionProfile.highQuality;
 
   @override
+  String get defaultModelName => modelName;
+
+  @override
   Future<bool> isModelInstalled(String _) {
     final model = AiTranscriptionService.instance.modelFromName(modelName);
     return AiTranscriptionService.instance.isModelInstalled(model);

@@ -39,6 +39,18 @@ class SpeechRecognitionCoordinator {
     );
   }
 
+  Future<SpeechRecognitionEngine> resolveAutomaticEngine(
+    SpeechRecognitionProfile profile,
+  ) async {
+    try {
+      return await resolveEngine(profile);
+    } on SpeechRecognitionProfileUnavailableException {
+      // A stale preference from a future/experimental build must never make
+      // automatic subtitles stop working after downgrade or gate changes.
+      return const WhisperCompatibilityEngine();
+    }
+  }
+
   Future<SpeechRecognitionEngine> resolveEngine(
     SpeechRecognitionProfile profile,
   ) async {

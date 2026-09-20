@@ -22,6 +22,9 @@ class WhisperCompatibilityEngine implements SpeechRecognitionEngine {
       SpeechRecognitionProfile.compatibility;
 
   @override
+  String get defaultModelName => 'base';
+
+  @override
   Future<bool> isModelInstalled(String modelName) {
     final model = AiTranscriptionService.instance.modelFromName(modelName);
     return AiTranscriptionService.instance.isModelInstalled(model);
