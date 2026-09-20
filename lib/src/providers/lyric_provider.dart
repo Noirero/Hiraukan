@@ -424,8 +424,7 @@ class LyricController extends StateNotifier<LyricState> {
     bool cancelled() => !_isCurrentLoadRequest(requestId);
 
     try {
-      final playbackActive =
-          ref.read(isPlayingProvider).valueOrNull ?? false;
+      final playbackActive = ref.read(isPlayingProvider);
       final asrThreads = playbackActive
           ? settings.whisperThreads.clamp(1, 2).toInt()
           : settings.whisperThreads;
