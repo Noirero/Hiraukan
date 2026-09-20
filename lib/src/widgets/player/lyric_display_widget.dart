@@ -93,6 +93,37 @@ class LyricDisplay extends ConsumerWidget {
       );
     }
 
+    if (lyricState.isGeneratingSubtitle ||
+        lyricState.subtitleGenerationStatus != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (lyricState.isGeneratingSubtitle) ...[
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 8),
+            ],
+            Flexible(
+              child: Text(
+                lyricState.subtitleGenerationStatus ??
+                    'Membuat subtitle Jepang…',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color:
+                          Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     if (albumName != null) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
