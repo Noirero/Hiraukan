@@ -199,6 +199,55 @@ void main() {
     expect(result.reasons, isNotEmpty);
   });
 
+  test('High Quality acceptance requires meaningful CER improvement', () {
+    final compatibility = AsrBenchmarkSummary(
+      engineId: 'whisper_existing',
+      engineVersion: 'compat',
+      measurements: corpus(cer: 0.24, rtf: 0.75),
+    );
+    final highQuality = AsrBenchmarkSummary(
+      engineId: 'whisper_small_hq_candidate',
+      engineVersion: 'candidate',
+      measurements: corpus(
+        cer: 0.18,
+        rtf: 1.35,
+        rssAfterBytes: 420 * 1024 * 1024,
+      ),
+    );
+
+    final result = AsrHighQualityAcceptanceEvaluator.evaluate(
+      candidate: highQuality,
+      compatibility: compatibility,
+    );
+
+    expect(result.state, AsrBenchmarkGateState.passed);
+    expect(result.reasons, isEmpty);
+  });
+
+  test('High Quality acceptance rejects larger model without quality gain', () {
+    final compatibility = AsrBenchmarkSummary(
+      engineId: 'whisper_existing',
+      engineVersion: 'compat',
+      measurements: corpus(cer: 0.20, rtf: 0.75),
+    );
+    final highQuality = AsrBenchmarkSummary(
+      engineId: 'whisper_small_hq_candidate',
+      engineVersion: 'candidate',
+      measurements: corpus(cer: 0.20, rtf: 1.20),
+    );
+
+    final result = AsrHighQualityAcceptanceEvaluator.evaluate(
+      candidate: highQuality,
+      compatibility: compatibility,
+    );
+
+    expect(result.state, AsrBenchmarkGateState.failed);
+    expect(
+      result.reasons.any((reason) => reason.contains('CER improvement')),
+      isTrue,
+    );
+  });
+
   test('Fast acceptance is incomplete without the full ASMR corpus', () {
     final compatibilityMeasurements = corpus(cer: 0.18, rtf: 0.80);
     final fastMeasurements = corpus(cer: 0.20, rtf: 0.60)
