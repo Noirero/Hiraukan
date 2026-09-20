@@ -12,6 +12,7 @@ import '../models/ai_job_identity.dart';
 import '../services/cache_service.dart';
 import '../services/asr_subtitle_fallback_service.dart';
 import '../services/kikoflu_feature_settings.dart';
+import '../services/speech_recognition_coordinator.dart';
 import '../services/download_service.dart';
 import '../services/local_work_metadata_service.dart';
 import '../services/offline_local_file_scanner.dart';
@@ -429,9 +430,13 @@ class LyricController extends StateNotifier<LyricState> {
           ? settings.whisperThreads.clamp(1, 2).toInt()
           : settings.whisperThreads;
 
+      final profile = SpeechRecognitionCoordinator.instance.profileFromName(
+        settings.asrProfile,
+      );
       final result = await AsrSubtitleFallbackService.instance.generate(
         track: track,
-        modelName: settings.whisperModel,
+        profile: profile,
+        compatibilityModelName: settings.whisperModel,
         threads: asrThreads,
         isCancelled: cancelled,
         onStatus: (status) {
@@ -466,10 +471,10 @@ class LyricController extends StateNotifier<LyricState> {
           lyrics: result.lyrics,
           isLoading: false,
           lyricUrl:
-              'asr://whisper/${result.modelName}',
+              'asr://${result.engineId}/${result.modelName}',
           subtitleGenerationStatus: result.fromCache
               ? 'Subtitle Jepang dimuat dari cache ASR.'
-              : 'Subtitle Jepang dibuat oleh Whisper.',
+              : 'Subtitle Jepang dibuat oleh ASR ${result.profile.name}.',
           subtitleGeneratedByAsr: true,
         ),
       );
