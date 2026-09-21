@@ -42,6 +42,40 @@ void main() {
     expect(settings, contains('HIRAUAKAN_ONLINE_ASR_ENDPOINT'));
   });
 
+  test('online ASR fallback is independent from legacy Whisper enablement', () {
+    final settings =
+        File('lib/src/services/kikoflu_feature_settings.dart').readAsStringSync();
+    final provider =
+        File('lib/src/providers/lyric_provider.dart').readAsStringSync();
+
+    expect(
+      settings,
+      contains("auto_asr_translate_fallback') ?? true"),
+    );
+    final helperStart = provider.indexOf('Future<bool> _tryAutomaticAsrFallback');
+    final helperEnd = provider.indexOf(
+      '// 从字幕库查找匹配的字幕文件',
+      helperStart,
+    );
+    final helper = provider.substring(helperStart, helperEnd);
+    expect(helper, isNot(contains('aiTranscriptionEnabled')));
+  });
+
+  test('downloaded Indonesian subtitle is restored without translation network',
+      () {
+    final provider =
+        File('lib/src/providers/lyric_provider.dart').readAsStringSync();
+    final cache = File(
+      'lib/src/services/subtitle_translation_cache.dart',
+    ).readAsStringSync();
+
+    expect(provider, contains('_restoreDownloadedTranslationForCurrentTrack'));
+    expect(provider, contains('loadDownloadedForTrack'));
+    expect(provider, contains('offlineDownload: true'));
+    expect(cache, contains("decoded['offlineDownload'] != true"));
+    expect(cache, contains("'trackId': track.trackId"));
+  });
+
   test('official/library subtitle lookup precedes ASR fallback', () {
     final source =
         File('lib/src/providers/lyric_provider.dart').readAsStringSync();
@@ -82,9 +116,19 @@ void main() {
     final source =
         File('lib/src/providers/lyric_provider.dart').readAsStringSync();
     expect(source, contains('downloadCurrentTranslationForOffline'));
-    expect(
-      source,
-      contains('SubtitleTranslationCache.instance.save'),
-    );
+    expect(source, contains('offlineDownload: true'));
+  });
+
+  test('source subtitle failure can fall through to ASR as the last fallback',
+      () {
+    final source =
+        File('lib/src/providers/lyric_provider.dart').readAsStringSync();
+    final methodStart = source.indexOf('Future<void> loadLyricForTrack');
+    final helperStart = source.indexOf('Future<bool> _tryAutomaticAsrFallback');
+    final method = source.substring(methodStart, helperStart);
+
+    expect(method, contains('getCachedTextContent'));
+    expect(method, contains('_tryAutomaticAsrFallback'));
+    expect(method, contains('Subtitle source HTTP'));
   });
 }
