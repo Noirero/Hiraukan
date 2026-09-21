@@ -13,6 +13,7 @@ import '../models/sort_options.dart';
 import '../providers/proxy_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/proxy_config.dart';
+import '../services/subtitle_language_settings.dart';
 import '../utils/l10n_extensions.dart';
 import '../utils/snackbar_util.dart';
 import '../widgets/radio_option_group.dart';
@@ -153,11 +154,6 @@ class PreferencesScreen extends ConsumerWidget {
             ),
         ],
         onChanged: (value) async {
-          if (value == TranslationSource.freeOnline) {
-            await ref
-                .read(translationLanguagePreferencesProvider.notifier)
-                .updateTargetLanguage(TranslationTargetLanguage.indonesian);
-          }
           if (value == TranslationSource.llm) {
             final llmSettings = ref.read(llmSettingsProvider);
             if (llmSettings.apiKey.isEmpty) {
@@ -364,7 +360,7 @@ class PreferencesScreen extends ConsumerWidget {
     final s = S.of(context);
     switch (source) {
       case TranslationSource.freeOnline:
-        return 'Gratis · online · tanpa API key/token pengguna · Jepang → Indonesia';
+        return 'Gratis · online · tanpa API key/token pengguna · multilingual';
       case TranslationSource.google:
         return s.translationDescGoogle;
       case TranslationSource.youdao:
@@ -407,6 +403,8 @@ class PreferencesScreen extends ConsumerWidget {
     );
     final preloadSettings = ref.watch(preloadNextSettingsProvider);
     final audioTapPlaylistMode = ref.watch(audioTapPlaylistModeProvider);
+    final pipelineTargetLanguage =
+        SubtitleLanguageSettings.instance.targetLanguage;
 
     return SettingsSubpageScaffold(
       title: S.of(context).preferenceSettings,
@@ -430,7 +428,9 @@ class PreferencesScreen extends ConsumerWidget {
                 title: S.of(context).translationTargetLanguage,
                 subtitle: S.of(context).currentSettingLabel(
                       translationSource == TranslationSource.freeOnline
-                          ? 'Bahasa Indonesia'
+                          ? SubtitleLanguageSettings.labelFor(
+                              pipelineTargetLanguage,
+                            )
                           : _targetLanguageLabel(
                               context,
                               translationLanguagePreferences,
@@ -439,12 +439,10 @@ class PreferencesScreen extends ConsumerWidget {
                     ),
                 onTap: () {
                   if (translationSource == TranslationSource.freeOnline) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Terjemahan Gratis Online saat ini khusus Jepang → Indonesia.',
-                        ),
-                        behavior: SnackBarBehavior.floating,
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const OnlineTranslationSettingsScreen(),
                       ),
                     );
                     return;
