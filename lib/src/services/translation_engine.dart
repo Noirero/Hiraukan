@@ -5,7 +5,7 @@ abstract interface class TranslationEngine {
 
   Future<String> translate(
     String text, {
-    String sourceLanguage = 'ja',
+    String sourceLanguage = 'auto',
     String targetLanguage = 'id',
   });
 }
