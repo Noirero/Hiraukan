@@ -388,8 +388,17 @@ class LyricController extends StateNotifier<LyricState> {
           lyricUrl: lyricUrl,
         ),
       );
+      await _restoreDownloadedTranslationForCurrentTrack(requestId);
     } catch (e) {
       _log.captureOutput('[Lyric] 加载失败: $e');
+      if (!_isCurrentLoadRequest(requestId)) return;
+
+      final handledByAsr = await _tryAutomaticAsrFallback(
+        track,
+        requestId,
+      );
+      if (handledByAsr) return;
+
       _setStateForLoadRequest(
         requestId,
         LyricState(
@@ -466,6 +475,11 @@ class LyricController extends StateNotifier<LyricState> {
           subtitleGeneratedByAsr: true,
         ),
       );
+
+      final restoredOffline =
+          await _restoreDownloadedTranslationForCurrentTrack(requestId);
+      if (!_isCurrentLoadRequest(requestId)) return true;
+      if (restoredOffline) return true;
 
       final translationService = TranslationService();
       final shouldTranslate = await translationService.isFreeOnlineSelected();
@@ -703,6 +717,51 @@ class LyricController extends StateNotifier<LyricState> {
     }
 
     return bestMatchFile;
+  }
+
+  Future<bool> _restoreDownloadedTranslationForCurrentTrack(
+    int requestId,
+  ) async {
+    if (!_isCurrentLoadRequest(requestId) || state.lyrics.isEmpty) {
+      return false;
+    }
+
+    final currentTrack = ref.read(currentTrackProvider).value;
+    if (currentTrack == null) return false;
+
+    final identity = TrackIdentity.fromTrack(currentTrack);
+    final sourceLyrics = List<LyricLine>.from(state.lyrics);
+    final downloaded =
+        await SubtitleTranslationCache.instance.loadDownloadedForTrack(
+      track: identity,
+      sourceLyrics: sourceLyrics,
+    );
+
+    if (!_isCurrentLoadRequest(requestId)) return false;
+    final activeTrack = ref.read(currentTrackProvider).value;
+    if (activeTrack == null || TrackIdentity.fromTrack(activeTrack) != identity) {
+      return false;
+    }
+    if (downloaded == null) return false;
+
+    final mode = ref.read(subtitleDisplayModeProvider);
+    final translatableCount = sourceLyrics
+        .where((line) => line.text.isNotEmpty && line.text != '♪ - ♪')
+        .length;
+
+    state = state.copyWith(
+      translatedLyrics: downloaded.lyrics,
+      translatedSubtitlePath: downloaded.path,
+      translatedCount: translatableCount,
+      translationTotal: translatableCount,
+      showTranslated:
+          mode == SubtitleDisplayMode.translated ||
+          mode == SubtitleDisplayMode.bilingual,
+    );
+    _log.captureOutput(
+      '[Lyric] Terjemahan offline dimuat untuk track="${currentTrack.title}".',
+    );
+    return true;
   }
 
   // 清空字幕
@@ -1049,6 +1108,7 @@ class LyricController extends StateNotifier<LyricState> {
       engineVersion: identity.$2,
       glossaryVersion: glossary.version,
       translationStrategy: strategy,
+      offlineDownload: true,
     );
 
     if (savedPath != null &&
@@ -1248,6 +1308,7 @@ class LyricController extends StateNotifier<LyricState> {
         ),
       );
 
+      await _restoreDownloadedTranslationForCurrentTrack(requestId);
       _log.captureOutput('[Lyric] 成功从本地文件加载字幕，共 ${lyrics.length} 行');
     } catch (e) {
       _log.captureOutput('[Lyric] 从本地文件加载字幕失败: $e');
@@ -1386,6 +1447,7 @@ class LyricController extends StateNotifier<LyricState> {
           lyricUrl: lyricUrl,
         ),
       );
+      await _restoreDownloadedTranslationForCurrentTrack(requestId);
     } catch (e) {
       if (!_isCurrentLoadRequest(requestId)) return;
       _setStateForLoadRequest(
