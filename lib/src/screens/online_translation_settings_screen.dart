@@ -151,7 +151,7 @@ class OnlineTranslationSettingsScreen extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Cache subtitle Indonesia',
+                      'Terjemahan offline',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 8),
@@ -160,21 +160,21 @@ class OnlineTranslationSettingsScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      'Bagian ini berisi terjemahan yang secara eksplisit diunduh '
-                      'untuk dipakai kembali saat offline.',
+                      'Berisi terjemahan yang Anda unduh dari player. Hiraukan '
+                      'akan memuatnya kembali tanpa internet saat track diputar.',
                     ),
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
                       onPressed: stats.documents == 0
                           ? null
                           : () async {
-                              await SubtitleTranslationCache.instance.clear();
+                              await SubtitleTranslationCache.instance.clearDownloaded();
                               ref.invalidate(
                                 translationDocumentCacheStatsProvider,
                               );
                             },
                       icon: const Icon(Icons.cleaning_services_outlined),
-                      label: const Text('Hapus Cache Terjemahan'),
+                      label: const Text('Hapus Terjemahan Offline'),
                     ),
                   ],
                 ),
