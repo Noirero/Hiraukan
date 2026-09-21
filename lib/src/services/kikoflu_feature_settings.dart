@@ -23,6 +23,16 @@ class KikoFluFeatureSettings {
   int get whisperThreads =>
       StorageService.getInt('${_prefix}whisper_threads') ?? 4;
 
+  /// Endpoint ASR online milik gateway/backend Hiraukan.
+  /// Dapat diisi oleh build dengan --dart-define=HIRAUAKAN_ONLINE_ASR_ENDPOINT=...
+  /// atau disimpan oleh konfigurasi aplikasi. Tidak ada model ASR di jalur ini.
+  String get onlineAsrEndpoint =>
+      StorageService.getString('${_prefix}online_asr_endpoint') ??
+      const String.fromEnvironment('HIRAUAKAN_ONLINE_ASR_ENDPOINT');
+  String get onlineAsrToken =>
+      StorageService.getString('${_prefix}online_asr_token') ??
+      const String.fromEnvironment('HIRAUAKAN_ONLINE_ASR_TOKEN');
+
   bool get notificationsEnabled =>
       StorageService.getBool('${_prefix}notifications') ?? false;
   bool get fcmEnabled => StorageService.getBool('${_prefix}fcm') ?? false;
@@ -48,6 +58,11 @@ class KikoFluFeatureSettings {
         '${_prefix}whisper_threads',
         value.clamp(1, 16).toInt(),
       );
+
+  Future<void> setOnlineAsrEndpoint(String value) =>
+      StorageService.setString('${_prefix}online_asr_endpoint', value.trim());
+  Future<void> setOnlineAsrToken(String value) =>
+      StorageService.setString('${_prefix}online_asr_token', value.trim());
 
   Future<void> setNotificationsEnabled(bool value) =>
       StorageService.setBool('${_prefix}notifications', value);
