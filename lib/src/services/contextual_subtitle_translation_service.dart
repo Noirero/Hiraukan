@@ -84,8 +84,8 @@ class ContextualSubtitleTranslationService {
     final protected = _protectGlossary([source], glossary.entries);
     final translated = await _engine.translate(
       protected.lines.first,
-      sourceLanguage: 'ja',
-      targetLanguage: 'id',
+      sourceLanguage: sourceLanguage,
+      targetLanguage: targetLanguage,
     );
     final expectedTokens = protected.tokensByLine.first;
     if (!_containsAllGlossaryTokens(translated, expectedTokens)) {
