@@ -4,6 +4,7 @@ import '../models/audio_track.dart';
 import '../models/subtitle/timed_subtitle.dart';
 import '../subtitles/subtitle_controller.dart';
 import '../subtitles/subtitle_format_adapter.dart';
+import '../services/subtitle_language_settings.dart';
 import 'audio_provider.dart';
 import 'lyric_provider.dart';
 import 'subtitle_display_mode_provider.dart';
@@ -48,7 +49,7 @@ final subtitleControllerProvider =
         track: track,
         lyrics: lyricState.lyrics,
         origin: origin,
-        language: 'ja',
+        language: SubtitleLanguageSettings.instance.sourceLanguage,
       ),
     );
 
@@ -59,7 +60,7 @@ final subtitleControllerProvider =
           track: track,
           lyrics: translatedLyrics,
           origin: SubtitleOrigin.aiGenerated,
-          language: 'id',
+          language: SubtitleLanguageSettings.instance.targetLanguage,
           isComplete: !lyricState.isTranslating,
         ),
       );
