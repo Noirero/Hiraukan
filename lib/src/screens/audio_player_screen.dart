@@ -879,39 +879,75 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
         }
 
         if (isTranslated && !isTranslating) {
-          return PopupMenuButton<SubtitleDisplayMode>(
-            tooltip: 'Mode subtitle',
-            initialValue: displayMode,
-            onSelected: (mode) {
-              ref
-                  .read(lyricControllerProvider.notifier)
-                  .setSubtitleDisplayMode(mode);
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: SubtitleDisplayMode.original,
-                child: Text('Original · Jepang'),
+          final freeOnline =
+              ref.watch(translationSourceProvider) == TranslationSource.freeOnline;
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              PopupMenuButton<SubtitleDisplayMode>(
+                tooltip: 'Mode subtitle',
+                initialValue: displayMode,
+                onSelected: (mode) {
+                  ref
+                      .read(lyricControllerProvider.notifier)
+                      .setSubtitleDisplayMode(mode);
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem(
+                    value: SubtitleDisplayMode.original,
+                    child: Text('Original · Jepang'),
+                  ),
+                  PopupMenuItem(
+                    value: SubtitleDisplayMode.translated,
+                    child: Text('Terjemahan · Indonesia'),
+                  ),
+                  PopupMenuItem(
+                    value: SubtitleDisplayMode.bilingual,
+                    child: Text('Bilingual · Jepang + Indonesia'),
+                  ),
+                  PopupMenuItem(
+                    value: SubtitleDisplayMode.off,
+                    child: Text('Subtitle Mati'),
+                  ),
+                ],
+                icon: Icon(
+                  Icons.translate,
+                  color: displayMode != SubtitleDisplayMode.original &&
+                          displayMode != SubtitleDisplayMode.off
+                      ? Theme.of(context).colorScheme.primary
+                      : null,
+                ),
               ),
-              PopupMenuItem(
-                value: SubtitleDisplayMode.translated,
-                child: Text('Terjemahan · Indonesia'),
-              ),
-              PopupMenuItem(
-                value: SubtitleDisplayMode.bilingual,
-                child: Text('Bilingual · Jepang + Indonesia'),
-              ),
-              PopupMenuItem(
-                value: SubtitleDisplayMode.off,
-                child: Text('Subtitle Mati'),
-              ),
+              if (freeOnline)
+                IconButton(
+                  tooltip: lyricState.translatedSubtitlePath != null
+                      ? 'Terjemahan tersedia offline'
+                      : 'Unduh terjemahan untuk offline',
+                  onPressed: lyricState.translatedSubtitlePath != null
+                      ? null
+                      : () async {
+                          final path = await ref
+                              .read(lyricControllerProvider.notifier)
+                              .downloadCurrentTranslationForOffline();
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                path != null
+                                    ? 'Terjemahan diunduh dan siap dipakai offline.'
+                                    : 'Terjemahan tidak dapat disimpan.',
+                              ),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        },
+                  icon: Icon(
+                    lyricState.translatedSubtitlePath != null
+                        ? Icons.download_done_rounded
+                        : Icons.download_for_offline_outlined,
+                  ),
+                ),
             ],
-            icon: Icon(
-              Icons.translate,
-              color: displayMode != SubtitleDisplayMode.original &&
-                      displayMode != SubtitleDisplayMode.off
-                  ? Theme.of(context).colorScheme.primary
-                  : null,
-            ),
           );
         }
 
@@ -942,7 +978,7 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
                         SnackBar(
                           content: Text(
                             freeOnline
-                                ? 'Terjemahan Indonesia siap dan disimpan di cache lokal.'
+                                ? 'Terjemahan Indonesia siap. Gunakan ikon unduh jika ingin memakainya offline.'
                                 : savedPath != null
                                     ? S.of(context).savedToSubtitleLibrary
                                     : S.of(context).translatedLyricsNotSaved,
