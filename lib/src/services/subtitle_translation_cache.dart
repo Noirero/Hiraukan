@@ -31,8 +31,7 @@ class DownloadedTranslationDocument {
 /// Durable cache for a complete translated subtitle document.
 ///
 /// The cache identity includes source subtitle content, stable track identity,
-/// translation engine/version and post-processing/glossary versions. A changed
-/// Japanese subtitle therefore never reuses an older Indonesian document.
+/// translation engine/version and post-processing/glossary versions. A changed source subtitle therefore never reuses an older translated document.
 class SubtitleTranslationCache {
   SubtitleTranslationCache._();
 
@@ -96,7 +95,7 @@ class SubtitleTranslationCache {
     required List<LyricLine> sourceLyrics,
     required String engineId,
     required String engineVersion,
-    String sourceLanguage = 'ja',
+    String sourceLanguage = 'auto',
     String targetLanguage = 'id',
     int glossaryVersion = defaultGlossaryVersion,
     String translationStrategy = 'segment-v1',
@@ -120,7 +119,7 @@ class SubtitleTranslationCache {
     required List<LyricLine> sourceLyrics,
     required String engineId,
     required String engineVersion,
-    String sourceLanguage = 'ja',
+    String sourceLanguage = 'auto',
     String targetLanguage = 'id',
     int glossaryVersion = defaultGlossaryVersion,
     String translationStrategy = 'segment-v1',
@@ -155,11 +154,12 @@ class SubtitleTranslationCache {
     }
   }
 
-  /// Finds an explicitly downloaded Indonesian subtitle without consulting
-  /// any online service or current translation settings.
+  /// Finds an explicitly downloaded translation without consulting
+  /// any online service. Source + target language are part of the match.
   Future<DownloadedTranslationDocument?> loadDownloadedForTrack({
     required TrackIdentity track,
     required List<LyricLine> sourceLyrics,
+    String sourceLanguage = 'auto',
     String targetLanguage = 'id',
   }) async {
     if (sourceLyrics.isEmpty) return null;
@@ -177,6 +177,7 @@ class SubtitleTranslationCache {
         if (decoded is! Map<String, dynamic>) continue;
         if (decoded['schemaVersion'] != schemaVersion ||
             decoded['offlineDownload'] != true ||
+            decoded['sourceLanguage'] != sourceLanguage ||
             decoded['targetLanguage'] != targetLanguage ||
             decoded['sourceContentHash'] != expectedSourceHash) {
           continue;
@@ -249,7 +250,7 @@ class SubtitleTranslationCache {
     required List<LyricLine> translatedLyrics,
     required String engineId,
     required String engineVersion,
-    String sourceLanguage = 'ja',
+    String sourceLanguage = 'auto',
     String targetLanguage = 'id',
     int glossaryVersion = defaultGlossaryVersion,
     String translationStrategy = 'segment-v1',
