@@ -46,6 +46,53 @@ class TranscriptionSavedEvent {
   });
 }
 
+
+class LocalAiModelConfig {
+  final WhisperModel model;
+  final String displayName;
+  final int approximateSizeBytes;
+  final String minRam;
+  final int speedRating;
+  final int accuracyRating;
+  final bool recommended;
+
+  const LocalAiModelConfig({
+    required this.model,
+    required this.displayName,
+    required this.approximateSizeBytes,
+    required this.minRam,
+    required this.speedRating,
+    required this.accuracyRating,
+    this.recommended = false,
+  });
+
+  String get sizeLabel {
+    final mib = approximateSizeBytes / (1024 * 1024);
+    if (mib >= 1024) return '~${(mib / 1024).toStringAsFixed(1)} GB';
+    return '~${mib.toStringAsFixed(0)} MB';
+  }
+}
+
+const localAiModelConfigs = <LocalAiModelConfig>[
+  LocalAiModelConfig(model: WhisperModel.tiny, displayName: 'Tiny', approximateSizeBytes: 75 * 1024 * 1024, minRam: '1 GB', speedRating: 5, accuracyRating: 2),
+  LocalAiModelConfig(model: WhisperModel.base, displayName: 'Base', approximateSizeBytes: 150 * 1024 * 1024, minRam: '2 GB', speedRating: 4, accuracyRating: 3, recommended: true),
+  LocalAiModelConfig(model: WhisperModel.small, displayName: 'Small', approximateSizeBytes: 500 * 1024 * 1024, minRam: '4 GB', speedRating: 3, accuracyRating: 4),
+  LocalAiModelConfig(model: WhisperModel.medium, displayName: 'Medium', approximateSizeBytes: 1536 * 1024 * 1024, minRam: '6 GB', speedRating: 2, accuracyRating: 4),
+  LocalAiModelConfig(model: WhisperModel.large, displayName: 'Large V3', approximateSizeBytes: 3072 * 1024 * 1024, minRam: '8 GB', speedRating: 1, accuracyRating: 5),
+  LocalAiModelConfig(model: WhisperModel.largeV3Turbo, displayName: 'Large V3 Turbo', approximateSizeBytes: 1600 * 1024 * 1024, minRam: '6 GB', speedRating: 3, accuracyRating: 4),
+];
+
+LocalAiModelConfig modelConfigFor(String name) {
+  final model = WhisperModel.values.firstWhere(
+    (value) => value.name == name,
+    orElse: () => WhisperModel.base,
+  );
+  return localAiModelConfigs.firstWhere(
+    (config) => config.model == model,
+    orElse: () => localAiModelConfigs[1],
+  );
+}
+
 /// On-device Whisper transcription ported from KikoFlu.
 /// Models are not bundled into the APK; they are downloaded/imported only
 /// after the user explicitly enables and uses transcription.
@@ -79,6 +126,41 @@ class AiTranscriptionService {
     } catch (_) {
       return false;
     }
+  }
+
+
+  Future<String> modelPath(WhisperModel model) => _ctrl.getPath(model);
+
+  Future<int?> modelSize(WhisperModel model) async {
+    try {
+      final file = File(await _ctrl.getPath(model));
+      return await file.exists() ? await file.length() : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> deleteModel(WhisperModel model) async {
+    final file = File(await _ctrl.getPath(model));
+    if (await file.exists()) await file.delete();
+    final partial = File('${file.path}.downloading');
+    if (await partial.exists()) await partial.delete();
+  }
+
+  Future<String> importModelFromFile({
+    required String sourceFilePath,
+    required WhisperModel model,
+  }) async {
+    final source = File(sourceFilePath);
+    if (!await source.exists()) {
+      throw FileSystemException('Model file not found', sourceFilePath);
+    }
+    final destination = await _ctrl.getPath(model);
+    final target = File(destination);
+    await target.parent.create(recursive: true);
+    if (await target.exists()) await target.delete();
+    await source.copy(destination);
+    return destination;
   }
 
   Future<String> downloadModel(
@@ -152,6 +234,7 @@ class AiTranscriptionService {
     WhisperModel model = WhisperModel.base,
     int threads = 4,
     bool splitOnWord = false,
+    String language = 'auto',
   }) async {
     final audio = File(audioPath);
     if (!await audio.exists()) return null;
@@ -165,7 +248,7 @@ class AiTranscriptionService {
         () => _ctrl.transcribe(
           model: model,
           audioPath: audioPath,
-          lang: 'ja',
+          lang: _normalizeWhisperLanguage(language),
           withTimestamps: true,
           splitOnWord: splitOnWord,
           threads: threads.clamp(1, 16).toInt(),
@@ -201,6 +284,8 @@ class AiTranscriptionService {
     WhisperModel model = WhisperModel.base,
     int threads = 4,
     bool overwrite = false,
+    bool splitOnWord = false,
+    String language = 'auto',
   }) async {
     final extension = p.extension(audioPath).toLowerCase();
     if (!supportedAudioExtensions.contains(extension)) return null;
@@ -211,7 +296,8 @@ class AiTranscriptionService {
       audioPath,
       model: model,
       threads: threads,
-      splitOnWord: true,
+      splitOnWord: splitOnWord,
+      language: language,
     );
     if (result == null) return null;
     await File(lrcPath).writeAsString(result.lrcContent, encoding: utf8, flush: true);
@@ -241,6 +327,8 @@ class AiTranscriptionService {
     WhisperModel model = WhisperModel.base,
     int threads = 4,
     bool skipExisting = true,
+    bool splitOnWord = false,
+    String language = 'auto',
     bool Function()? isCancelled,
     void Function(int done, int total, String path)? onProgress,
   }) async {
@@ -263,6 +351,8 @@ class AiTranscriptionService {
           model: model,
           threads: threads,
           overwrite: !skipExisting,
+          splitOnWord: splitOnWord,
+          language: language,
         );
         if (saved == null) {
           failed++;
@@ -281,6 +371,13 @@ class AiTranscriptionService {
       skipped: skipped,
       failed: failed,
     );
+  }
+
+  String _normalizeWhisperLanguage(String value) {
+    final language = value.trim().toLowerCase().replaceAll('_', '-');
+    if (language.isEmpty || language == 'auto') return 'auto';
+    if (language.startsWith('zh')) return 'zh';
+    return language.split('-').first;
   }
 
   String _toLrc(List<WhisperSegment> segments) {
