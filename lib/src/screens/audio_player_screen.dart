@@ -13,6 +13,7 @@ import '../providers/lyric_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/subtitle_display_mode_provider.dart';
 import '../subtitles/subtitle_controller.dart';
+import '../services/subtitle_language_settings.dart';
 import '../utils/local_file_url.dart';
 import '../utils/system_ui_style.dart';
 import '../widgets/player/player_cover_widget.dart';
@@ -853,6 +854,11 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
         final isTranslating = lyricState.isTranslating;
         final isTranslated = lyricState.isTranslated;
         final displayMode = ref.watch(subtitleDisplayModeProvider);
+        final languageSettings = SubtitleLanguageSettings.instance;
+        final sourceLabel =
+            SubtitleLanguageSettings.labelFor(languageSettings.sourceLanguage);
+        final targetLabel =
+            SubtitleLanguageSettings.labelFor(languageSettings.targetLanguage);
         final total = lyricState.translationTotal;
         final completed =
             total > 0 ? lyricState.translatedCount.clamp(0, total).toInt() : 0;
@@ -869,7 +875,7 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
               : S.of(context).translatingLyrics;
         } else if (isTranslated) {
           tooltip = switch (displayMode) {
-            SubtitleDisplayMode.original => 'Tampilkan subtitle Indonesia',
+            SubtitleDisplayMode.original => 'Tampilkan subtitle $targetLabel',
             SubtitleDisplayMode.translated => 'Tampilkan bilingual',
             SubtitleDisplayMode.bilingual => S.of(context).showOriginalLyrics,
             SubtitleDisplayMode.off => S.of(context).showOriginalLyrics,
@@ -892,20 +898,20 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
                       .read(lyricControllerProvider.notifier)
                       .setSubtitleDisplayMode(mode);
                 },
-                itemBuilder: (context) => const [
+                itemBuilder: (context) => [
                   PopupMenuItem(
                     value: SubtitleDisplayMode.original,
-                    child: Text('Original · Jepang'),
+                    child: Text('Original · $sourceLabel'),
                   ),
                   PopupMenuItem(
                     value: SubtitleDisplayMode.translated,
-                    child: Text('Terjemahan · Indonesia'),
+                    child: Text('Terjemahan · $targetLabel'),
                   ),
                   PopupMenuItem(
                     value: SubtitleDisplayMode.bilingual,
-                    child: Text('Bilingual · Jepang + Indonesia'),
+                    child: Text('Bilingual · $sourceLabel + $targetLabel'),
                   ),
-                  PopupMenuItem(
+                  const PopupMenuItem(
                     value: SubtitleDisplayMode.off,
                     child: Text('Subtitle Mati'),
                   ),
@@ -978,7 +984,7 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
                         SnackBar(
                           content: Text(
                             freeOnline
-                                ? 'Terjemahan Indonesia siap. Gunakan ikon unduh jika ingin memakainya offline.'
+                                ? 'Terjemahan $targetLabel siap. Gunakan ikon unduh jika ingin memakainya offline.'
                                 : savedPath != null
                                     ? S.of(context).savedToSubtitleLibrary
                                     : S.of(context).translatedLyricsNotSaved,
