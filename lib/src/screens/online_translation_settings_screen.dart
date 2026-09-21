@@ -87,7 +87,7 @@ class _OnlineTranslationSettingsScreenState
     final engine = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Engine ASR online'),
+        title: const Text('Engine ASR online (fallback)'),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -263,7 +263,7 @@ class _OnlineTranslationSettingsScreenState
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.graphic_eq_rounded),
-                    title: const Text('Engine ASR online'),
+                    title: const Text('Engine ASR online (fallback)'),
                     subtitle: Text(asrEngine),
                     trailing: const Icon(Icons.edit_outlined),
                     onTap: _editAsrEngine,
@@ -339,10 +339,10 @@ class _OnlineTranslationSettingsScreenState
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Jika subtitle sumber/lokal/cache tidak tersedia, '
-                    'Hiraukan memakai ASR online sebagai fallback terakhir. '
-                    'Auto Detect dapat dipakai atau bahasa sumber dapat '
-                    'dipaksa secara manual.',
+                    'Jika subtitle sumber/lokal/cache tidak tersedia, Hiraukan '
+                    'memakai Whisper lokal bila model sudah diunduh. ASR online '
+                    'hanya menjadi fallback tambahan bila endpoint dikonfigurasi. '
+                    'Auto Detect dapat dipakai atau bahasa sumber dipilih manual.',
                   ),
                   const SizedBox(height: 8),
                   const Text(
