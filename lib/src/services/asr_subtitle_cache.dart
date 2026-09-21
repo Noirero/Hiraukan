@@ -14,8 +14,8 @@ class AsrSubtitleCache {
   static final AsrSubtitleCache instance = AsrSubtitleCache._();
 
   static const int schemaVersion = 1;
-  static const String engineId = 'whisper_existing';
-  static const String engineVersion = 'compat-v1';
+  static const String engineId = 'online_asr_gateway';
+  static const String engineVersion = 'gateway-v1';
 
   Future<Directory> _directory() async {
     final support = await getApplicationSupportDirectory();
