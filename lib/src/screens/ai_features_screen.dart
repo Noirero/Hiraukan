@@ -296,6 +296,36 @@ class _AiFeaturesScreenState extends State<AiFeaturesScreen> {
                       'Ukuran terpasang',
                       _formatBytes(_installedSize!),
                     ),
+                  const Divider(height: 24),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Gunakan Whisper Lokal'),
+                    subtitle: Text(
+                      _installed
+                          ? 'Suara → teks diproses di perangkat tanpa biaya server.'
+                          : 'Unduh atau import model terlebih dahulu.',
+                    ),
+                    value: _settings.aiTranscriptionEnabled && _installed,
+                    onChanged: _installed
+                        ? (value) async {
+                            await _settings.setAiTranscriptionEnabled(value);
+                            if (mounted) setState(() {});
+                          }
+                        : null,
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Otomatis buat subtitle jika tidak ada'),
+                    subtitle: const Text(
+                      'Subtitle sumber/lokal/cache tetap diprioritaskan. '
+                      'Whisper hanya dipakai ketika tidak ada subtitle.',
+                    ),
+                    value: _settings.autoAsrTranslateFallback,
+                    onChanged: (value) async {
+                      await _settings.setAutoAsrTranslateFallback(value);
+                      if (mounted) setState(() {});
+                    },
+                  ),
                   const SizedBox(height: 12),
                   if (_progress != null && _busy)
                     LinearProgressIndicator(value: _progress),
