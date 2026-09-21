@@ -11,6 +11,10 @@ on:
         description: 'Beta release notes in Markdown'
         required: true
         type: string
+      asr_endpoint:
+        description: 'Online ASR endpoint, e.g. https://asr.example.com/v1/transcribe'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -121,6 +125,8 @@ jobs:
             test/unified_source_service_test.dart
 
       - name: Build Android ARM64 Beta APK
+        env:
+          HIRAUAKAN_ONLINE_ASR_ENDPOINT: ${{ inputs.asr_endpoint }}
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -129,6 +135,7 @@ jobs:
             --flavor beta \
             --target-platform android-arm64 \
             --split-per-abi \
+            --dart-define=HIRAUAKAN_ONLINE_ASR_ENDPOINT="$HIRAUAKAN_ONLINE_ASR_ENDPOINT" \
             --build-name="${{ needs.prepare.outputs.version }}" \
             --build-number="${{ needs.prepare.outputs.build_number }}"
           mv build/app/outputs/flutter-apk/app-arm64-v8a-beta-release.apk \
