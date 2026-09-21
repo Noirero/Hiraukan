@@ -1,0 +1,513 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../services/ai_transcription_service.dart';
+import '../services/kikoflu_feature_settings.dart';
+import '../services/subtitle_language_settings.dart';
+
+class AiFeaturesScreen extends StatefulWidget {
+  const AiFeaturesScreen({super.key});
+
+  @override
+  State<AiFeaturesScreen> createState() => _AiFeaturesScreenState();
+}
+
+class _AiFeaturesScreenState extends State<AiFeaturesScreen> {
+  final _settings = KikoFluFeatureSettings.instance;
+  final _languages = SubtitleLanguageSettings.instance;
+  final _service = AiTranscriptionService.instance;
+
+  bool _checking = true;
+  bool _busy = false;
+  bool _installed = false;
+  int? _installedSize;
+  double? _progress;
+  String? _status;
+
+  LocalAiModelConfig get _config => modelConfigFor(_settings.whisperModel);
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshModel();
+  }
+
+  Future<void> _refreshModel() async {
+    final model = _config.model;
+    final installed = await _service.isModelInstalled(model);
+    final size = await _service.modelSize(model);
+    if (!mounted) return;
+    setState(() {
+      _installed = installed;
+      _installedSize = size;
+      _checking = false;
+    });
+  }
+
+  Future<void> _selectModel(String? name) async {
+    if (name == null || name == _settings.whisperModel) return;
+    await _settings.setWhisperModel(name);
+    if (!mounted) return;
+    setState(() {
+      _checking = true;
+      _progress = null;
+      _status = null;
+    });
+    await _refreshModel();
+  }
+
+  Future<void> _downloadModel() async {
+    final config = _config;
+    setState(() {
+      _busy = true;
+      _progress = 0;
+      _status = 'Mengunduh ${config.displayName}…';
+    });
+    try {
+      await _service.downloadModel(
+        config.model,
+        onProgress: (received, total) {
+          if (!mounted) return;
+          setState(() {
+            _progress = total > 0 ? received / total : null;
+            _status = total > 0
+                ? '${_formatBytes(received)} / ${_formatBytes(total)}'
+                : _formatBytes(received);
+          });
+        },
+      );
+      await _settings.setAiTranscriptionEnabled(true);
+      if (!mounted) return;
+      setState(() => _status = 'Model siap digunakan untuk subtitle lokal.');
+      await _refreshModel();
+    } catch (error) {
+      if (mounted) setState(() => _status = 'Download gagal: $error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _openBrowser() async {
+    final launched = await launchUrl(
+      _config.model.modelUri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (!launched && mounted) {
+      setState(() => _status = 'Browser tidak dapat dibuka.');
+    }
+  }
+
+  Future<void> _importModel() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['bin'],
+      allowMultiple: false,
+    );
+    final path = result?.files.single.path;
+    if (path == null) return;
+
+    setState(() {
+      _busy = true;
+      _status = 'Mengimpor model…';
+    });
+    try {
+      await _service.importModelFromFile(
+        sourceFilePath: path,
+        model: _config.model,
+      );
+      await _settings.setAiTranscriptionEnabled(true);
+      await _refreshModel();
+      if (mounted) setState(() => _status = 'Model berhasil diimpor.');
+    } catch (error) {
+      if (mounted) setState(() => _status = 'Import gagal: $error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _deleteModel() async {
+    await _service.deleteModel(_config.model);
+    await _refreshModel();
+    if (mounted) {
+      setState(() {
+        _progress = null;
+        _status = 'Model ${_config.displayName} dihapus.';
+      });
+    }
+  }
+
+  List<DropdownMenuItem<String>> _languageItems({
+    required String current,
+    required bool includeAuto,
+  }) {
+    final items = <DropdownMenuItem<String>>[];
+    if (includeAuto) {
+      items.add(
+        const DropdownMenuItem(
+          value: 'auto',
+          child: Text('Auto Detect'),
+        ),
+      );
+    }
+    for (final language in SubtitleLanguageSettings.commonLanguages) {
+      items.add(
+        DropdownMenuItem(
+          value: language.code,
+          child: Text(language.label),
+        ),
+      );
+    }
+    final known = current == 'auto' ||
+        SubtitleLanguageSettings.commonLanguages
+            .any((language) => language.code == current);
+    if (!known) {
+      items.add(
+        DropdownMenuItem(
+          value: current,
+          child: Text('Custom · $current'),
+        ),
+      );
+    }
+    return items;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final config = _config;
+    final sourceLanguage = _languages.sourceLanguage;
+    final targetLanguage = _languages.targetLanguage;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Fitur AI')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    child: Icon(
+                      Icons.auto_awesome,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Fitur AI',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        SizedBox(height: 6),
+                        Text(
+                          'Transkripsi lokal dan pembuatan subtitle bertimestamp. '
+                          'Model tidak ditanam di APK dan hanya aktif setelah diunduh.',
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'AI Model',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: config.model.name,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      for (final item in localAiModelConfigs)
+                        DropdownMenuItem(
+                          value: item.model.name,
+                          child: Text(
+                            '${item.recommended ? '★ ' : ''}'
+                            '${item.displayName}'
+                            '${item.recommended ? ' (Recommended)' : ''} '
+                            '${item.sizeLabel}',
+                          ),
+                        ),
+                    ],
+                    onChanged: _busy ? null : _selectModel,
+                  ),
+                  const SizedBox(height: 16),
+                  _specRow('Size', config.sizeLabel),
+                  _specRow(
+                    'Speed',
+                    '⚡' * config.speedRating,
+                  ),
+                  _specRow(
+                    'Accuracy',
+                    '★' * config.accuracyRating +
+                        '☆' * (5 - config.accuracyRating),
+                  ),
+                  _specRow('Min RAM', config.minRam),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  _infoRow(
+                    Icons.inventory_2_outlined,
+                    'Fitur AI',
+                    _checking
+                        ? 'Memeriksa…'
+                        : _installed
+                            ? 'Model terpasang'
+                            : 'Paket AI belum terinstal',
+                  ),
+                  _infoRow(
+                    Icons.model_training_outlined,
+                    'Model',
+                    config.recommended
+                        ? '${config.displayName} (Recommended)'
+                        : config.displayName,
+                  ),
+                  if (_installedSize != null)
+                    _infoRow(
+                      Icons.storage_outlined,
+                      'Ukuran terpasang',
+                      _formatBytes(_installedSize!),
+                    ),
+                  const SizedBox(height: 12),
+                  if (_progress != null && _busy)
+                    LinearProgressIndicator(value: _progress),
+                  if (_progress != null && _busy)
+                    const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _busy
+                          ? null
+                          : _installed
+                              ? _deleteModel
+                              : _downloadModel,
+                      icon: Icon(
+                        _installed
+                            ? Icons.delete_outline
+                            : Icons.download_rounded,
+                      ),
+                      label: Text(
+                        _installed ? 'Hapus Model' : 'Unduh Model',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _busy ? null : _openBrowser,
+                          icon: const Icon(Icons.open_in_browser),
+                          label: const Text('Via Browser'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _busy ? null : _importModel,
+                          icon: const Icon(Icons.file_open_outlined),
+                          label: const Text('Import File'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Bahasa subtitle',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: sourceLanguage,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Bahasa audio / sumber',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _languageItems(
+                      current: sourceLanguage,
+                      includeAuto: true,
+                    ),
+                    onChanged: (value) async {
+                      if (value == null) return;
+                      await _languages.setSourceLanguage(value);
+                      if (mounted) setState(() {});
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: targetLanguage,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Terjemahkan ke',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _languageItems(
+                      current: targetLanguage,
+                      includeAuto: false,
+                    ),
+                    onChanged: (value) async {
+                      if (value == null) return;
+                      await _languages.setTargetLanguage(value);
+                      if (mounted) setState(() {});
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Transcription Speed',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Text('CPU Threads'),
+                      const Spacer(),
+                      Text('${_settings.whisperThreads} threads'),
+                    ],
+                  ),
+                  Slider(
+                    value: _settings.whisperThreads.toDouble(),
+                    min: 1,
+                    max: 8,
+                    divisions: 7,
+                    label: '${_settings.whisperThreads}',
+                    onChanged: (value) async {
+                      await _settings.setWhisperThreads(value.round());
+                      if (mounted) setState(() {});
+                    },
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Word-Level Timestamps'),
+                    subtitle: const Text(
+                      'OFF lebih cepat. ON membuat segmentasi lebih detail.',
+                    ),
+                    value: _settings.whisperSplitOnWord,
+                    onChanged: (value) async {
+                      await _settings.setWhisperSplitOnWord(value);
+                      if (mounted) setState(() {});
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Alur: subtitle sumber/lokal/cache dicoba lebih dulu. Jika tidak '
+                'ada dan model ini sudah diunduh, Whisper lokal membuat subtitle '
+                'bertimestamp. Setelah itu translate berjalan online ke bahasa '
+                'tujuan. Hasil terjemahan dapat diunduh dan dipakai offline.',
+                style: theme.textTheme.bodyMedium,
+              ),
+            ),
+          ),
+          if (_status != null) ...[
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(_status!),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _specRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        children: [
+          Expanded(child: Text(label)),
+          Text(value),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 20),
+          const SizedBox(width: 10),
+          Expanded(child: Text(label)),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KiB';
+    }
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MiB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GiB';
+  }
+}
