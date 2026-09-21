@@ -309,6 +309,15 @@ class LyricController extends StateNotifier<LyricState> {
       final workId = track.workId;
 
       if (hash == null || host.isEmpty || workId == null) {
+        _log.captureOutput(
+          '[Lyric] Subtitle source metadata incomplete; mencoba ASR terakhir.',
+        );
+        final handledByAsr = await _tryAutomaticAsrFallback(
+          track,
+          requestId,
+        );
+        if (handledByAsr) return;
+
         _setStateForLoadRequest(
           requestId,
           LyricState(lyrics: [], isLoading: false),
@@ -365,15 +374,9 @@ class LyricController extends StateNotifier<LyricState> {
           );
           if (!_isCurrentLoadRequest(requestId)) return;
         } else {
-          _setStateForLoadRequest(
-            requestId,
-            LyricState(
-              lyrics: [],
-              isLoading: false,
-              error: 'HTTP ${response.statusCode}',
-            ),
+          throw StateError(
+            'Subtitle source HTTP ${response.statusCode}',
           );
-          return;
         }
       }
 
