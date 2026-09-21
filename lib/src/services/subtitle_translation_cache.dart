@@ -81,6 +81,30 @@ class SubtitleTranslationCache {
     return sha256.convert(utf8.encode(payload)).toString();
   }
 
+  Future<String> pathFor({
+    required TrackIdentity track,
+    required List<LyricLine> sourceLyrics,
+    required String engineId,
+    required String engineVersion,
+    String sourceLanguage = 'ja',
+    String targetLanguage = 'id',
+    int glossaryVersion = defaultGlossaryVersion,
+    String translationStrategy = 'segment-v1',
+  }) async {
+    final dir = await _directory();
+    final id = _cacheId(
+      track: track,
+      sourceLyrics: sourceLyrics,
+      engineId: engineId,
+      engineVersion: engineVersion,
+      sourceLanguage: sourceLanguage,
+      targetLanguage: targetLanguage,
+      glossaryVersion: glossaryVersion,
+      translationStrategy: translationStrategy,
+    );
+    return p.join(dir.path, '$id.json');
+  }
+
   Future<List<LyricLine>?> load({
     required TrackIdentity track,
     required List<LyricLine> sourceLyrics,
