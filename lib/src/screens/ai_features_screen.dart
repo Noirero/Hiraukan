@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -258,12 +256,12 @@ class _AiFeaturesScreenState extends State<AiFeaturesScreen> {
                   _specRow('Size', config.sizeLabel),
                   _specRow(
                     'Speed',
-                    '⚡' * config.speedRating,
+                    List.filled(config.speedRating, '⚡').join(),
                   ),
                   _specRow(
                     'Accuracy',
-                    '★' * config.accuracyRating +
-                        '☆' * (5 - config.accuracyRating),
+                    List.filled(config.accuracyRating, '★').join() +
+                        List.filled(5 - config.accuracyRating, '☆').join(),
                   ),
                   _specRow('Min RAM', config.minRam),
                 ],
