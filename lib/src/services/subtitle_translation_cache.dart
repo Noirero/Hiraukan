@@ -308,17 +308,38 @@ class SubtitleTranslationCache {
     var bytes = 0;
     await for (final entity in dir.list(followLinks: false)) {
       if (entity is! File || !entity.path.endsWith('.json')) continue;
-      documents++;
       try {
+        final decoded = jsonDecode(await entity.readAsString());
+        if (decoded is! Map<String, dynamic> ||
+            decoded['offlineDownload'] != true) {
+          continue;
+        }
+        documents++;
         bytes += await entity.length();
       } catch (_) {
-        // Ignore files removed concurrently.
+        // Ignore corrupt or concurrently removed documents.
       }
     }
     return TranslationDocumentCacheStats(
       documents: documents,
       bytes: bytes,
     );
+  }
+
+  Future<void> clearDownloaded() async {
+    final dir = await _directory();
+    await for (final entity in dir.list(followLinks: false)) {
+      if (entity is! File || !entity.path.endsWith('.json')) continue;
+      try {
+        final decoded = jsonDecode(await entity.readAsString());
+        if (decoded is Map<String, dynamic> &&
+            decoded['offlineDownload'] == true) {
+          await entity.delete();
+        }
+      } catch (_) {
+        // Leave unknown/corrupt legacy cache entries untouched.
+      }
+    }
   }
 
   Future<void> clear() async {
