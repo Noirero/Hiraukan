@@ -18,23 +18,29 @@ void main() {
     expect(state.subtitleGeneratedByAsr, isTrue);
   });
 
-  test('automatic subtitle fallback identifies the online ASR cache', () {
-    expect(AsrSubtitleCache.engineId, 'online_asr_gateway');
-    expect(AsrSubtitleCache.engineVersion, 'gateway-v1');
+  test('ASR cache supports local and online engines', () {
+    expect(AsrSubtitleCache.engineId, 'hiraukan_asr');
+    expect(AsrSubtitleCache.engineVersion, 'local-online-v2');
     expect(
       OnlineAsrService.cacheProfileFor(sourceLanguage: 'ko', engine: 'auto'),
       'online-v2:auto:ko',
     );
   });
 
-  test('automatic fallback does not use or download a local ASR model', () {
+  test('automatic fallback prefers installed local Whisper without auto-download',
+      () {
     final fallback = File(
       'lib/src/services/asr_subtitle_fallback_service.dart',
     ).readAsStringSync();
 
-    expect(fallback, isNot(contains('AiTranscriptionService')));
+    expect(fallback, contains('AiTranscriptionService.instance'));
+    expect(fallback, contains('isModelInstalled'));
     expect(fallback, isNot(contains('downloadModel(')));
     expect(fallback, contains('OnlineAsrService.instance.transcribe'));
+    expect(
+      fallback.indexOf('transcription.transcribe('),
+      lessThan(fallback.indexOf('OnlineAsrService.instance.transcribe')),
+    );
   });
 
   test('online ASR endpoint can be supplied by build or app configuration', () {
@@ -45,23 +51,21 @@ void main() {
     expect(settings, contains('HIRAUAKAN_ONLINE_ASR_ENDPOINT'));
   });
 
-  test('online ASR fallback is independent from legacy Whisper enablement', () {
+  test('local Whisper remains opt-in and online ASR remains optional fallback',
+      () {
     final settings =
         File('lib/src/services/kikoflu_feature_settings.dart').readAsStringSync();
-    final provider =
-        File('lib/src/providers/lyric_provider.dart').readAsStringSync();
+    final fallback = File(
+      'lib/src/services/asr_subtitle_fallback_service.dart',
+    ).readAsStringSync();
 
+    expect(settings, contains("ai_transcription') ?? false"));
     expect(
       settings,
       contains("auto_asr_translate_fallback') ?? true"),
     );
-    final helperStart = provider.indexOf('Future<bool> _tryAutomaticAsrFallback');
-    final helperEnd = provider.indexOf(
-      '// 从字幕库查找匹配的字幕文件',
-      helperStart,
-    );
-    final helper = provider.substring(helperStart, helperEnd);
-    expect(helper, isNot(contains('aiTranscriptionEnabled')));
+    expect(fallback, contains('featureSettings.aiTranscriptionEnabled'));
+    expect(fallback, contains('featureSettings.onlineAsrEndpoint.trim()'));
   });
 
   test('downloaded target subtitle is restored without translation network',
