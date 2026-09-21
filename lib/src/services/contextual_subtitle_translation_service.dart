@@ -13,6 +13,8 @@ class ContextualSubtitleTranslationService {
     required List<String> sourceLines,
     required int index,
     required TranslationGlossarySnapshot glossary,
+    required String sourceLanguage,
+    required String targetLanguage,
     bool contextEnabled = true,
   }) async {
     if (index < 0 || index >= sourceLines.length) {
@@ -23,7 +25,12 @@ class ContextualSubtitleTranslationService {
     if (source.trim().isEmpty || source == '♪ - ♪') return source;
 
     if (!contextEnabled || sourceLines.length == 1) {
-      return _translateSingle(source, glossary);
+      return _translateSingle(
+        source,
+        glossary,
+        sourceLanguage: sourceLanguage,
+        targetLanguage: targetLanguage,
+      );
     }
 
     final start = index > 0 ? index - 1 : index;
@@ -35,8 +42,8 @@ class ContextualSubtitleTranslationService {
     try {
       final translated = await _engine.translate(
         joined,
-        sourceLanguage: 'ja',
-        targetLanguage: 'id',
+        sourceLanguage: sourceLanguage,
+        targetLanguage: targetLanguage,
       );
       final translatedLines = translated.split('\n');
       final relativeIndex = index - start;
@@ -60,13 +67,20 @@ class ContextualSubtitleTranslationService {
       // Context is a quality optimization only. Fall back to strict 1:1.
     }
 
-    return _translateSingle(source, glossary);
+    return _translateSingle(
+      source,
+      glossary,
+      sourceLanguage: sourceLanguage,
+      targetLanguage: targetLanguage,
+    );
   }
 
   Future<String> _translateSingle(
     String source,
-    TranslationGlossarySnapshot glossary,
-  ) async {
+    TranslationGlossarySnapshot glossary, {
+    required String sourceLanguage,
+    required String targetLanguage,
+  }) async {
     final protected = _protectGlossary([source], glossary.entries);
     final translated = await _engine.translate(
       protected.lines.first,
@@ -75,13 +89,21 @@ class ContextualSubtitleTranslationService {
     );
     final expectedTokens = protected.tokensByLine.first;
     if (!_containsAllGlossaryTokens(translated, expectedTokens)) {
-      return _translateUnprotected(source);
+      return _translateUnprotected(
+        source,
+        sourceLanguage: sourceLanguage,
+        targetLanguage: targetLanguage,
+      );
     }
 
     final restored =
         _restoreGlossary(translated, protected.replacements).trim();
     if (restored.isEmpty || restored.contains('ZXQGLOSS')) {
-      return _translateUnprotected(source);
+      return _translateUnprotected(
+        source,
+        sourceLanguage: sourceLanguage,
+        targetLanguage: targetLanguage,
+      );
     }
     return restored;
   }
@@ -131,11 +153,15 @@ class ContextualSubtitleTranslationService {
     );
   }
 
-  Future<String> _translateUnprotected(String source) async {
+  Future<String> _translateUnprotected(
+    String source, {
+    required String sourceLanguage,
+    required String targetLanguage,
+  }) async {
     final translated = await _engine.translate(
       source,
-      sourceLanguage: 'ja',
-      targetLanguage: 'id',
+      sourceLanguage: sourceLanguage,
+      targetLanguage: targetLanguage,
     );
     final trimmed = translated.trim();
     return trimmed.isEmpty ? source : trimmed;
