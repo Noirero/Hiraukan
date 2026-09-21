@@ -25,6 +25,7 @@ import '../services/contextual_subtitle_translation_service.dart';
 import '../services/translation_glossary_service.dart';
 import '../services/subtitle_translation_cache.dart';
 import '../services/subtitle_translation_planner.dart';
+import '../services/subtitle_language_settings.dart';
 import '../services/storage_service.dart';
 import 'auth_provider.dart';
 import 'audio_provider.dart';
@@ -458,7 +459,7 @@ class LyricController extends StateNotifier<LyricState> {
             lyrics: const [],
             isLoading: false,
             subtitleGenerationStatus:
-                'ASR online tidak menghasilkan subtitle Jepang.',
+                'ASR online tidak menghasilkan subtitle bertimestamp.',
             subtitleGeneratedByAsr: true,
           ),
         );
@@ -472,8 +473,8 @@ class LyricController extends StateNotifier<LyricState> {
           isLoading: false,
           lyricUrl: 'asr://online/${result.serviceName}',
           subtitleGenerationStatus: result.fromCache
-              ? 'Subtitle Jepang dimuat dari hasil ASR tersimpan.'
-              : 'Subtitle Jepang dibuat melalui ASR online.',
+              ? 'Subtitle sumber dimuat dari hasil ASR tersimpan.'
+              : 'Subtitle sumber dibuat melalui ASR online.',
           subtitleGeneratedByAsr: true,
         ),
       );
@@ -520,7 +521,7 @@ class LyricController extends StateNotifier<LyricState> {
           lyrics: const [],
           isLoading: false,
           subtitleGenerationStatus:
-              'Gagal membuat subtitle Jepang melalui ASR online.',
+              'Gagal membuat subtitle melalui ASR online.',
           subtitleGeneratedByAsr: true,
         ),
       );
@@ -733,10 +734,13 @@ class LyricController extends StateNotifier<LyricState> {
 
     final identity = TrackIdentity.fromTrack(currentTrack);
     final sourceLyrics = List<LyricLine>.from(state.lyrics);
+    final languageSettings = SubtitleLanguageSettings.instance;
     final downloaded =
         await SubtitleTranslationCache.instance.loadDownloadedForTrack(
       track: identity,
       sourceLyrics: sourceLyrics,
+      sourceLanguage: languageSettings.sourceLanguage,
+      targetLanguage: languageSettings.targetLanguage,
     );
 
     if (!_isCurrentLoadRequest(requestId)) return false;
@@ -814,9 +818,8 @@ class LyricController extends StateNotifier<LyricState> {
 
   /// Translate the active subtitle without ever blocking playback.
   ///
-  /// Free Online uses a durable document cache outside the subtitle library so
-  /// Indonesian output can never be mistaken for the Japanese source on the
-  /// next playback. Online providers retain the legacy optional library export.
+  /// Free Online uses a durable document cache outside the subtitle library.
+  /// Source + target language are part of the cache identity.
   Future<String?> translateAndSaveCurrentLyrics() async {
     if (state.lyrics.isEmpty || state.isTranslating) return null;
 
@@ -851,6 +854,9 @@ class LyricController extends StateNotifier<LyricState> {
       final isFreeOnline = await translationService.isFreeOnlineSelected();
       final freeOnlineIdentity =
           isFreeOnline ? await translationService.freeOnlineEngineIdentity() : null;
+      final selectedPair = translationService.freeOnlineLanguagePair(
+        sourceLanguage: SubtitleLanguageSettings.instance.sourceLanguage,
+      );
       final translationQuality = ref.read(translationQualityProvider);
       final glossary =
           isFreeOnline ? await TranslationGlossaryService.instance.load() : null;
@@ -893,6 +899,8 @@ class LyricController extends StateNotifier<LyricState> {
           sourceLyrics: sourceLyrics,
           engineId: freeOnlineIdentity.$1,
           engineVersion: freeOnlineIdentity.$2,
+          sourceLanguage: selectedPair.$1,
+          targetLanguage: selectedPair.$2,
           glossaryVersion: glossary?.version ??
               SubtitleTranslationCache.defaultGlossaryVersion,
           translationStrategy: translationStrategy,
@@ -906,6 +914,8 @@ class LyricController extends StateNotifier<LyricState> {
             sourceLyrics: sourceLyrics,
             engineId: freeOnlineIdentity.$1,
             engineVersion: freeOnlineIdentity.$2,
+            sourceLanguage: selectedPair.$1,
+            targetLanguage: selectedPair.$2,
             glossaryVersion: glossary?.version ??
                 SubtitleTranslationCache.defaultGlossaryVersion,
             translationStrategy: translationStrategy,
@@ -992,6 +1002,8 @@ class LyricController extends StateNotifier<LyricState> {
             sourceLines: allSourceTexts,
             index: lyricIndex,
             glossary: glossary,
+            sourceLanguage: selectedPair.$1,
+            targetLanguage: selectedPair.$2,
             contextEnabled: translationQuality.contextEnabled,
           );
           if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
@@ -1010,7 +1022,7 @@ class LyricController extends StateNotifier<LyricState> {
       } else {
         await translationService.translateBatch(
           textsToTranslate,
-          sourceLang: 'ja',
+          sourceLang: selectedPair.$1,
           onItemTranslated: (itemIndex, translatedText, completed, total) {
             final lyricIndex = indexMap[itemIndex];
             publishProgress(
@@ -1093,6 +1105,9 @@ class LyricController extends StateNotifier<LyricState> {
     }
 
     final identity = await translationService.freeOnlineEngineIdentity();
+    final selectedPair = translationService.freeOnlineLanguagePair(
+      sourceLanguage: SubtitleLanguageSettings.instance.sourceLanguage,
+    );
     final quality = ref.read(translationQualityProvider);
     final glossary = await TranslationGlossaryService.instance.load();
     if (!_isSameTrack(currentTrack, ref.read(currentTrackProvider).value)) {
@@ -1108,6 +1123,8 @@ class LyricController extends StateNotifier<LyricState> {
       translatedLyrics: List<LyricLine>.from(translated),
       engineId: identity.$1,
       engineVersion: identity.$2,
+      sourceLanguage: selectedPair.$1,
+      targetLanguage: selectedPair.$2,
       glossaryVersion: glossary.version,
       translationStrategy: strategy,
       offlineDownload: true,
