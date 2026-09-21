@@ -6,7 +6,6 @@ import '../providers/translation_provider.dart';
 import '../providers/translation_quality_provider.dart';
 import '../services/subtitle_translation_cache.dart';
 import 'translation_glossary_screen.dart';
-import 'kikoflu_features_settings_screen.dart';
 
 class OnlineTranslationSettingsScreen extends ConsumerWidget {
   const OnlineTranslationSettingsScreen({super.key});
@@ -116,23 +115,16 @@ class OnlineTranslationSettingsScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Aktifkan fallback ASR agar Whisper membuat subtitle Jepang '
-                    'ketika subtitle resmi tidak tersedia. Setelah subtitle '
-                    'Jepang siap, Terjemahan Gratis Online akan menerjemahkannya '
-                    'ke Indonesia secara otomatis.',
+                    'Fallback subtitle memakai ASR online Jepang. Jalur ini '
+                    'tidak memasukkan atau mengunduh model Whisper ke perangkat. '
+                    'Audio dikirim ke gateway ASR yang dikonfigurasi pada build, '
+                    'lalu hasil teks Jepang bertimestamp diterjemahkan online '
+                    'ke Indonesia.',
                   ),
-                  const SizedBox(height: 12),
-                  FilledButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              const KikoFluFeaturesSettingsScreen(),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.graphic_eq_rounded),
-                    label: const Text('Atur ASR / Whisper'),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Setelah terjemahan selesai, gunakan ikon unduh di player '
+                    'untuk menyimpan hasil subtitle agar dapat dipakai saat offline.',
                   ),
                 ],
               ),
@@ -168,8 +160,8 @@ class OnlineTranslationSettingsScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      'Hasil yang sudah diterjemahkan dapat dipakai kembali '
-                      'tanpa mengirim ulang baris yang sama ke layanan online.',
+                      'Bagian ini berisi terjemahan yang secara eksplisit diunduh '
+                      'untuk dipakai kembali saat offline.',
                     ),
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
