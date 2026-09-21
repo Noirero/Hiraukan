@@ -1,6 +1,4 @@
 import 'dart:io';
-import 'dart:ui';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kikoeru_flutter/src/models/ai_job_identity.dart';
 import 'package:kikoeru_flutter/src/models/audio_track.dart';
@@ -8,8 +6,7 @@ import 'package:kikoeru_flutter/src/providers/settings_provider.dart';
 import 'package:kikoeru_flutter/src/services/free_online_translation_engine.dart';
 
 void main() {
-  test('free online provider migrates legacy preference and keeps Indonesian target',
-      () {
+  test('free online provider still migrates the legacy preference', () {
     expect(TranslationSource.freeOnline.value, 'free_online');
     expect(
       TranslationSource.fromStoredValue('local_ai'),
@@ -19,13 +16,34 @@ void main() {
       TranslationSource.fromStoredValue('free_online'),
       TranslationSource.freeOnline,
     );
-    expect(TranslationTargetLanguage.indonesian.value, 'id');
-    expect(
-      TranslationTargetLanguage.indonesian.resolveLocale(
-        const Locale('en'),
-      ).languageCode,
-      'id',
+  });
+
+  test('free online engine forwards selectable multilingual pairs', () async {
+    final calls = <String>[];
+    final engine = FreeOnlineTranslationEngine.forTesting(
+      client: (text, source, target) async {
+        calls.add('$source->$target:$text');
+        return 'ok';
+      },
     );
+
+    expect(
+      await engine.translate(
+        '안녕하세요',
+        sourceLanguage: 'ko',
+        targetLanguage: 'en',
+      ),
+      'ok',
+    );
+    expect(
+      await engine.translate(
+        '你好',
+        sourceLanguage: 'zh-cn',
+        targetLanguage: 'ja',
+      ),
+      'ok',
+    );
+    expect(calls, ['ko->en:안녕하세요', 'zh-cn->ja:你好']);
   });
 
   test('free online engine has no local model lifecycle', () {
