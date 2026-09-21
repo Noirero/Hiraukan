@@ -273,18 +273,19 @@ class _AsrBenchmarkLabScreenState extends State<AsrBenchmarkLabScreen> {
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: () async {
+                final report = await File(result.reportPath).readAsString();
                 await Clipboard.setData(
-                  ClipboardData(text: result.reportPath),
+                  ClipboardData(text: report),
                 );
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Path laporan disalin.'),
+                    content: Text('Laporan JSON disalin.'),
                   ),
                 );
               },
               icon: const Icon(Icons.copy_outlined),
-              label: const Text('Salin path laporan'),
+              label: const Text('Salin laporan JSON'),
             ),
           ],
         ),
