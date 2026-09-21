@@ -14,8 +14,8 @@ class AsrSubtitleCache {
   static final AsrSubtitleCache instance = AsrSubtitleCache._();
 
   static const int schemaVersion = 1;
-  static const String engineId = 'online_asr_gateway';
-  static const String engineVersion = 'gateway-v1';
+  static const String engineId = 'hiraukan_asr';
+  static const String engineVersion = 'local-online-v2';
 
   Future<Directory> _directory() async {
     final support = await getApplicationSupportDirectory();
