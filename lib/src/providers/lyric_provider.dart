@@ -418,8 +418,7 @@ class LyricController extends StateNotifier<LyricState> {
     int requestId,
   ) async {
     final settings = KikoFluFeatureSettings.instance;
-    if (!settings.aiTranscriptionEnabled ||
-        !settings.autoAsrTranslateFallback) {
+    if (!settings.autoAsrTranslateFallback) {
       return false;
     }
 
