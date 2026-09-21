@@ -85,7 +85,7 @@ class AsrSubtitleFallbackService {
     await AsrSubtitleCache.instance.save(
       track: identity,
       modelName: cacheProfile,
-      language: result.sourceLanguage,
+      language: requestedLanguage,
       lines: lyrics,
     );
     if (isCancelled?.call() == true) return null;
