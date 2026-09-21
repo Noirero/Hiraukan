@@ -17,7 +17,7 @@ class KikoFluFeatureSettings {
   bool get aiTranscriptionEnabled =>
       StorageService.getBool('${_prefix}ai_transcription') ?? false;
   bool get autoAsrTranslateFallback =>
-      StorageService.getBool('${_prefix}auto_asr_translate_fallback') ?? false;
+      StorageService.getBool('${_prefix}auto_asr_translate_fallback') ?? true;
   String get whisperModel =>
       StorageService.getString('${_prefix}whisper_model') ?? 'base';
   int get whisperThreads =>
