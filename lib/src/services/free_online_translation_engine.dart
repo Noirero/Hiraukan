@@ -10,7 +10,7 @@ typedef FreeOnlineTranslateClient = Future<String> Function(
   String targetLanguage,
 );
 
-/// Online Japanese -> Indonesian translation without a user API credential.
+/// Lightweight online subtitle translation without a user API credential.
 ///
 /// The engine intentionally stays lightweight: no local model, no native AI
 /// runtime, and no automatic fallback to paid/API providers.
@@ -69,15 +69,15 @@ class FreeOnlineTranslationEngine implements TranslationEngine {
   @override
   Future<String> translate(
     String text, {
-    String sourceLanguage = 'ja',
+    String sourceLanguage = 'auto',
     String targetLanguage = 'id',
   }) {
     if (text.trim().isEmpty) return Future.value(text);
-    if (sourceLanguage != 'ja' || targetLanguage != 'id') {
+    final from = sourceLanguage.trim().isEmpty ? 'auto' : sourceLanguage.trim();
+    final to = targetLanguage.trim();
+    if (to.isEmpty || to == 'auto') {
       return Future.error(
-        ArgumentError(
-          'Free Online translation currently supports ja -> id only.',
-        ),
+        ArgumentError('Target language must be an explicit language code.'),
       );
     }
 
@@ -90,15 +90,15 @@ class FreeOnlineTranslationEngine implements TranslationEngine {
       );
     }
 
-    final key = '$sourceLanguage|$targetLanguage|$text';
+    final key = '$from|$to|$text';
     final existing = _inFlight[key];
     if (existing != null) return existing;
 
     late Future<String> tracked;
     tracked = _translateWithRetry(
       text,
-      sourceLanguage: sourceLanguage,
-      targetLanguage: targetLanguage,
+      sourceLanguage: from,
+      targetLanguage: to,
     ).then((value) {
       _retryAfter = null;
       return value;
