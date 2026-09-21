@@ -12,8 +12,8 @@ on:
         required: true
         type: string
       asr_endpoint:
-        description: 'Online ASR endpoint, e.g. https://asr.example.com/v1/transcribe'
-        required: true
+        description: 'Optional online ASR fallback endpoint'
+        required: false
         type: string
 
 permissions:
@@ -126,7 +126,7 @@ jobs:
 
       - name: Build Android ARM64 Beta APK
         env:
-          HIRAUAKAN_ONLINE_ASR_ENDPOINT: ${{ inputs.asr_endpoint }}
+          HIRAUAKAN_ONLINE_ASR_ENDPOINT: ${{ inputs.asr_endpoint || vars.HIRAUAKAN_ONLINE_ASR_ENDPOINT }}
         run: |
           set -euo pipefail
           mkdir -p dist
