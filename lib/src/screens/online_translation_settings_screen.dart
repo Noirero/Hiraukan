@@ -1,24 +1,169 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../providers/lyric_provider.dart';
 import '../providers/translation_glossary_provider.dart';
 import '../providers/translation_provider.dart';
 import '../providers/translation_quality_provider.dart';
+import '../services/subtitle_language_settings.dart';
 import '../services/subtitle_translation_cache.dart';
 import 'translation_glossary_screen.dart';
 
-class OnlineTranslationSettingsScreen extends ConsumerWidget {
+class OnlineTranslationSettingsScreen extends ConsumerStatefulWidget {
   const OnlineTranslationSettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<OnlineTranslationSettingsScreen> createState() =>
+      _OnlineTranslationSettingsScreenState();
+}
+
+class _OnlineTranslationSettingsScreenState
+    extends ConsumerState<OnlineTranslationSettingsScreen> {
+  final _languages = SubtitleLanguageSettings.instance;
+
+  Future<void> _setSourceLanguage(String code) async {
+    await _languages.setSourceLanguage(code);
+    ref.read(lyricControllerProvider.notifier).clearTranslation();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _setTargetLanguage(String code) async {
+    await _languages.setTargetLanguage(code);
+    ref.read(lyricControllerProvider.notifier).clearTranslation();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _editLanguageCode({
+    required bool source,
+  }) async {
+    final current =
+        source ? _languages.sourceLanguage : _languages.targetLanguage;
+    final controller = TextEditingController(
+      text: current == 'auto' ? '' : current,
+    );
+
+    final code = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          source ? 'Kode bahasa sumber' : 'Kode bahasa tujuan',
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            hintText: source ? 'contoh: ko, ja, en, auto' : 'contoh: en, ja, id',
+            helperText: 'Gunakan kode bahasa yang didukung layanan online.',
+          ),
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(controller.text.trim()),
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (code == null || code.trim().isEmpty) return;
+
+    if (source) {
+      await _setSourceLanguage(code);
+    } else {
+      await _setTargetLanguage(code);
+    }
+  }
+
+  Future<void> _editAsrEngine() async {
+    final controller = TextEditingController(
+      text: _languages.asrEngine == 'auto' ? '' : _languages.asrEngine,
+    );
+    final engine = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Engine ASR online'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'auto atau ID engine dari gateway',
+            helperText:
+                'Kosongkan untuk membiarkan gateway memilih engine otomatis.',
+          ),
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(controller.text.trim()),
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (engine == null) return;
+    await _languages.setAsrEngine(engine);
+    if (mounted) setState(() {});
+  }
+
+  List<DropdownMenuItem<String>> _languageItems({
+    required String current,
+    required bool includeAuto,
+  }) {
+    final items = <DropdownMenuItem<String>>[];
+    if (includeAuto) {
+      items.add(
+        const DropdownMenuItem(
+          value: 'auto',
+          child: Text('Auto Detect'),
+        ),
+      );
+    }
+    for (final language in SubtitleLanguageSettings.commonLanguages) {
+      items.add(
+        DropdownMenuItem(
+          value: language.code,
+          child: Text(language.label),
+        ),
+      );
+    }
+    final known = current == 'auto' ||
+        SubtitleLanguageSettings.commonLanguages
+            .any((language) => language.code == current);
+    if (!known) {
+      items.add(
+        DropdownMenuItem(
+          value: current,
+          child: Text('Custom · $current'),
+        ),
+      );
+    }
+    return items;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final engine = ref.watch(freeOnlineTranslationEngineProvider);
     final cacheStats = ref.watch(translationDocumentCacheStatsProvider);
     final quality = ref.watch(translationQualityProvider);
     final glossary = ref.watch(translationGlossaryProvider);
+    final sourceLanguage = _languages.sourceLanguage;
+    final targetLanguage = _languages.targetLanguage;
+    final asrEngine = _languages.asrEngine;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Terjemahan Gratis Online')),
+      appBar: AppBar(title: const Text('Subtitle & Translate Online')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -29,20 +174,99 @@ class OnlineTranslationSettingsScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Jepang → Indonesia',
+                    '${SubtitleLanguageSettings.labelFor(sourceLanguage)} → '
+                    '${SubtitleLanguageSettings.labelFor(targetLanguage)}',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Gratis dan tidak memerlukan API key/token pengguna, akun, '
-                    'atau download model. Terjemahan membutuhkan koneksi internet.',
+                    'ASR dan terjemahan diproses online. Hiraukan tidak '
+                    'menanam atau mengunduh model bahasa ke APK.',
                   ),
                   const SizedBox(height: 8),
-                  Text('Engine: ${engine.displayName}'),
+                  Text('Translate engine: ${engine.displayName}'),
+                  const SizedBox(height: 4),
+                  Text('ASR engine: $asrEngine'),
                   const SizedBox(height: 8),
                   const Text(
-                    'Jika layanan online tidak dapat dijangkau, playback dan '
-                    'subtitle Jepang tetap berjalan normal.',
+                    'Bahasa yang benar-benar dapat diproses mengikuti '
+                    'kemampuan engine/gateway online yang dipilih.',
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Bahasa pipeline',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey('source-$sourceLanguage'),
+                    initialValue: sourceLanguage,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Bahasa audio / subtitle sumber',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _languageItems(
+                      current: sourceLanguage,
+                      includeAuto: true,
+                    ),
+                    onChanged: (value) {
+                      if (value != null) _setSourceLanguage(value);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () => _editLanguageCode(source: true),
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Kode bahasa lain'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey('target-$targetLanguage'),
+                    initialValue: targetLanguage,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Terjemahkan ke',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _languageItems(
+                      current: targetLanguage,
+                      includeAuto: false,
+                    ),
+                    onChanged: (value) {
+                      if (value != null) _setTargetLanguage(value);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () => _editLanguageCode(source: false),
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Kode bahasa lain'),
+                    ),
+                  ),
+                  const Divider(height: 24),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.graphic_eq_rounded),
+                    title: const Text('Engine ASR online'),
+                    subtitle: Text(asrEngine),
+                    trailing: const Icon(Icons.edit_outlined),
+                    onTap: _editAsrEngine,
                   ),
                 ],
               ),
@@ -56,9 +280,9 @@ class OnlineTranslationSettingsScreen extends ConsumerWidget {
                   secondary: const Icon(Icons.forum_outlined),
                   title: const Text('Gunakan konteks baris sekitar'),
                   subtitle: const Text(
-                    'Mencoba baris sebelum/sesudah untuk memahami kalimat '
-                    'Jepang yang menghilangkan subjek. Jika mapping berubah, '
-                    'otomatis kembali ke terjemahan 1:1.',
+                    'Mencoba baris sebelum/sesudah untuk membantu memahami '
+                    'kalimat. Jika mapping berubah, otomatis kembali ke '
+                    'terjemahan 1:1.',
                   ),
                   value: quality.contextEnabled,
                   onChanged: (value) => ref
@@ -115,16 +339,16 @@ class OnlineTranslationSettingsScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Fallback subtitle memakai ASR online Jepang. Jalur ini '
-                    'tidak memasukkan atau mengunduh model Whisper ke perangkat. '
-                    'Audio dikirim ke gateway ASR yang dikonfigurasi pada build, '
-                    'lalu hasil teks Jepang bertimestamp diterjemahkan online '
-                    'ke Indonesia.',
+                    'Jika subtitle sumber/lokal/cache tidak tersedia, '
+                    'Hiraukan memakai ASR online sebagai fallback terakhir. '
+                    'Auto Detect dapat dipakai atau bahasa sumber dapat '
+                    'dipaksa secara manual.',
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Setelah terjemahan selesai, gunakan ikon unduh di player '
-                    'untuk menyimpan hasil subtitle agar dapat dipakai saat offline.',
+                    'Hasil ASR tetap bertimestamp, lalu diterjemahkan ke '
+                    'bahasa tujuan yang dipilih. Gunakan ikon unduh di player '
+                    'untuk menyimpan hasil terjemahan agar dapat dipakai offline.',
                   ),
                 ],
               ),
@@ -141,7 +365,7 @@ class OnlineTranslationSettingsScreen extends ConsumerWidget {
             error: (_, __) => const Card(
               child: Padding(
                 padding: EdgeInsets.all(16),
-                child: Text('Statistik cache terjemahan tidak tersedia.'),
+                child: Text('Statistik terjemahan offline tidak tersedia.'),
               ),
             ),
             data: (stats) => Card(
@@ -160,15 +384,17 @@ class OnlineTranslationSettingsScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      'Berisi terjemahan yang Anda unduh dari player. Hiraukan '
-                      'akan memuatnya kembali tanpa internet saat track diputar.',
+                      'Setiap hasil disimpan bersama pasangan bahasa sumber '
+                      'dan tujuan, sehingga satu track dapat memiliki beberapa '
+                      'terjemahan offline.',
                     ),
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
                       onPressed: stats.documents == 0
                           ? null
                           : () async {
-                              await SubtitleTranslationCache.instance.clearDownloaded();
+                              await SubtitleTranslationCache.instance
+                                  .clearDownloaded();
                               ref.invalidate(
                                 translationDocumentCacheStatsProvider,
                               );
