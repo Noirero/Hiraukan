@@ -60,6 +60,8 @@ void main() {
     final result = await service.translateSegment(
       sourceLines: const ['前', '今', '後'],
       index: 1,
+      sourceLanguage: 'ja',
+      targetLanguage: 'id',
       glossary: const TranslationGlossarySnapshot(
         version: 1,
         entries: [],
@@ -80,6 +82,8 @@ void main() {
     final result = await service.translateSegment(
       sourceLines: const ['前', '今', '後'],
       index: 1,
+      sourceLanguage: 'ja',
+      targetLanguage: 'id',
       glossary: const TranslationGlossarySnapshot(
         version: 1,
         entries: [],
@@ -99,6 +103,8 @@ void main() {
       sourceLines: const ['お兄ちゃん、好き'],
       index: 0,
       contextEnabled: false,
+      sourceLanguage: 'ja',
+      targetLanguage: 'id',
       glossary: const TranslationGlossarySnapshot(
         version: 2,
         entries: [
