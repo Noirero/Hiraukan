@@ -499,6 +499,19 @@ class LyricController extends StateNotifier<LyricState> {
         );
       }
       return true;
+    } on AsrLocalModelNotInstalledException catch (error) {
+      if (!_isCurrentLoadRequest(requestId)) return true;
+      _setStateForLoadRequest(
+        requestId,
+        LyricState(
+          lyrics: const [],
+          isLoading: false,
+          subtitleGenerationStatus:
+              'Model Whisper ${error.modelName} belum diunduh. Buka Fitur AI untuk mengunduh model.',
+          subtitleGeneratedByAsr: true,
+        ),
+      );
+      return true;
     } on OnlineAsrNotConfiguredException {
       if (!_isCurrentLoadRequest(requestId)) return true;
       _setStateForLoadRequest(
@@ -507,7 +520,7 @@ class LyricController extends StateNotifier<LyricState> {
           lyrics: const [],
           isLoading: false,
           subtitleGenerationStatus:
-              'ASR online belum dikonfigurasi pada build/gateway Hiraukan.',
+              'ASR belum tersedia. Unduh model di Fitur AI atau konfigurasi ASR online.',
           subtitleGeneratedByAsr: true,
         ),
       );
