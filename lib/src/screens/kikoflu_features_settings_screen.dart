@@ -12,6 +12,7 @@ import '../services/hi_res_audio_service.dart';
 import '../services/kikoflu_feature_coordinator.dart';
 import '../services/kikoflu_feature_settings.dart';
 import '../services/kikoflu_notification_service.dart';
+import 'asr_benchmark_lab_screen.dart';
 
 class KikoFluFeaturesSettingsScreen extends StatefulWidget {
   const KikoFluFeaturesSettingsScreen({super.key});
@@ -367,6 +368,22 @@ class _KikoFluFeaturesSettingsScreenState
                         : LinearProgressIndicator(value: _modelProgress),
                     enabled: !_busy,
                     onTap: _downloadModel,
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.science_outlined),
+                    title: const Text('ASR Benchmark Lab'),
+                    subtitle: const Text(
+                      'Bandingkan Base, Tiny, dan Small pada corpus Jepang/ASMR. '
+                      'Tidak mengaktifkan Fast/HQ secara otomatis.',
+                    ),
+                    enabled: !_busy,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const AsrBenchmarkLabScreen(),
+                        ),
+                      );
+                    },
                   ),
                   ListTile(
                     leading: const Icon(Icons.library_music_rounded),

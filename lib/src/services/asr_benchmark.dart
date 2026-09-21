@@ -703,9 +703,13 @@ class AsrBenchmarkRunner {
     required SpeechRecognitionEngine engine,
     required List<AsrBenchmarkCase> cases,
     int threads = 4,
+    void Function(int index, int total, AsrBenchmarkCase benchmarkCase)?
+        onCaseStarting,
   }) async {
     final results = <AsrBenchmarkMeasurement>[];
-    for (final benchmarkCase in cases) {
+    for (var index = 0; index < cases.length; index++) {
+      final benchmarkCase = cases[index];
+      onCaseStarting?.call(index, cases.length, benchmarkCase);
       results.add(
         await runCase(
           engine: engine,
@@ -734,16 +738,28 @@ class AsrBenchmarkRunner {
       if (raw is! Map) {
         throw const FormatException('Invalid ASR benchmark case');
       }
-      final benchmarkCase =
+      final parsed =
           AsrBenchmarkCase.fromJson(Map<String, dynamic>.from(raw));
-      if (benchmarkCase.id.trim().isEmpty ||
-          benchmarkCase.audioPath.trim().isEmpty ||
-          benchmarkCase.referenceText.trim().isEmpty) {
+      if (parsed.id.trim().isEmpty ||
+          parsed.audioPath.trim().isEmpty ||
+          parsed.referenceText.trim().isEmpty) {
         throw const FormatException(
           'Benchmark id, audioPath and referenceText are required',
         );
       }
-      cases.add(benchmarkCase);
+
+      final resolvedAudioPath = p.isAbsolute(parsed.audioPath)
+          ? p.normalize(parsed.audioPath)
+          : p.normalize(p.join(file.parent.path, parsed.audioPath));
+      cases.add(
+        AsrBenchmarkCase(
+          id: parsed.id,
+          category: parsed.category,
+          audioPath: resolvedAudioPath,
+          referenceText: parsed.referenceText,
+          durationMs: parsed.durationMs,
+        ),
+      );
     }
     return List.unmodifiable(cases);
   }
