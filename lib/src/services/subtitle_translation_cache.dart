@@ -18,6 +18,16 @@ class TranslationDocumentCacheStats {
   });
 }
 
+class DownloadedTranslationDocument {
+  final List<LyricLine> lyrics;
+  final String path;
+
+  const DownloadedTranslationDocument({
+    required this.lyrics,
+    required this.path,
+  });
+}
+
 /// Durable cache for a complete translated subtitle document.
 ///
 /// The cache identity includes source subtitle content, stable track identity,
@@ -136,27 +146,101 @@ class SubtitleTranslationCache {
       if (decoded['sourceContentHash'] != sourceContentHash(sourceLyrics)) {
         return null;
       }
-      final rawLines = decoded['lines'];
-      if (rawLines is! List || rawLines.length != sourceLyrics.length) {
-        return null;
-      }
-      final lines = <LyricLine>[];
-      for (var i = 0; i < rawLines.length; i++) {
-        final raw = rawLines[i];
-        if (raw is! Map) return null;
-        final source = sourceLyrics[i];
-        lines.add(
-          LyricLine(
-            startTime: source.startTime,
-            endTime: source.endTime,
-            text: raw['text']?.toString() ?? source.text,
-          ),
-        );
-      }
-      return lines;
+      return _decodeLines(
+        decoded['lines'],
+        sourceLyrics: sourceLyrics,
+      );
     } catch (_) {
       return null;
     }
+  }
+
+  /// Finds an explicitly downloaded Indonesian subtitle without consulting
+  /// any online service or current translation settings.
+  Future<DownloadedTranslationDocument?> loadDownloadedForTrack({
+    required TrackIdentity track,
+    required List<LyricLine> sourceLyrics,
+    String targetLanguage = 'id',
+  }) async {
+    if (sourceLyrics.isEmpty) return null;
+
+    final dir = await _directory();
+    final expectedSourceHash = sourceContentHash(sourceLyrics);
+    DownloadedTranslationDocument? newest;
+    DateTime? newestCreatedAt;
+
+    await for (final entity in dir.list(followLinks: false)) {
+      if (entity is! File || !entity.path.endsWith('.json')) continue;
+
+      try {
+        final decoded = jsonDecode(await entity.readAsString());
+        if (decoded is! Map<String, dynamic>) continue;
+        if (decoded['schemaVersion'] != schemaVersion ||
+            decoded['offlineDownload'] != true ||
+            decoded['targetLanguage'] != targetLanguage ||
+            decoded['sourceContentHash'] != expectedSourceHash) {
+          continue;
+        }
+
+        final rawTrack = decoded['track'];
+        if (rawTrack is! Map) continue;
+        if (rawTrack['trackId']?.toString() != track.trackId ||
+            rawTrack['sourceKey']?.toString() != track.sourceKey ||
+            rawTrack['sourceWorkId']?.toString() != track.sourceWorkId ||
+            rawTrack['audioFingerprint']?.toString() !=
+                track.audioFingerprint) {
+          continue;
+        }
+
+        final lines = _decodeLines(
+          decoded['lines'],
+          sourceLyrics: sourceLyrics,
+        );
+        if (lines == null) continue;
+
+        final createdAt = DateTime.tryParse(
+          decoded['createdAt']?.toString() ?? '',
+        );
+        if (newest == null ||
+            (createdAt != null &&
+                (newestCreatedAt == null ||
+                    createdAt.isAfter(newestCreatedAt)))) {
+          newest = DownloadedTranslationDocument(
+            lyrics: List.unmodifiable(lines),
+            path: entity.path,
+          );
+          newestCreatedAt = createdAt;
+        }
+      } catch (_) {
+        // Ignore corrupt/partial documents and continue searching.
+      }
+    }
+
+    return newest;
+  }
+
+  List<LyricLine>? _decodeLines(
+    dynamic rawLines, {
+    required List<LyricLine> sourceLyrics,
+  }) {
+    if (rawLines is! List || rawLines.length != sourceLyrics.length) {
+      return null;
+    }
+
+    final lines = <LyricLine>[];
+    for (var i = 0; i < rawLines.length; i++) {
+      final raw = rawLines[i];
+      if (raw is! Map) return null;
+      final source = sourceLyrics[i];
+      lines.add(
+        LyricLine(
+          startTime: source.startTime,
+          endTime: source.endTime,
+          text: raw['text']?.toString() ?? source.text,
+        ),
+      );
+    }
+    return lines;
   }
 
   Future<String?> save({
@@ -169,6 +253,7 @@ class SubtitleTranslationCache {
     String targetLanguage = 'id',
     int glossaryVersion = defaultGlossaryVersion,
     String translationStrategy = 'segment-v1',
+    bool offlineDownload = false,
   }) async {
     if (sourceLyrics.length != translatedLyrics.length) return null;
 
@@ -189,6 +274,13 @@ class SubtitleTranslationCache {
     final payload = jsonEncode({
       'schemaVersion': schemaVersion,
       'sourceContentHash': sourceContentHash(sourceLyrics),
+      'offlineDownload': offlineDownload,
+      'track': {
+        'trackId': track.trackId,
+        'sourceKey': track.sourceKey,
+        'sourceWorkId': track.sourceWorkId,
+        'audioFingerprint': track.audioFingerprint,
+      },
       'engineId': engineId,
       'engineVersion': engineVersion,
       'sourceLanguage': sourceLanguage,
