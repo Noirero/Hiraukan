@@ -10,6 +10,7 @@ import 'llm_translator.dart';
 import 'translation_engine.dart';
 import 'free_online_translation_engine.dart';
 import 'log_service.dart';
+import 'subtitle_language_settings.dart';
 import '../providers/settings_provider.dart';
 import '../utils/global_keys.dart';
 
@@ -162,6 +163,16 @@ class TranslationService {
     return (_freeOnlineTranslator.id, _freeOnlineTranslator.version);
   }
 
+  (String sourceLanguage, String targetLanguage) freeOnlineLanguagePair({
+    String? sourceLanguage,
+  }) {
+    final settings = SubtitleLanguageSettings.instance;
+    final source = sourceLanguage == null || sourceLanguage.trim().isEmpty
+        ? settings.sourceLanguage
+        : sourceLanguage.trim().toLowerCase().replaceAll('_', '-');
+    return (source, settings.targetLanguage);
+  }
+
   /// 翻译文本到应用当前语言
   Future<String> translate(String text, {String? sourceLang}) async {
     if (text.isEmpty) return text;
@@ -169,12 +180,18 @@ class TranslationService {
     final prefs = await SharedPreferences.getInstance();
     final selectedSource = TranslationSource.fromStoredValue(prefs.getString('translation_source')).value;
     final languageConfig = _getLanguageConfig(prefs, selectedSource);
-    final cacheSourceLang = languageConfig.cacheSourceLang(sourceLang);
-    final cacheTargetLang = languageConfig.cacheTargetLang();
-    final targetLocale = selectedSource == TranslationSource.freeOnline.value
-        ? const Locale('id')
-        : languageConfig.targetLocale;
-    final engineCacheKey = selectedSource == TranslationSource.freeOnline.value
+    final isFreeOnline =
+        selectedSource == TranslationSource.freeOnline.value;
+    final freeOnlinePair =
+        isFreeOnline ? freeOnlineLanguagePair(sourceLanguage: sourceLang) : null;
+    final cacheSourceLang = isFreeOnline
+        ? freeOnlinePair!.$1
+        : languageConfig.cacheSourceLang(sourceLang);
+    final cacheTargetLang = isFreeOnline
+        ? freeOnlinePair!.$2
+        : languageConfig.cacheTargetLang();
+    final targetLocale = languageConfig.targetLocale;
+    final engineCacheKey = isFreeOnline
         ? '${_freeOnlineTranslator.id}:${_freeOnlineTranslator.version}'
         : selectedSource;
 
@@ -182,7 +199,7 @@ class TranslationService {
     final cachedTranslation = await _getCachedTranslation(
       text,
       cacheSourceLang,
-      selectedSource == TranslationSource.freeOnline.value ? 'id' : cacheTargetLang,
+      cacheTargetLang,
       engineCacheKey,
     );
     if (cachedTranslation != null) {
@@ -194,19 +211,18 @@ class TranslationService {
 
     // Free Online never falls back to paid/API providers without an explicit
     // user choice. Network failures are surfaced without affecting playback.
-    if (selectedSource == TranslationSource.freeOnline.value) {
+    if (isFreeOnline) {
       try {
         final result = await _freeOnlineTranslator.translate(
           text,
-          sourceLanguage:
-              sourceLang == null || sourceLang == 'auto' ? 'ja' : sourceLang,
-          targetLanguage: 'id',
+          sourceLanguage: freeOnlinePair!.$1,
+          targetLanguage: freeOnlinePair.$2,
         );
         await _cacheTranslation(
           text,
           result,
           cacheSourceLang,
-          'id',
+          cacheTargetLang,
           engineCacheKey,
         );
         return result;
