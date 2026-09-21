@@ -10,6 +10,7 @@ import 'ui_settings_screen.dart';
 import 'preferences_screen.dart';
 import 'about_screen.dart';
 import 'permissions_screen.dart';
+import 'ai_features_screen.dart';
 import 'privacy_mode_settings_screen.dart';
 import 'floating_lyric_style_screen.dart';
 import 'log_screen.dart';
@@ -475,6 +476,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(builder: (context) => const UiSettingsScreen()),
+            );
+          },
+        ),
+        SettingsNavigationTile(
+          icon: Icons.auto_awesome_rounded,
+          title: 'Fitur AI',
+          subtitle:
+              'Model Whisper opsional · transkripsi lokal · subtitle bertimestamp',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const AiFeaturesScreen(),
+              ),
             );
           },
         ),
