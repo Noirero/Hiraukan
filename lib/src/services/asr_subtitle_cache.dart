@@ -31,6 +31,7 @@ class AsrSubtitleCache {
   String _cacheId({
     required TrackIdentity track,
     required String modelName,
+    required String language,
   }) {
     final payload = [
       'schema=$schemaVersion',
@@ -41,7 +42,7 @@ class AsrSubtitleCache {
       'engine=$engineId',
       'engineVersion=$engineVersion',
       'model=$modelName',
-      'lang=ja',
+      'lang=$language',
     ].join('|');
     return sha256.convert(utf8.encode(payload)).toString();
   }
@@ -49,12 +50,13 @@ class AsrSubtitleCache {
   Future<List<LyricLine>?> load({
     required TrackIdentity track,
     required String modelName,
+    required String language,
   }) async {
     final dir = await _directory();
     final file = File(
       p.join(
         dir.path,
-        '${_cacheId(track: track, modelName: modelName)}.json',
+        '${_cacheId(track: track, modelName: modelName, language: language)}.json',
       ),
     );
     if (!await file.exists()) return null;
@@ -65,7 +67,8 @@ class AsrSubtitleCache {
       if (decoded['schemaVersion'] != schemaVersion ||
           decoded['engineId'] != engineId ||
           decoded['engineVersion'] != engineVersion ||
-          decoded['modelName'] != modelName) {
+          decoded['modelName'] != modelName ||
+          decoded['language'] != language) {
         return null;
       }
 
@@ -97,6 +100,7 @@ class AsrSubtitleCache {
   Future<void> save({
     required TrackIdentity track,
     required String modelName,
+    required String language,
     required List<LyricLine> lines,
   }) async {
     if (lines.isEmpty) return;
@@ -105,7 +109,7 @@ class AsrSubtitleCache {
     final destination = File(
       p.join(
         dir.path,
-        '${_cacheId(track: track, modelName: modelName)}.json',
+        '${_cacheId(track: track, modelName: modelName, language: language)}.json',
       ),
     );
     final temporary = File('${destination.path}.tmp');
@@ -115,7 +119,7 @@ class AsrSubtitleCache {
       'engineId': engineId,
       'engineVersion': engineVersion,
       'modelName': modelName,
-      'language': 'ja',
+      'language': language,
       'createdAt': DateTime.now().toUtc().toIso8601String(),
       'track': {
         'trackId': track.trackId,
