@@ -11,6 +11,7 @@ import '../models/audio_track.dart';
 import '../models/ai_job_identity.dart';
 import '../services/cache_service.dart';
 import '../services/asr_subtitle_fallback_service.dart';
+import '../services/online_asr_service.dart';
 import '../services/kikoflu_feature_settings.dart';
 import '../services/download_service.dart';
 import '../services/local_work_metadata_service.dart';
@@ -416,7 +417,7 @@ class LyricController extends StateNotifier<LyricState> {
         lyrics: const [],
         isLoading: false,
         isGeneratingSubtitle: true,
-        subtitleGenerationStatus: 'Menyiapkan subtitle Jepang dengan ASR…',
+        subtitleGenerationStatus: 'Menyiapkan ASR online…',
         subtitleGeneratedByAsr: true,
       ),
     );
@@ -424,15 +425,8 @@ class LyricController extends StateNotifier<LyricState> {
     bool cancelled() => !_isCurrentLoadRequest(requestId);
 
     try {
-      final playbackActive = ref.read(isPlayingProvider);
-      final asrThreads = playbackActive
-          ? settings.whisperThreads.clamp(1, 2).toInt()
-          : settings.whisperThreads;
-
       final result = await AsrSubtitleFallbackService.instance.generate(
         track: track,
-        modelName: settings.whisperModel,
-        threads: asrThreads,
         isCancelled: cancelled,
         onStatus: (status) {
           if (!_isCurrentLoadRequest(requestId)) return;
@@ -453,7 +447,7 @@ class LyricController extends StateNotifier<LyricState> {
             lyrics: const [],
             isLoading: false,
             subtitleGenerationStatus:
-                'ASR tidak menghasilkan subtitle Jepang.',
+                'ASR online tidak menghasilkan subtitle Jepang.',
             subtitleGeneratedByAsr: true,
           ),
         );
@@ -465,11 +459,10 @@ class LyricController extends StateNotifier<LyricState> {
         LyricState(
           lyrics: result.lyrics,
           isLoading: false,
-          lyricUrl:
-              'asr://whisper/${result.modelName}',
+          lyricUrl: 'asr://online/${result.serviceName}',
           subtitleGenerationStatus: result.fromCache
-              ? 'Subtitle Jepang dimuat dari cache ASR.'
-              : 'Subtitle Jepang dibuat oleh Whisper.',
+              ? 'Subtitle Jepang dimuat dari hasil ASR tersimpan.'
+              : 'Subtitle Jepang dibuat melalui ASR online.',
           subtitleGeneratedByAsr: true,
         ),
       );
@@ -482,14 +475,14 @@ class LyricController extends StateNotifier<LyricState> {
         unawaited(
           translateAndSaveCurrentLyrics().catchError((error) {
             _log.captureOutput(
-              '[Lyric] Terjemahan otomatis setelah ASR gagal: $error',
+              '[Lyric] Terjemahan otomatis setelah ASR online gagal: $error',
             );
             return null;
           }),
         );
       }
       return true;
-    } on AsrModelNotInstalledException catch (error) {
+    } on OnlineAsrNotConfiguredException {
       if (!_isCurrentLoadRequest(requestId)) return true;
       _setStateForLoadRequest(
         requestId,
@@ -497,14 +490,13 @@ class LyricController extends StateNotifier<LyricState> {
           lyrics: const [],
           isLoading: false,
           subtitleGenerationStatus:
-              'Model Whisper ${error.modelName} belum diunduh. '
-              'Buka Advanced Audio & AI untuk mengunduh model.',
+              'ASR online belum dikonfigurasi pada build/gateway Hiraukan.',
           subtitleGeneratedByAsr: true,
         ),
       );
       return true;
     } catch (error) {
-      _log.captureOutput('[Lyric] ASR fallback gagal: $error');
+      _log.captureOutput('[Lyric] ASR online fallback gagal: $error');
       if (!_isCurrentLoadRequest(requestId)) return true;
       _setStateForLoadRequest(
         requestId,
@@ -512,7 +504,7 @@ class LyricController extends StateNotifier<LyricState> {
           lyrics: const [],
           isLoading: false,
           subtitleGenerationStatus:
-              'Gagal membuat subtitle Jepang dengan ASR.',
+              'Gagal membuat subtitle Jepang melalui ASR online.',
           subtitleGeneratedByAsr: true,
         ),
       );
@@ -848,6 +840,15 @@ class LyricController extends StateNotifier<LyricState> {
           return null;
         }
         if (cached != null) {
+          final cachedPath = await SubtitleTranslationCache.instance.pathFor(
+            track: TrackIdentity.fromTrack(currentTrack),
+            sourceLyrics: sourceLyrics,
+            engineId: freeOnlineIdentity.$1,
+            engineVersion: freeOnlineIdentity.$2,
+            glossaryVersion: glossary?.version ??
+                SubtitleTranslationCache.defaultGlossaryVersion,
+            translationStrategy: translationStrategy,
+          );
           await ref
               .read(subtitleDisplayModeProvider.notifier)
               .setMode(SubtitleDisplayMode.translated);
@@ -860,6 +861,7 @@ class LyricController extends StateNotifier<LyricState> {
             isTranslating: false,
             translatedCount: textsToTranslate.length,
             translationTotal: textsToTranslate.length,
+            translatedSubtitlePath: cachedPath,
           );
           return state.translatedSubtitlePath;
         }
@@ -965,18 +967,7 @@ class LyricController extends StateNotifier<LyricState> {
       }
 
       String? savedPath;
-      if (isFreeOnline && currentTrack != null && freeOnlineIdentity != null) {
-        savedPath = await SubtitleTranslationCache.instance.save(
-          track: TrackIdentity.fromTrack(currentTrack),
-          sourceLyrics: sourceLyrics,
-          translatedLyrics: translated,
-          engineId: freeOnlineIdentity.$1,
-          engineVersion: freeOnlineIdentity.$2,
-          glossaryVersion: glossary?.version ??
-              SubtitleTranslationCache.defaultGlossaryVersion,
-          translationStrategy: translationStrategy,
-        );
-      } else {
+      if (!isFreeOnline) {
         final shouldAutoSave = await ref
             .read(autoSaveTranslatedLyricsProvider.notifier)
             .resolvedEnabled();
@@ -1016,6 +1007,56 @@ class LyricController extends StateNotifier<LyricState> {
       }
       rethrow;
     }
+  }
+
+  /// Persist the current Free Online translation only when the user asks for it.
+  /// The saved document is then reusable without network access.
+  Future<String?> downloadCurrentTranslationForOffline() async {
+    final translated = state.translatedLyrics;
+    final currentTrack = ref.read(currentTrackProvider).value;
+    if (translated == null ||
+        translated.isEmpty ||
+        state.lyrics.isEmpty ||
+        state.isTranslating ||
+        currentTrack == null) {
+      return null;
+    }
+
+    if (state.translatedSubtitlePath != null) {
+      return state.translatedSubtitlePath;
+    }
+
+    final translationService = TranslationService();
+    if (!await translationService.isFreeOnlineSelected()) {
+      return state.translatedSubtitlePath;
+    }
+
+    final identity = await translationService.freeOnlineEngineIdentity();
+    final quality = ref.read(translationQualityProvider);
+    final glossary = await TranslationGlossaryService.instance.load();
+    if (!_isSameTrack(currentTrack, ref.read(currentTrackProvider).value)) {
+      return null;
+    }
+
+    final strategy = quality.contextEnabled
+        ? 'free-online-context-v1'
+        : 'free-online-segment-v1';
+    final savedPath = await SubtitleTranslationCache.instance.save(
+      track: TrackIdentity.fromTrack(currentTrack),
+      sourceLyrics: List<LyricLine>.from(state.lyrics),
+      translatedLyrics: List<LyricLine>.from(translated),
+      engineId: identity.$1,
+      engineVersion: identity.$2,
+      glossaryVersion: glossary.version,
+      translationStrategy: strategy,
+    );
+
+    if (savedPath != null &&
+        mounted &&
+        _isSameTrack(currentTrack, ref.read(currentTrackProvider).value)) {
+      state = state.copyWith(translatedSubtitlePath: savedPath);
+    }
+    return savedPath;
   }
 
   Future<String?> _saveTranslatedLyricsToLibrary(
