@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import '../models/audio_track.dart';
 import '../utils/local_file_url.dart';
 import 'kikoflu_feature_settings.dart';
+import 'subtitle_language_settings.dart';
 
 class OnlineAsrNotConfiguredException implements Exception {
   const OnlineAsrNotConfiguredException();
@@ -38,10 +39,12 @@ class OnlineAsrSegment {
 class OnlineAsrResult {
   final List<OnlineAsrSegment> segments;
   final String serviceName;
+  final String sourceLanguage;
 
   const OnlineAsrResult({
     required this.segments,
     required this.serviceName,
+    required this.sourceLanguage,
   });
 }
 
@@ -61,13 +64,19 @@ class OnlineAsrService {
 
   static const String engineId = 'hiraukan_online_asr';
   static const String engineVersion = 'gateway-v1';
-  static const String cacheProfile = 'ja-online-v1';
+  static String cacheProfileFor({
+    required String sourceLanguage,
+    required String engine,
+  }) => 'online-v2:$engine:$sourceLanguage';
 
   Future<OnlineAsrResult> transcribe(
     AudioTrack track, {
     bool Function()? isCancelled,
   }) async {
     final settings = KikoFluFeatureSettings.instance;
+    final languageSettings = SubtitleLanguageSettings.instance;
+    final requestedLanguage = languageSettings.sourceLanguage;
+    final requestedEngine = languageSettings.asrEngine;
     final endpoint = settings.onlineAsrEndpoint.trim();
     if (endpoint.isEmpty) {
       throw const OnlineAsrNotConfiguredException();
@@ -110,7 +119,8 @@ class OnlineAsrService {
                 ? 'audio'
                 : file.uri.pathSegments.last,
           ),
-          'language': 'ja',
+          'language': requestedLanguage,
+          'asr_engine': requestedEngine,
           'response_format': 'verbose_json',
         }),
       );
@@ -126,7 +136,8 @@ class OnlineAsrService {
         endpoint,
         data: <String, dynamic>{
           'audio_url': track.url,
-          'language': 'ja',
+          'language': requestedLanguage,
+          'asr_engine': requestedEngine,
           'response_format': 'verbose_json',
           'track_id': track.id,
           if (track.sourceKey != null) 'source': track.sourceKey,
@@ -163,7 +174,7 @@ class OnlineAsrService {
 
     if (segments.isEmpty) {
       throw const OnlineAsrInvalidResponseException(
-        'Online ASR returned no timed Japanese segments.',
+        'Online ASR returned no timed subtitle segments.',
       );
     }
 
@@ -171,10 +182,37 @@ class OnlineAsrService {
         decoded is Map && decoded['service'] != null
             ? decoded['service'].toString()
             : 'online';
+    final detectedLanguage = _detectedLanguage(
+      decoded,
+      requestedLanguage,
+    );
     return OnlineAsrResult(
       segments: List.unmodifiable(segments),
       serviceName: serviceName,
+      sourceLanguage: detectedLanguage,
     );
+  }
+
+  String _detectedLanguage(dynamic decoded, String requestedLanguage) {
+    if (decoded is Map) {
+      final value = decoded['detected_language'] ?? decoded['language'];
+      if (value != null && value.toString().trim().isNotEmpty) {
+        return value.toString().trim().toLowerCase().replaceAll('_', '-');
+      }
+      final nested = decoded['data'];
+      if (nested is Map) {
+        final nestedValue =
+            nested['detected_language'] ?? nested['language'];
+        if (nestedValue != null && nestedValue.toString().trim().isNotEmpty) {
+          return nestedValue
+              .toString()
+              .trim()
+              .toLowerCase()
+              .replaceAll('_', '-');
+        }
+      }
+    }
+    return requestedLanguage;
   }
 
   String? _existingLocalPath(AudioTrack track) {
