@@ -8,6 +8,11 @@ on:
     branches:
       - beta
   workflow_dispatch:
+    inputs:
+      asr_endpoint:
+        description: 'Online ASR endpoint; leave blank to use repository variable HIRAUAKAN_ONLINE_ASR_ENDPOINT'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -85,14 +90,20 @@ jobs:
           echo "build_number=$build_number" >> "$GITHUB_OUTPUT"
 
       - name: Build Android ARM64 Beta APK
+        env:
+          HIRAUAKAN_ONLINE_ASR_ENDPOINT: ${{ inputs.asr_endpoint || vars.HIRAUAKAN_ONLINE_ASR_ENDPOINT }}
         run: |
           set -euo pipefail
           mkdir -p dist
+          if [ -z "$HIRAUAKAN_ONLINE_ASR_ENDPOINT" ]; then
+            echo "::warning::No online ASR endpoint configured; APK will build but audio-without-subtitle ASR is unavailable."
+          fi
           flutter build apk \
             --release \
             --flavor beta \
             --target-platform android-arm64 \
             --split-per-abi \
+            --dart-define=HIRAUAKAN_ONLINE_ASR_ENDPOINT="$HIRAUAKAN_ONLINE_ASR_ENDPOINT" \
             --build-number="${{ steps.beta_version.outputs.build_number }}"
           mv build/app/outputs/flutter-apk/app-arm64-v8a-beta-release.apk \
             dist/Hiraukan-android-arm64-v8a-beta.apk
