@@ -429,7 +429,7 @@ class LyricController extends StateNotifier<LyricState> {
         lyrics: const [],
         isLoading: false,
         isGeneratingSubtitle: true,
-        subtitleGenerationStatus: 'Menyiapkan ASR online…',
+        subtitleGenerationStatus: 'Menyiapkan mesin subtitle…',
         subtitleGeneratedByAsr: true,
       ),
     );
@@ -459,7 +459,7 @@ class LyricController extends StateNotifier<LyricState> {
             lyrics: const [],
             isLoading: false,
             subtitleGenerationStatus:
-                'ASR online tidak menghasilkan subtitle bertimestamp.',
+                'ASR tidak menghasilkan subtitle bertimestamp.',
             subtitleGeneratedByAsr: true,
           ),
         );
@@ -471,10 +471,10 @@ class LyricController extends StateNotifier<LyricState> {
         LyricState(
           lyrics: result.lyrics,
           isLoading: false,
-          lyricUrl: 'asr://online/${result.serviceName}',
+          lyricUrl: 'asr://${result.serviceName}',
           subtitleGenerationStatus: result.fromCache
               ? 'Subtitle sumber dimuat dari hasil ASR tersimpan.'
-              : 'Subtitle sumber dibuat melalui ASR online.',
+              : 'Subtitle sumber dibuat oleh mesin ASR.',
           subtitleGeneratedByAsr: true,
         ),
       );
@@ -492,7 +492,7 @@ class LyricController extends StateNotifier<LyricState> {
         unawaited(
           translateAndSaveCurrentLyrics().catchError((error) {
             _log.captureOutput(
-              '[Lyric] Terjemahan otomatis setelah ASR online gagal: $error',
+              '[Lyric] Terjemahan otomatis setelah ASR gagal: $error',
             );
             return null;
           }),
@@ -526,7 +526,7 @@ class LyricController extends StateNotifier<LyricState> {
       );
       return true;
     } catch (error) {
-      _log.captureOutput('[Lyric] ASR online fallback gagal: $error');
+      _log.captureOutput('[Lyric] ASR fallback gagal: $error');
       if (!_isCurrentLoadRequest(requestId)) return true;
       _setStateForLoadRequest(
         requestId,
@@ -534,7 +534,7 @@ class LyricController extends StateNotifier<LyricState> {
           lyrics: const [],
           isLoading: false,
           subtitleGenerationStatus:
-              'Gagal membuat subtitle melalui ASR online.',
+              'Gagal membuat subtitle melalui ASR.',
           subtitleGeneratedByAsr: true,
         ),
       );
