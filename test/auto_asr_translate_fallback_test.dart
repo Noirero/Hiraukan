@@ -9,7 +9,7 @@ void main() {
   test('ASR fallback state is independent from translation state', () {
     final state = LyricState(
       isGeneratingSubtitle: true,
-      subtitleGenerationStatus: 'Membuat subtitle Jepang…',
+      subtitleGenerationStatus: 'Membuat subtitle sumber…',
       subtitleGeneratedByAsr: true,
     );
 
@@ -21,7 +21,10 @@ void main() {
   test('automatic subtitle fallback identifies the online ASR cache', () {
     expect(AsrSubtitleCache.engineId, 'online_asr_gateway');
     expect(AsrSubtitleCache.engineVersion, 'gateway-v1');
-    expect(OnlineAsrService.cacheProfile, 'ja-online-v1');
+    expect(
+      OnlineAsrService.cacheProfileFor(sourceLanguage: 'ko', engine: 'auto'),
+      'online-v2:auto:ko',
+    );
   });
 
   test('automatic fallback does not use or download a local ASR model', () {
@@ -61,7 +64,7 @@ void main() {
     expect(helper, isNot(contains('aiTranscriptionEnabled')));
   });
 
-  test('downloaded Indonesian subtitle is restored without translation network',
+  test('downloaded target subtitle is restored without translation network',
       () {
     final provider =
         File('lib/src/providers/lyric_provider.dart').readAsStringSync();
@@ -95,7 +98,7 @@ void main() {
     expect(asrFallback, greaterThan(libraryLookup));
   });
 
-  test('generated Japanese subtitle still enters free online translation', () {
+  test('generated source subtitle still enters free online translation', () {
     final source =
         File('lib/src/providers/lyric_provider.dart').readAsStringSync();
     final helperStart = source.indexOf('Future<bool> _tryAutomaticAsrFallback');
@@ -132,3 +135,5 @@ void main() {
     expect(method, contains('Subtitle source HTTP'));
   });
 }
+
+
