@@ -99,7 +99,6 @@ class MiyorareAudioCatalogService {
       _latestReleaseApi,
       options: Options(
         headers: const {'Accept': 'application/vnd.github+json'},
-        connectTimeout: const Duration(seconds: 10),
         receiveTimeout: const Duration(seconds: 15),
       ),
     );
@@ -190,7 +189,6 @@ class MiyorareAudioCatalogService {
       options: Options(
         responseType: ResponseType.bytes,
         followRedirects: true,
-        connectTimeout: const Duration(seconds: 10),
         receiveTimeout: const Duration(seconds: 20),
       ),
     );
