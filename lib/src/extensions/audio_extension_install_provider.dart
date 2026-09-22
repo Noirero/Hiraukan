@@ -20,12 +20,23 @@ class AudioExtensionInstallState {
 class AudioExtensionInstallController
     extends StateNotifier<AudioExtensionInstallState> {
   final Map<String, AudioExtension> _bundled;
+  final Future<void> Function(Set<String>) _persist;
 
-  AudioExtensionInstallController(Iterable<AudioExtension> bundled)
-      : _bundled = {
+  AudioExtensionInstallController(
+    Iterable<AudioExtension> bundled, {
+    Set<String>? initialInstalled,
+    Future<void> Function(Set<String>)? persist,
+  })  : _bundled = {
           for (final extension in bundled) extension.manifest.id: extension,
         },
-        super(AudioExtensionInstallState(_loadInstalledIds()));
+        _persist = persist ?? _persistInstalledIds,
+        super(
+          AudioExtensionInstallState(
+            initialInstalled == null
+                ? _loadInstalledIds()
+                : Set.unmodifiable(initialInstalled),
+          ),
+        );
 
   static Set<String> _loadInstalledIds() {
     final stored = StorageService.getSetting<List<dynamic>>(
@@ -60,9 +71,13 @@ class AudioExtensionInstallController
     await _save(Set<String>.from(_defaultInstalledAudioExtensions));
   }
 
-  Future<void> _save(Set<String> values) async {
+  static Future<void> _persistInstalledIds(Set<String> values) async {
     final sorted = values.toList()..sort();
     await StorageService.setSetting(_installedAudioExtensionsKey, sorted);
+  }
+
+  Future<void> _save(Set<String> values) async {
+    await _persist(values);
     state = AudioExtensionInstallState(Set.unmodifiable(values));
   }
 }
