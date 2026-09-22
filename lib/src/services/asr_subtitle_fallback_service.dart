@@ -60,6 +60,20 @@ class AsrSubtitleFallbackService {
     final localProfile =
         'local-whisper-v2:$localModelName:$requestedLanguage:word=${featureSettings.whisperSplitOnWord}';
 
+    onStatus?.call('Memeriksa subtitle ASR tersimpan…');
+    final latestCached = await AsrSubtitleCache.instance.loadLatestForTrack(
+      track: identity,
+      language: requestedLanguage,
+    );
+    if (latestCached != null) {
+      return AsrSubtitleFallbackResult(
+        lyrics: latestCached.lines,
+        fromCache: true,
+        serviceName: latestCached.modelName,
+        sourceLanguage: requestedLanguage,
+      );
+    }
+
     var localModelMissing = false;
     if (featureSettings.aiTranscriptionEnabled) {
       onStatus?.call('Memeriksa subtitle Whisper lokal tersimpan…');
