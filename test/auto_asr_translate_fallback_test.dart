@@ -5,6 +5,7 @@ import 'package:kikoeru_flutter/src/providers/lyric_provider.dart';
 import 'package:kikoeru_flutter/src/services/asr_subtitle_cache.dart';
 import 'package:kikoeru_flutter/src/services/ai_transcription_service.dart';
 import 'package:kikoeru_flutter/src/services/online_asr_service.dart';
+import 'package:whisper_ggml_plus/whisper_ggml_plus.dart';
 
 void main() {
   test('ASR fallback state is independent from translation state', () {
@@ -69,6 +70,8 @@ void main() {
       'ggml-large-v3-turbo-q5_0.bin',
     );
     expect(byId['base_q5_1']?.quantized, isTrue);
+    expect(modelConfigFor('base').id, 'base');
+    expect(modelConfigFor('base_q5_1').id, 'base_q5_1');
     expect(byId['small_q5_1']?.model, WhisperModel.small);
     expect(
       byId['large_v3_turbo_q5_0']?.model,
