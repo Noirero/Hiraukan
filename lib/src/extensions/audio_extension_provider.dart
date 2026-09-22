@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/auth_provider.dart';
 import '../services/kikoeru_api_service.dart' hide kikoeruApiServiceProvider;
+import '../services/miyorare_audio_catalog_service.dart';
 import 'asmr_one_audio_extension.dart';
 import 'audio_extension.dart';
 import 'ero_voice_audio_extension.dart';
@@ -37,4 +38,15 @@ final audioExtensionRegistryProvider = Provider<AudioExtensionRegistry>((ref) {
   return AudioExtensionRegistry(
     bundled.where((extension) => installed.contains(extension.manifest.id)),
   );
+});
+
+
+final miyorareAudioCatalogServiceProvider =
+    Provider<MiyorareAudioCatalogService>((ref) {
+  return MiyorareAudioCatalogService();
+});
+
+final miyorareAudioCatalogProvider =
+    FutureProvider<MiyorareAudioCatalogSnapshot?>((ref) async {
+  return ref.read(miyorareAudioCatalogServiceProvider).loadLatest();
 });
