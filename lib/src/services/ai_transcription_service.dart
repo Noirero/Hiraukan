@@ -106,7 +106,7 @@ const localAiModelConfigs = <LocalAiModelConfig>[
     model: WhisperModel.base,
     displayName: 'Base Q5_1',
     fileName: 'ggml-base-q5_1.bin',
-    approximateSizeBytes: 60 * 1024 * 1024,
+    approximateSizeBytes: 57 * 1024 * 1024,
     minRam: '1.5 GB',
     speedRating: 5,
     accuracyRating: 3,
@@ -118,7 +118,7 @@ const localAiModelConfigs = <LocalAiModelConfig>[
     model: WhisperModel.base,
     displayName: 'Base Q8_0',
     fileName: 'ggml-base-q8_0.bin',
-    approximateSizeBytes: 82 * 1024 * 1024,
+    approximateSizeBytes: 78 * 1024 * 1024,
     minRam: '2 GB',
     speedRating: 4,
     accuracyRating: 3,
@@ -142,7 +142,7 @@ const localAiModelConfigs = <LocalAiModelConfig>[
     model: WhisperModel.small,
     displayName: 'Small Q5_1',
     fileName: 'ggml-small-q5_1.bin',
-    approximateSizeBytes: 182 * 1024 * 1024,
+    approximateSizeBytes: 181 * 1024 * 1024,
     minRam: '3 GB',
     speedRating: 4,
     accuracyRating: 4,
@@ -208,15 +208,21 @@ const localAiModelConfigs = <LocalAiModelConfig>[
 ];
 
 LocalAiModelConfig modelConfigFor(String name) {
-  return localAiModelConfigs.firstWhere(
-    (config) =>
-        config.id == name ||
-        config.model.name == name ||
-        config.model.modelName == name,
-    orElse: () => localAiModelConfigs.firstWhere(
-      (config) => config.id == 'base',
-    ),
-  );
+  for (final config in localAiModelConfigs) {
+    if (config.id == name) return config;
+  }
+
+  // Legacy values used WhisperModel enum names. Resolve those only to the
+  // original non-quantized model so an existing "base" preference can never
+  // silently switch to Base Q5/Q8.
+  for (final config in localAiModelConfigs) {
+    if (!config.quantized &&
+        (config.model.name == name || config.model.modelName == name)) {
+      return config;
+    }
+  }
+
+  return localAiModelConfigs.firstWhere((config) => config.id == 'base');
 }
 
 /// On-device Whisper transcription ported from KikoFlu.
