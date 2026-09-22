@@ -500,6 +500,9 @@ class LyricController extends StateNotifier<LyricState> {
             subtitleGeneratedByAsr: true,
           ),
         );
+        if (wasPlaying) {
+          await ref.read(audioPlayerControllerProvider.notifier).play();
+        }
         return true;
       }
 
@@ -519,7 +522,12 @@ class LyricController extends StateNotifier<LyricState> {
       final restoredOffline =
           await _restoreDownloadedTranslationForCurrentTrack(requestId);
       if (!_isCurrentLoadRequest(requestId)) return true;
-      if (restoredOffline) return true;
+      if (restoredOffline) {
+        if (wasPlaying) {
+          await ref.read(audioPlayerControllerProvider.notifier).play();
+        }
+        return true;
+      }
 
       final translationService = TranslationService();
       final shouldTranslate = await translationService.isFreeOnlineSelected();
