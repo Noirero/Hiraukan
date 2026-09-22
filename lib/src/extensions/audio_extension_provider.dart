@@ -4,6 +4,8 @@ import '../providers/auth_provider.dart';
 import '../services/kikoeru_api_service.dart';
 import 'asmr_one_audio_extension.dart';
 import 'audio_extension.dart';
+import 'ero_voice_audio_extension.dart';
+import 'hentai_asmr_audio_extension.dart';
 import 'audio_extension_install_provider.dart';
 import 'audio_extension_registry.dart';
 
@@ -17,6 +19,8 @@ final bundledAudioExtensionsProvider = Provider<List<AudioExtension>>((ref) {
       host: () => auth.host ?? KikoeruApiService.remoteHost,
       token: () => auth.token ?? '',
     ),
+    createHentaiAsmrAudioExtension(),
+    createEroVoiceAudioExtension(),
   ];
 });
 
