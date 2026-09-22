@@ -1,0 +1,39 @@
+name: Audio Extension Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'lib/src/extensions/**'
+      - 'lib/src/sources/**'
+      - 'lib/src/screens/audio_extensions_screen.dart'
+      - 'lib/src/screens/settings_screen.dart'
+      - 'lib/src/providers/auth_provider.dart'
+      - 'lib/main.dart'
+      - 'test/*audio_extension*'
+      - 'test/miyorare_audio_pack_test.dart'
+      - '.github/workflows/audio_extension_validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.7'
+          channel: stable
+          cache: true
+      - name: Get dependencies
+        run: flutter pub get
+      - name: Generate localizations
+        run: flutter gen-l10n
+      - name: Run audio extension tests
+        run: |
+          flutter test             test/audio_extension_manifest_test.dart             test/asmr_one_audio_extension_test.dart             test/miyorare_audio_pack_test.dart             test/audio_extension_regression_test.dart             test/optional_auth_startup_guard_test.dart
