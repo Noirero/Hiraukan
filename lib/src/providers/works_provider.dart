@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:equatable/equatable.dart';
 
+import '../extensions/audio_extension_provider.dart';
 import '../models/work.dart';
 import '../models/sort_options.dart';
 import '../services/kikoeru_api_service.dart' hide kikoeruApiServiceProvider;
@@ -56,8 +57,26 @@ extension HomeSourceFilterX on HomeSourceFilter {
         HomeSourceFilter.eroVoice => UnifiedSourceKind.eroVoice,
       };
 
+  String? get extensionId => switch (this) {
+        HomeSourceFilter.all => null,
+        HomeSourceFilter.asmrOne => 'miyorare.audio.asmr_one',
+        HomeSourceFilter.hentaiAsmr => 'miyorare.audio.hentai_asmr',
+        HomeSourceFilter.eroVoice => 'miyorare.audio.ero_voice',
+      };
+
+  bool isAvailableIn(Set<String> enabledExtensionIds) =>
+      extensionId == null || enabledExtensionIds.contains(extensionId);
+
   bool get supportsCuratedModes =>
       this == HomeSourceFilter.all || this == HomeSourceFilter.asmrOne;
+}
+
+List<HomeSourceFilter> availableHomeSourceFilters(
+  Set<String> enabledExtensionIds,
+) {
+  return HomeSourceFilter.values
+      .where((source) => source.isAvailableIn(enabledExtensionIds))
+      .toList(growable: false);
 }
 
 class WorksModeSnapshot extends Equatable {
@@ -271,7 +290,16 @@ class WorksNotifier extends StateNotifier<WorksState> {
     if (!mounted) return;
 
     final layout = values[0] as LayoutType? ?? LayoutType.bigGrid;
-    final source = values[1] as HomeSourceFilter? ?? HomeSourceFilter.all;
+    final loadedSource =
+        values[1] as HomeSourceFilter? ?? HomeSourceFilter.all;
+    final enabledExtensionIds = _ref
+        .read(audioExtensionRegistryProvider)
+        .extensions
+        .map((extension) => extension.manifest.id)
+        .toSet();
+    final source = loadedSource.isAvailableIn(enabledExtensionIds)
+        ? loadedSource
+        : HomeSourceFilter.all;
 
     final oldKey = state.activeFeedKey;
     state = state.copyWith(
@@ -665,6 +693,35 @@ class WorksNotifier extends StateNotifier<WorksState> {
     }).toList(growable: false);
   }
 
+  void syncAudioExtensions(Set<String> enabledExtensionIds) {
+    final previousSource = state.sourceFilter;
+    final nextSource = previousSource.isAvailableIn(enabledExtensionIds)
+        ? previousSource
+        : HomeSourceFilter.all;
+    final asmrOneEnabled =
+        enabledExtensionIds.contains(HomeSourceFilter.asmrOne.extensionId);
+    final nextDisplayMode =
+        state.displayMode != DisplayMode.all && !asmrOneEnabled
+            ? DisplayMode.all
+            : (nextSource.supportsCuratedModes
+                ? state.displayMode
+                : DisplayMode.all);
+
+    _catalogGeneration++;
+    _requestGates.clear();
+    state = state.copyWith(
+      sourceFilter: nextSource,
+      displayMode: nextDisplayMode,
+      modeStates: const {},
+      sourceHealth: const {},
+    );
+
+    if (nextSource != previousSource) {
+      unawaited(_sourcePreference.save(nextSource));
+    }
+    unawaited(loadWorks(targetPage: 1, supersede: true));
+  }
+
   void resetCatalogForUserChange() {
     _catalogGeneration++;
     _requestGates.clear();
@@ -703,6 +760,23 @@ final worksProvider = StateNotifierProvider<WorksNotifier, WorksState>((ref) {
     if (prevUser?.name != nextUser?.name || prevUser?.host != nextUser?.host) {
       _log.captureOutput('[WorksProvider] User changed, resetting works cache');
       notifier.resetCatalogForUserChange();
+    }
+  });
+
+  ref.listen(audioExtensionRegistryProvider, (previous, next) {
+    final previousIds = previous?.extensions
+            .map((extension) => extension.manifest.id)
+            .toSet() ??
+        const <String>{};
+    final nextIds =
+        next.extensions.map((extension) => extension.manifest.id).toSet();
+    final unchanged = previousIds.length == nextIds.length &&
+        previousIds.containsAll(nextIds);
+    if (!unchanged) {
+      _log.captureOutput(
+        '[WorksProvider] Audio extensions changed, resetting source catalog',
+      );
+      notifier.syncAudioExtensions(nextIds);
     }
   });
 

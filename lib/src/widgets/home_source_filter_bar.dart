@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../extensions/audio_extension_provider.dart';
 import '../providers/works_provider.dart';
 import '../sources/unified_source_models.dart';
 
@@ -22,6 +23,11 @@ class HomeSourceFilterBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(worksProvider);
     final notifier = ref.read(worksProvider.notifier);
+    final extensionRegistry = ref.watch(audioExtensionRegistryProvider);
+    final enabledExtensionIds = extensionRegistry.extensions
+        .map((extension) => extension.manifest.id)
+        .toSet();
+    final sourceOptions = availableHomeSourceFilters(enabledExtensionIds);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
@@ -165,7 +171,7 @@ class HomeSourceFilterBar extends ConsumerWidget {
                           ),
                         ),
                         child: Text(
-                          '${HomeSourceFilter.values.length} pilihan',
+                          '${sourceOptions.length} pilihan',
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                             fontWeight: FontWeight.w700,
@@ -179,7 +185,7 @@ class HomeSourceFilterBar extends ConsumerWidget {
                     scrollDirection: Axis.horizontal,
                     clipBehavior: Clip.none,
                     child: Row(
-                      children: HomeSourceFilter.values.map((source) {
+                      children: sourceOptions.map((source) {
                         final kind = source.unifiedSource;
                         final health = kind == null
                             ? null
