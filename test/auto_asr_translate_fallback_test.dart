@@ -83,6 +83,35 @@ void main() {
     expect(cache, contains("'trackId': track.trackId"));
   });
 
+  test('generated ASR subtitle survives model removal through cache discovery',
+      () {
+    final cache =
+        File('lib/src/services/asr_subtitle_cache.dart').readAsStringSync();
+    final fallback = File(
+      'lib/src/services/asr_subtitle_fallback_service.dart',
+    ).readAsStringSync();
+
+    expect(cache, contains('loadLatestForTrack'));
+    expect(fallback, contains('loadLatestForTrack'));
+    expect(
+      fallback.indexOf('loadLatestForTrack'),
+      lessThan(fallback.indexOf('featureSettings.aiTranscriptionEnabled')),
+    );
+  });
+
+  test('beta release does not require an online ASR server', () {
+    final workflow = File('.github/workflows/build.yml').readAsStringSync();
+
+    final inputStart = workflow.indexOf('asr_endpoint:');
+    final inputEnd = workflow.indexOf('permissions:', inputStart);
+    final inputBlock = workflow.substring(inputStart, inputEnd);
+    expect(inputBlock, contains('required: false'));
+    expect(
+      workflow,
+      contains('inputs.asr_endpoint || vars.HIRAUAKAN_ONLINE_ASR_ENDPOINT'),
+    );
+  });
+
   test('official/library subtitle lookup precedes ASR fallback', () {
     final source =
         File('lib/src/providers/lyric_provider.dart').readAsStringSync();
