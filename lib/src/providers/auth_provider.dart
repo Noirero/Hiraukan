@@ -15,7 +15,11 @@ final _log = LogService.instance;
 
 // Kikoeru API Service Provider
 final kikoeruApiServiceProvider = Provider<KikoeruApiService>((ref) {
-  return KikoeruApiService();
+  // Anonymous-by-default: the app must have a usable public source before any
+  // optional account authentication is configured.
+  final service = KikoeruApiService();
+  service.init('', KikoeruApiService.remoteHost);
+  return service;
 });
 
 // Auth state
