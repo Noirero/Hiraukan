@@ -2,7 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_new_min/return_code.dart';
+import 'package:ffmpeg_kit_flutter_new_min/session.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:whisper_ggml_plus/whisper_ggml_plus.dart';
 import 'package:whisper_ggml_plus_ffmpeg/whisper_ggml_plus_ffmpeg.dart';
@@ -283,6 +287,178 @@ class AiTranscriptionService {
     }
   }
 
+  /// Transcribes a finished audio file in short WAV chunks so the caller can
+  /// publish useful subtitle text before the whole track has finished.
+  ///
+  /// whisper_ggml_plus itself is file/batch based and does not stream partial
+  /// tokens, so chunking is the fast-start bridge used by Hiraukan.
+  Future<TranscriptionResult?> transcribeChunked(
+    String audioPath, {
+    required Duration totalDuration,
+    WhisperModel model = WhisperModel.base,
+    int threads = 6,
+    bool splitOnWord = false,
+    bool speedUp = true,
+    String language = 'auto',
+    Duration chunkDuration = const Duration(seconds: 20),
+    bool Function()? isCancelled,
+    void Function(
+      TranscriptionResult partial,
+      int completedChunks,
+      int totalChunks,
+    )? onPartial,
+  }) async {
+    if (totalDuration <= Duration.zero ||
+        totalDuration <= chunkDuration) {
+      return transcribe(
+        audioPath,
+        model: model,
+        threads: threads,
+        splitOnWord: splitOnWord,
+        speedUp: speedUp,
+        language: language,
+      );
+    }
+
+    final totalChunks =
+        (totalDuration.inMilliseconds / chunkDuration.inMilliseconds).ceil();
+    final allSegments = <WhisperSegment>[];
+    final allText = <String>[];
+    final tempDir = await getTemporaryDirectory();
+    final runId = DateTime.now().microsecondsSinceEpoch;
+
+    for (var chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+      if (isCancelled?.call() == true) {
+        throw const TranscriptionCancelledException();
+      }
+
+      final start = Duration(
+        milliseconds: chunkIndex * chunkDuration.inMilliseconds,
+      );
+      final remaining = totalDuration - start;
+      if (remaining <= Duration.zero) break;
+      final length =
+          remaining < chunkDuration ? remaining : chunkDuration;
+
+      final chunkFile = File(
+        p.join(
+          tempDir.path,
+          'hiraukan_whisper_chunk_${runId}_$chunkIndex.wav',
+        ),
+      );
+
+      try {
+        final extracted = await _extractWhisperChunk(
+          inputPath: audioPath,
+          outputPath: chunkFile.path,
+          start: start,
+          duration: length,
+        );
+        if (!extracted) {
+          throw StateError('Failed to prepare Whisper audio chunk');
+        }
+
+        final chunkResult = await transcribe(
+          chunkFile.path,
+          model: model,
+          threads: threads,
+          splitOnWord: splitOnWord,
+          speedUp: speedUp,
+          convert: false,
+          language: language,
+        );
+        if (chunkResult != null) {
+          final offsetSeconds = start.inMilliseconds / 1000.0;
+          for (final segment in chunkResult.segments) {
+            if (segment.text.trim().isEmpty) continue;
+            allSegments.add(
+              WhisperSegment(
+                startSeconds: segment.startSeconds + offsetSeconds,
+                endSeconds: segment.endSeconds + offsetSeconds,
+                text: segment.text.trim(),
+              ),
+            );
+          }
+          final text = chunkResult.fullText.trim();
+          if (text.isNotEmpty) allText.add(text);
+        }
+
+        if (allSegments.isNotEmpty && onPartial != null) {
+          onPartial(
+            TranscriptionResult(
+              fullText: allText.join(' ').trim(),
+              segments: List<WhisperSegment>.unmodifiable(allSegments),
+              lrcContent: _toLrc(allSegments),
+            ),
+            chunkIndex + 1,
+            totalChunks,
+          );
+        }
+      } finally {
+        try {
+          if (await chunkFile.exists()) await chunkFile.delete();
+        } catch (_) {}
+      }
+    }
+
+    if (allSegments.isEmpty && allText.isEmpty) return null;
+    return TranscriptionResult(
+      fullText: allText.join(' ').trim(),
+      segments: List<WhisperSegment>.unmodifiable(allSegments),
+      lrcContent: _toLrc(allSegments),
+    );
+  }
+
+  Future<bool> _extractWhisperChunk({
+    required String inputPath,
+    required String outputPath,
+    required Duration start,
+    required Duration duration,
+  }) async {
+    String quote(String value) =>
+        '"${value.replaceAll('"', '\\"')}"';
+
+    final startSeconds =
+        (start.inMilliseconds / 1000).toStringAsFixed(3);
+    final durationSeconds =
+        (duration.inMilliseconds / 1000).toStringAsFixed(3);
+    final command = [
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-ss',
+      startSeconds,
+      '-t',
+      durationSeconds,
+      '-i',
+      quote(inputPath),
+      '-vn',
+      '-ac',
+      '1',
+      '-ar',
+      '16000',
+      '-c:a',
+      'pcm_s16le',
+      '-y',
+      quote(outputPath),
+    ].join(' ');
+
+    final completer = Completer<Session>();
+    FFmpegKit.executeAsync(
+      command,
+      (session) {
+        if (!completer.isCompleted) completer.complete(session);
+      },
+    );
+
+    final session = await completer.future;
+    final code = await session.getReturnCode();
+    final output = File(outputPath);
+    return ReturnCode.isSuccess(code) &&
+        await output.exists() &&
+        await output.length() > 44;
+  }
+
   Future<String?> transcribeAndSave(
     String audioPath, {
     WhisperModel model = WhisperModel.base,
@@ -290,6 +466,7 @@ class AiTranscriptionService {
     bool overwrite = false,
     bool splitOnWord = false,
     bool speedUp = true,
+    bool convert = true,
     String language = 'auto',
   }) async {
     final extension = p.extension(audioPath).toLowerCase();
