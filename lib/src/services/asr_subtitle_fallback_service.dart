@@ -100,8 +100,9 @@ class AsrSubtitleFallbackService {
       if (isCancelled?.call() == true) return null;
 
       final transcription = AiTranscriptionService.instance;
-      final model = transcription.modelFromName(localModelName);
-      final installed = await transcription.isModelInstalled(model);
+      final modelConfig = modelConfigFor(localModelName);
+      final installed =
+          await transcription.isModelConfigInstalled(modelConfig);
       if (installed) {
         final prepared = await _prepareAudioInput(
           track,
@@ -115,7 +116,7 @@ class AsrSubtitleFallbackService {
               totalDuration: track.duration,
               transcription: transcription,
               modelName: localModelName,
-              model: model,
+              modelConfig: modelConfig,
               threads: featureSettings.whisperThreads,
               splitOnWord: featureSettings.whisperSplitOnWord,
               speedUp: featureSettings.whisperSpeedUp,
@@ -226,7 +227,7 @@ class AsrSubtitleFallbackService {
     required Duration? totalDuration,
     required AiTranscriptionService transcription,
     required String modelName,
-    required dynamic model,
+    required LocalAiModelConfig modelConfig,
     required int threads,
     required bool splitOnWord,
     required bool speedUp,
@@ -243,9 +244,9 @@ class AsrSubtitleFallbackService {
       onStatus?.call(
         'Membuat subtitle dengan Whisper lokal ($modelName)…',
       );
-      final result = await transcription.transcribe(
+      final result = await transcription.transcribeConfigured(
         audioPath,
-        model: model,
+        config: modelConfig,
         threads: threads,
         splitOnWord: splitOnWord,
         speedUp: speedUp,
@@ -284,9 +285,9 @@ class AsrSubtitleFallbackService {
           onStatus?.call(
             'Mode cepat gagal menyiapkan potongan audio; mencoba file penuh…',
           );
-          final fallback = await transcription.transcribe(
+          final fallback = await transcription.transcribeConfigured(
             audioPath,
-            model: model,
+            config: modelConfig,
             threads: threads,
             splitOnWord: splitOnWord,
             speedUp: speedUp,
@@ -300,9 +301,9 @@ class AsrSubtitleFallbackService {
       }
 
       try {
-        final result = await transcription.transcribe(
+        final result = await transcription.transcribeConfigured(
           chunk.path,
-          model: model,
+          config: modelConfig,
           threads: threads,
           splitOnWord: splitOnWord,
           speedUp: speedUp,
