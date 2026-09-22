@@ -20,7 +20,7 @@ class HtmlAudioSiteSourceAdapter implements UnifiedSourceAdapter {
   @override
   final UnifiedSourceKind kind;
 
-  final String baseUrl;
+  final String siteBaseUrl;
   final String cacheNamespace;
   final HtmlCatalogUrlBuilder catalogUrlBuilder;
   final HtmlDetailUrlMatcher detailUrlMatcher;
@@ -30,14 +30,15 @@ class HtmlAudioSiteSourceAdapter implements UnifiedSourceAdapter {
 
   HtmlAudioSiteSourceAdapter({
     required this.kind,
-    required this.baseUrl,
+    required String baseUrl,
     required this.cacheNamespace,
     required this.catalogUrlBuilder,
     required this.detailUrlMatcher,
     this.mediaEnabled = true,
     this.extraPlayableUrlResolver,
     Dio? dio,
-  }) : _dio = dio ?? Dio() {
+  })  : siteBaseUrl = baseUrl,
+        _dio = dio ?? Dio() {
     _dio.options
       ..connectTimeout = const Duration(seconds: 12)
       ..receiveTimeout = const Duration(seconds: 22)
@@ -69,7 +70,7 @@ class HtmlAudioSiteSourceAdapter implements UnifiedSourceAdapter {
   }
 
   List<SourceWorkCandidate> _parseCatalogPage(String html) {
-    final root = Uri.parse(baseUrl);
+    final root = Uri.parse(siteBaseUrl);
     final anchors = RegExp(
       r'''<a\b[^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>''',
       caseSensitive: false,
@@ -284,7 +285,7 @@ class HtmlAudioSiteSourceAdapter implements UnifiedSourceAdapter {
   Future<UnifiedSourceHealth> checkHealth() async {
     try {
       final response = await _dio.get<String>(
-        baseUrl + '/',
+        siteBaseUrl + '/',
         options: Options(
           responseType: ResponseType.plain,
           validateStatus: (status) => status != null && status < 500,
@@ -304,7 +305,7 @@ class HtmlAudioSiteSourceAdapter implements UnifiedSourceAdapter {
       url,
       options: Options(
         responseType: ResponseType.plain,
-        headers: {'Referer': baseUrl + '/'},
+        headers: {'Referer': siteBaseUrl + '/'},
         validateStatus: (status) =>
             status != null && status >= 200 && status < 400,
       ),
