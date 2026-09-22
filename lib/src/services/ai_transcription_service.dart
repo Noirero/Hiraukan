@@ -52,22 +52,30 @@ class TranscriptionSavedEvent {
 
 
 class LocalAiModelConfig {
+  final String id;
   final WhisperModel model;
   final String displayName;
+  final String fileName;
   final int approximateSizeBytes;
   final String minRam;
   final int speedRating;
   final int accuracyRating;
   final bool recommended;
+  final bool quantized;
+  final String? badge;
 
   const LocalAiModelConfig({
+    required this.id,
     required this.model,
     required this.displayName,
+    required this.fileName,
     required this.approximateSizeBytes,
     required this.minRam,
     required this.speedRating,
     required this.accuracyRating,
     this.recommended = false,
+    this.quantized = false,
+    this.badge,
   });
 
   String get sizeLabel {
@@ -75,25 +83,139 @@ class LocalAiModelConfig {
     if (mib >= 1024) return '~${(mib / 1024).toStringAsFixed(1)} GB';
     return '~${mib.toStringAsFixed(0)} MB';
   }
+
+  Uri get downloadUri => Uri.parse(
+        'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$fileName',
+      );
 }
 
 const localAiModelConfigs = <LocalAiModelConfig>[
-  LocalAiModelConfig(model: WhisperModel.tiny, displayName: 'Tiny', approximateSizeBytes: 75 * 1024 * 1024, minRam: '1 GB', speedRating: 5, accuracyRating: 2),
-  LocalAiModelConfig(model: WhisperModel.base, displayName: 'Base', approximateSizeBytes: 150 * 1024 * 1024, minRam: '2 GB', speedRating: 4, accuracyRating: 3, recommended: true),
-  LocalAiModelConfig(model: WhisperModel.small, displayName: 'Small', approximateSizeBytes: 500 * 1024 * 1024, minRam: '4 GB', speedRating: 3, accuracyRating: 4),
-  LocalAiModelConfig(model: WhisperModel.medium, displayName: 'Medium', approximateSizeBytes: 1536 * 1024 * 1024, minRam: '6 GB', speedRating: 2, accuracyRating: 4),
-  LocalAiModelConfig(model: WhisperModel.large, displayName: 'Large V3', approximateSizeBytes: 3072 * 1024 * 1024, minRam: '8 GB', speedRating: 1, accuracyRating: 5),
-  LocalAiModelConfig(model: WhisperModel.largeV3Turbo, displayName: 'Large V3 Turbo', approximateSizeBytes: 1600 * 1024 * 1024, minRam: '6 GB', speedRating: 3, accuracyRating: 4),
+  LocalAiModelConfig(
+    id: 'tiny',
+    model: WhisperModel.tiny,
+    displayName: 'Tiny',
+    fileName: 'ggml-tiny.bin',
+    approximateSizeBytes: 75 * 1024 * 1024,
+    minRam: '1 GB',
+    speedRating: 5,
+    accuracyRating: 2,
+    badge: 'Fastest',
+  ),
+  LocalAiModelConfig(
+    id: 'base_q5_1',
+    model: WhisperModel.base,
+    displayName: 'Base Q5_1',
+    fileName: 'ggml-base-q5_1.bin',
+    approximateSizeBytes: 60 * 1024 * 1024,
+    minRam: '1.5 GB',
+    speedRating: 5,
+    accuracyRating: 3,
+    quantized: true,
+    badge: 'Lite',
+  ),
+  LocalAiModelConfig(
+    id: 'base_q8_0',
+    model: WhisperModel.base,
+    displayName: 'Base Q8_0',
+    fileName: 'ggml-base-q8_0.bin',
+    approximateSizeBytes: 82 * 1024 * 1024,
+    minRam: '2 GB',
+    speedRating: 4,
+    accuracyRating: 3,
+    quantized: true,
+    badge: 'Lite HQ',
+  ),
+  LocalAiModelConfig(
+    id: 'base',
+    model: WhisperModel.base,
+    displayName: 'Base',
+    fileName: 'ggml-base.bin',
+    approximateSizeBytes: 150 * 1024 * 1024,
+    minRam: '2 GB',
+    speedRating: 4,
+    accuracyRating: 3,
+    recommended: true,
+    badge: 'Balanced',
+  ),
+  LocalAiModelConfig(
+    id: 'small_q5_1',
+    model: WhisperModel.small,
+    displayName: 'Small Q5_1',
+    fileName: 'ggml-small-q5_1.bin',
+    approximateSizeBytes: 182 * 1024 * 1024,
+    minRam: '3 GB',
+    speedRating: 4,
+    accuracyRating: 4,
+    quantized: true,
+    badge: 'High Quality Lite',
+  ),
+  LocalAiModelConfig(
+    id: 'small',
+    model: WhisperModel.small,
+    displayName: 'Small',
+    fileName: 'ggml-small.bin',
+    approximateSizeBytes: 500 * 1024 * 1024,
+    minRam: '4 GB',
+    speedRating: 3,
+    accuracyRating: 4,
+    badge: 'High Quality',
+  ),
+  LocalAiModelConfig(
+    id: 'large_v3_turbo_q5_0',
+    model: WhisperModel.largeV3Turbo,
+    displayName: 'Large V3 Turbo Q5_0',
+    fileName: 'ggml-large-v3-turbo-q5_0.bin',
+    approximateSizeBytes: 547 * 1024 * 1024,
+    minRam: '4 GB',
+    speedRating: 3,
+    accuracyRating: 4,
+    quantized: true,
+    badge: 'Advanced Lite',
+  ),
+  LocalAiModelConfig(
+    id: 'medium',
+    model: WhisperModel.medium,
+    displayName: 'Medium',
+    fileName: 'ggml-medium.bin',
+    approximateSizeBytes: 1536 * 1024 * 1024,
+    minRam: '6 GB',
+    speedRating: 2,
+    accuracyRating: 4,
+    badge: 'Advanced',
+  ),
+  LocalAiModelConfig(
+    id: 'largeV3Turbo',
+    model: WhisperModel.largeV3Turbo,
+    displayName: 'Large V3 Turbo',
+    fileName: 'ggml-large-v3-turbo.bin',
+    approximateSizeBytes: 1600 * 1024 * 1024,
+    minRam: '6 GB',
+    speedRating: 3,
+    accuracyRating: 4,
+    badge: 'Advanced',
+  ),
+  LocalAiModelConfig(
+    id: 'large',
+    model: WhisperModel.large,
+    displayName: 'Large V3',
+    fileName: 'ggml-large-v3.bin',
+    approximateSizeBytes: 3072 * 1024 * 1024,
+    minRam: '8 GB',
+    speedRating: 1,
+    accuracyRating: 5,
+    badge: 'Maximum',
+  ),
 ];
 
 LocalAiModelConfig modelConfigFor(String name) {
-  final model = WhisperModel.values.firstWhere(
-    (value) => value.name == name,
-    orElse: () => WhisperModel.base,
-  );
   return localAiModelConfigs.firstWhere(
-    (config) => config.model == model,
-    orElse: () => localAiModelConfigs[1],
+    (config) =>
+        config.id == name ||
+        config.model.name == name ||
+        config.model.modelName == name,
+    orElse: () => localAiModelConfigs.firstWhere(
+      (config) => config.id == 'base',
+    ),
   );
 }
 
