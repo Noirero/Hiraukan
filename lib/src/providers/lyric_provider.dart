@@ -472,6 +472,7 @@ class LyricController extends StateNotifier<LyricState> {
     );
 
     bool cancelled() => !_isCurrentLoadRequest(requestId);
+    var resumedFromPartialSubtitle = false;
 
     try {
       final result = await AsrSubtitleFallbackService.instance.generate(
@@ -484,6 +485,25 @@ class LyricController extends StateNotifier<LyricState> {
             subtitleGenerationStatus: status,
             subtitleGeneratedByAsr: true,
           );
+        },
+        onPartialLyrics: (partialLyrics, isComplete) async {
+          if (!_isCurrentLoadRequest(requestId) || partialLyrics.isEmpty) {
+            return;
+          }
+
+          state = state.copyWith(
+            lyrics: partialLyrics,
+            isGeneratingSubtitle: !isComplete,
+            subtitleGenerationStatus: isComplete
+                ? 'Subtitle sumber selesai dibuat.'
+                : 'Subtitle awal sudah siap; sisa audio diproses di belakang…',
+            subtitleGeneratedByAsr: true,
+          );
+
+          if (wasPlaying && !resumedFromPartialSubtitle) {
+            resumedFromPartialSubtitle = true;
+            await ref.read(audioPlayerControllerProvider.notifier).play();
+          }
         },
       );
 
@@ -549,10 +569,10 @@ class LyricController extends StateNotifier<LyricState> {
         unawaited(
           _resumePlaybackWhenFirstTranslationIsReady(
             requestId: requestId,
-            shouldResume: wasPlaying,
+            shouldResume: wasPlaying && !resumedFromPartialSubtitle,
           ),
         );
-      } else if (wasPlaying) {
+      } else if (wasPlaying && !resumedFromPartialSubtitle) {
         await ref.read(audioPlayerControllerProvider.notifier).play();
       }
       return true;
