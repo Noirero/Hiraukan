@@ -7,6 +7,8 @@ import 'miyorare_audio_pack.dart';
 const _installedAudioExtensionsKey = 'installed_audio_extensions_v1';
 const _defaultInstalledAudioExtensions = <String>{
   'miyorare.audio.asmr_one',
+  'miyorare.audio.hentai_asmr',
+  'miyorare.audio.ero_voice',
 };
 
 class AudioExtensionInstallState {
@@ -52,11 +54,13 @@ class AudioExtensionInstallController
     if (entry.deliveryKind != 'builtin') {
       throw StateError('Unsupported audio extension delivery');
     }
-    if (!_bundled.containsKey(entry.runtimeId)) {
+    final runtime = _bundled[entry.runtimeId];
+    if (runtime == null) {
       throw StateError(
         'Hiraukan does not bundle audio runtime: ' + entry.runtimeId,
       );
     }
+    _verifyCompatibility(entry, runtime);
 
     final next = Set<String>.from(state.installedIds)..add(entry.runtimeId);
     await _save(next);
@@ -69,6 +73,23 @@ class AudioExtensionInstallController
 
   Future<void> restoreDefaults() async {
     await _save(Set<String>.from(_defaultInstalledAudioExtensions));
+  }
+
+  void _verifyCompatibility(
+    MiyorareAudioPackEntry entry,
+    AudioExtension runtime,
+  ) {
+    final expected = entry.manifest;
+    final actual = runtime.manifest;
+    if (actual.type != expected.type ||
+        actual.version != expected.version ||
+        actual.auth != expected.auth ||
+        !actual.capabilities.containsAll(expected.capabilities)) {
+      throw StateError(
+        'Bundled audio runtime is incompatible with pack entry: ' +
+            entry.runtimeId,
+      );
+    }
   }
 
   static Future<void> _persistInstalledIds(Set<String> values) async {
