@@ -36,7 +36,7 @@ void main() {
     ).readAsStringSync();
 
     expect(fallback, contains('AiTranscriptionService.instance'));
-    expect(fallback, contains('isModelInstalled'));
+    expect(fallback, contains('isModelConfigInstalled'));
     expect(fallback, isNot(contains('downloadModel(')));
     expect(fallback, contains('_transcribeLocalAudio('));
     expect(fallback, contains('AiAudioChunkService.instance.extractWavChunk'));
