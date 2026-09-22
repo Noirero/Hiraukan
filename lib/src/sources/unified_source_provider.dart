@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../extensions/audio_extension_install_provider.dart';
 import '../extensions/audio_extension_provider.dart';
 import '../providers/auth_provider.dart';
 import 'asmr_one_source_adapter.dart';
