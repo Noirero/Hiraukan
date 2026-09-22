@@ -32,15 +32,6 @@ final audioExtensionInstallProvider = StateNotifierProvider<
   );
 });
 
-final audioExtensionRegistryProvider = Provider<AudioExtensionRegistry>((ref) {
-  final bundled = ref.watch(bundledAudioExtensionsProvider);
-  final installed = ref.watch(audioExtensionInstallProvider).installedIds;
-  return AudioExtensionRegistry(
-    bundled.where((extension) => installed.contains(extension.manifest.id)),
-  );
-});
-
-
 final miyorareAudioCatalogServiceProvider =
     Provider<MiyorareAudioCatalogService>((ref) {
   return MiyorareAudioCatalogService();
@@ -49,4 +40,24 @@ final miyorareAudioCatalogServiceProvider =
 final miyorareAudioCatalogProvider =
     FutureProvider<MiyorareAudioCatalogSnapshot?>((ref) async {
   return ref.read(miyorareAudioCatalogServiceProvider).loadLatest();
+});
+
+
+final audioExtensionRegistryProvider = Provider<AudioExtensionRegistry>((ref) {
+  final bundled = ref.watch(bundledAudioExtensionsProvider);
+  final installed = ref.watch(audioExtensionInstallProvider).installedIds;
+  final remoteCatalog = ref.watch(miyorareAudioCatalogProvider).valueOrNull;
+  final allowed = remoteCatalog == null
+      ? MiyorareAudioCatalogService.lastKnownGoodExtensionIds()
+      : remoteCatalog.pack.extensions
+          .map((entry) => entry.runtimeId)
+          .toSet();
+
+  return AudioExtensionRegistry(
+    bundled.where(
+      (extension) =>
+          installed.contains(extension.manifest.id) &&
+          (allowed == null || allowed.contains(extension.manifest.id)),
+    ),
+  );
 });
