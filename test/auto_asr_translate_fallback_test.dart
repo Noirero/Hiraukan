@@ -112,6 +112,25 @@ void main() {
     );
   });
 
+  test('automatic ASR pauses playback until first translation is ready',
+      () {
+    final source =
+        File('lib/src/providers/lyric_provider.dart').readAsStringSync();
+
+    final helperStart =
+        source.indexOf('Future<bool> _tryAutomaticAsrFallback');
+    final helperEnd = source.indexOf(
+      '// 从字幕库查找匹配的字幕文件',
+      helperStart,
+    );
+    final helper = source.substring(helperStart, helperEnd);
+
+    expect(helper, contains('final wasPlaying = ref.read(isPlayingProvider)'));
+    expect(helper, contains('audioPlayerControllerProvider.notifier).pause()'));
+    expect(helper, contains('_resumePlaybackWhenFirstTranslationIsReady'));
+    expect(source, contains('state.translatedCount > 0'));
+  });
+
   test('official/library subtitle lookup precedes ASR fallback', () {
     final source =
         File('lib/src/providers/lyric_provider.dart').readAsStringSync();
