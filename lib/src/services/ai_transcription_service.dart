@@ -464,6 +464,146 @@ class AiTranscriptionService {
     }
   }
 
+  Future<TranscriptionResult?> transcribeConfigured(
+    String audioPath, {
+    required LocalAiModelConfig config,
+    int threads = 6,
+    bool splitOnWord = false,
+    bool speedUp = true,
+    bool convert = true,
+    String language = 'auto',
+  }) async {
+    if (!config.quantized) {
+      return transcribe(
+        audioPath,
+        model: config.model,
+        threads: threads,
+        splitOnWord: splitOnWord,
+        speedUp: speedUp,
+        convert: convert,
+        language: language,
+      );
+    }
+
+    final audio = File(audioPath);
+    if (!await audio.exists()) return null;
+    if (!await isModelConfigInstalled(config)) {
+      throw StateError('Whisper model ${config.id} is not installed');
+    }
+
+    File? convertedAudio;
+    var finalAudioPath = audioPath;
+    if (convert && !audioPath.toLowerCase().endsWith('.wav')) {
+      convertedAudio = await _convertWholeAudioToWav(audioPath);
+      if (convertedAudio == null) {
+        throw StateError('Failed to convert audio for quantized Whisper');
+      }
+      finalAudioPath = convertedAudio.path;
+    }
+
+    try {
+      await WakelockPlus.enable();
+      final modelPath = await modelPathForConfig(config);
+      final transcription = await AiHeavyJobQueue.instance.run(
+        () => Whisper(model: config.model).transcribe(
+          transcribeRequest: TranscribeRequest(
+            audio: finalAudioPath,
+            language: _normalizeWhisperLanguage(language),
+            threads: threads.clamp(1, 16).toInt(),
+            isNoTimestamps: false,
+            splitOnWord: splitOnWord,
+            isRealtime: true,
+            speedUp: speedUp,
+          ),
+          modelPath: modelPath,
+        ),
+      );
+
+      if (transcription.text.trim().isEmpty) return null;
+      final segments = <WhisperSegment>[];
+      for (final segment in transcription.segments ?? const []) {
+        segments.add(
+          WhisperSegment(
+            startSeconds: segment.fromTs.inMilliseconds / 1000,
+            endSeconds: segment.toTs.inMilliseconds / 1000,
+            text: segment.text.trim(),
+          ),
+        );
+      }
+      return TranscriptionResult(
+        fullText: transcription.text,
+        segments: segments,
+        lrcContent: _toLrc(segments),
+      );
+    } catch (error) {
+      _log.error(
+        'Quantized Whisper transcription failed (${config.id}): $error',
+        tag: 'AI',
+      );
+      rethrow;
+    } finally {
+      try {
+        await WakelockPlus.disable();
+      } catch (_) {}
+      if (convertedAudio != null) {
+        try {
+          if (await convertedAudio.exists()) await convertedAudio.delete();
+        } catch (_) {}
+      }
+    }
+  }
+
+  Future<File?> _convertWholeAudioToWav(String inputPath) async {
+    final tempDir = await getTemporaryDirectory();
+    final output = File(
+      p.join(
+        tempDir.path,
+        'hiraukan_whisper_quantized_'
+        '${DateTime.now().microsecondsSinceEpoch}.wav',
+      ),
+    );
+
+    String quote(String value) =>
+        '"${value.replaceAll('"', '\\"')}"';
+
+    final command = [
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-i',
+      quote(inputPath),
+      '-vn',
+      '-ac',
+      '1',
+      '-ar',
+      '16000',
+      '-c:a',
+      'pcm_s16le',
+      '-y',
+      quote(output.path),
+    ].join(' ');
+
+    final completer = Completer<Session>();
+    FFmpegKit.executeAsync(
+      command,
+      (session) {
+        if (!completer.isCompleted) completer.complete(session);
+      },
+    );
+
+    final session = await completer.future;
+    final code = await session.getReturnCode();
+    if (!ReturnCode.isSuccess(code) ||
+        !await output.exists() ||
+        await output.length() <= 44) {
+      try {
+        if (await output.exists()) await output.delete();
+      } catch (_) {}
+      return null;
+    }
+    return output;
+  }
+
   /// Transcribes a finished audio file in short WAV chunks so the caller can
   /// publish useful subtitle text before the whole track has finished.
   ///
