@@ -34,7 +34,7 @@ class AuthState extends Equatable {
   const AuthState({
     this.currentUser,
     this.token,
-    this.host,
+    this.host = KikoeruApiService.remoteHost,
     this.isLoading = false,
     this.error,
     this.isLoggedIn = false,
@@ -562,6 +562,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       _log.captureOutput('Failed to clear storage: $e');
     }
 
+    // Return to a fully usable anonymous session instead of an unconfigured
+    // state. Public audio sources must remain available after logout.
+    _apiService.init('', KikoeruApiService.remoteHost);
     state = const AuthState();
   }
 
