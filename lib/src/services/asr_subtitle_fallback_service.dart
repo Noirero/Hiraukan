@@ -235,8 +235,9 @@ class AsrSubtitleFallbackService {
     AsrPartialLyricsCallback? onPartialLyrics,
     bool Function()? isCancelled,
   }) async {
-    const chunkDuration = Duration(seconds: 15);
-    const chunkThreshold = Duration(seconds: 25);
+    const firstChunkDuration = Duration(seconds: 10);
+    const laterChunkDuration = Duration(seconds: 20);
+    const chunkThreshold = Duration(seconds: 20);
 
     if (totalDuration == null || totalDuration <= chunkThreshold) {
       onStatus?.call(
@@ -262,8 +263,10 @@ class AsrSubtitleFallbackService {
       if (isCancelled?.call() == true) break;
 
       final remaining = totalDuration - start;
+      final preferredDuration =
+          start == Duration.zero ? firstChunkDuration : laterChunkDuration;
       final currentDuration =
-          remaining < chunkDuration ? remaining : chunkDuration;
+          remaining < preferredDuration ? remaining : preferredDuration;
       final end = start + currentDuration;
 
       onStatus?.call(
