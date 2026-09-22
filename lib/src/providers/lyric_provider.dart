@@ -473,6 +473,17 @@ class LyricController extends StateNotifier<LyricState> {
 
     bool cancelled() => !_isCurrentLoadRequest(requestId);
     var resumedFromPartialSubtitle = false;
+    var progressiveTranslationUsed = false;
+    var progressiveTranslatedCount = 0;
+    var progressiveSourceCount = 0;
+    final progressiveTranslatedLyrics = <LyricLine>[];
+    final progressiveTranslationService = TranslationService();
+    final progressiveShouldTranslate =
+        await progressiveTranslationService.isFreeOnlineSelected();
+    final progressivePair =
+        progressiveTranslationService.freeOnlineLanguagePair(
+      sourceLanguage: SubtitleLanguageSettings.instance.sourceLanguage,
+    );
 
     try {
       final result = await AsrSubtitleFallbackService.instance.generate(
@@ -494,11 +505,94 @@ class LyricController extends StateNotifier<LyricState> {
           state = state.copyWith(
             lyrics: partialLyrics,
             isGeneratingSubtitle: !isComplete,
-            subtitleGenerationStatus: isComplete
-                ? 'Subtitle sumber selesai dibuat.'
-                : 'Subtitle awal sudah siap; sisa audio diproses di belakang…',
+            subtitleGenerationStatus: progressiveShouldTranslate
+                ? 'Subtitle awal siap; menerjemahkan potongan terbaru…'
+                : (isComplete
+                    ? 'Subtitle sumber selesai dibuat.'
+                    : 'Subtitle awal siap; sisa audio diproses di belakang…'),
             subtitleGeneratedByAsr: true,
           );
+
+          if (!progressiveShouldTranslate) {
+            if (wasPlaying && !resumedFromPartialSubtitle) {
+              resumedFromPartialSubtitle = true;
+              await ref.read(audioPlayerControllerProvider.notifier).play();
+            }
+            progressiveSourceCount = partialLyrics.length;
+            return;
+          }
+
+          while (progressiveTranslatedLyrics.length < partialLyrics.length) {
+            progressiveTranslatedLyrics.add(
+              partialLyrics[progressiveTranslatedLyrics.length],
+            );
+          }
+
+          final newIndexes = <int>[];
+          final newTexts = <String>[];
+          for (var i = progressiveSourceCount; i < partialLyrics.length; i++) {
+            final text = partialLyrics[i].text;
+            if (text.isEmpty || text == '♪ - ♪') continue;
+            newIndexes.add(i);
+            newTexts.add(text);
+          }
+          progressiveSourceCount = partialLyrics.length;
+
+          if (newTexts.isNotEmpty) {
+            progressiveTranslationUsed = true;
+            state = state.copyWith(
+              isTranslating: true,
+              translationTotal:
+                  progressiveTranslatedCount + newTexts.length,
+            );
+
+            await progressiveTranslationService.translateBatch(
+              newTexts,
+              sourceLang: progressivePair.$1,
+              onItemTranslated: (
+                itemIndex,
+                translatedText,
+                completed,
+                total,
+              ) {
+                if (!_isCurrentLoadRequest(requestId)) return;
+                final lyricIndex = newIndexes[itemIndex];
+                progressiveTranslatedLyrics[lyricIndex] =
+                    partialLyrics[lyricIndex].copyWith(text: translatedText);
+                progressiveTranslatedCount++;
+                unawaited(
+                  ref
+                      .read(subtitleDisplayModeProvider.notifier)
+                      .setMode(SubtitleDisplayMode.translated),
+                );
+                state = state.copyWith(
+                  lyrics: partialLyrics,
+                  translatedLyrics:
+                      List<LyricLine>.unmodifiable(progressiveTranslatedLyrics),
+                  showTranslated: true,
+                  isTranslating: true,
+                  translatedCount: progressiveTranslatedCount,
+                  translationTotal: progressiveTranslatedCount +
+                      (newTexts.length - completed),
+                  subtitleGenerationStatus:
+                      'Terjemahan awal siap; sisa audio diproses di belakang…',
+                );
+              },
+            );
+
+            if (!_isCurrentLoadRequest(requestId)) return;
+            state = state.copyWith(
+              isTranslating: false,
+              translatedLyrics:
+                  List<LyricLine>.unmodifiable(progressiveTranslatedLyrics),
+              showTranslated: true,
+              translatedCount: progressiveTranslatedCount,
+              translationTotal: progressiveTranslatedCount,
+              subtitleGenerationStatus: isComplete
+                  ? 'Subtitle dan terjemahan selesai dibuat.'
+                  : 'Terjemahan awal siap; sisa audio diproses di belakang…',
+            );
+          }
 
           if (wasPlaying && !resumedFromPartialSubtitle) {
             resumedFromPartialSubtitle = true;
@@ -526,18 +620,31 @@ class LyricController extends StateNotifier<LyricState> {
         return true;
       }
 
-      _setStateForLoadRequest(
-        requestId,
-        LyricState(
+      if (progressiveTranslationUsed) {
+        state = state.copyWith(
           lyrics: result.lyrics,
           isLoading: false,
           lyricUrl: 'asr://${result.serviceName}',
-          subtitleGenerationStatus: result.fromCache
-              ? 'Subtitle sumber dimuat dari hasil ASR tersimpan.'
-              : 'Subtitle sumber dibuat oleh mesin ASR.',
+          isGeneratingSubtitle: false,
+          isTranslating: false,
+          subtitleGenerationStatus:
+              'Subtitle dan terjemahan selesai dibuat.',
           subtitleGeneratedByAsr: true,
-        ),
-      );
+        );
+      } else {
+        _setStateForLoadRequest(
+          requestId,
+          LyricState(
+            lyrics: result.lyrics,
+            isLoading: false,
+            lyricUrl: 'asr://${result.serviceName}',
+            subtitleGenerationStatus: result.fromCache
+                ? 'Subtitle sumber dimuat dari hasil ASR tersimpan.'
+                : 'Subtitle sumber dibuat oleh mesin ASR.',
+            subtitleGeneratedByAsr: true,
+          ),
+        );
+      }
 
       final restoredOffline =
           await _restoreDownloadedTranslationForCurrentTrack(requestId);
@@ -546,6 +653,18 @@ class LyricController extends StateNotifier<LyricState> {
         if (wasPlaying) {
           await ref.read(audioPlayerControllerProvider.notifier).play();
         }
+        return true;
+      }
+
+      if (progressiveTranslationUsed &&
+          progressiveTranslatedLyrics.length == result.lyrics.length) {
+        state = state.copyWith(
+          isTranslating: false,
+          translatedCount: progressiveTranslatedCount,
+          translationTotal: progressiveTranslatedCount,
+          subtitleGenerationStatus:
+              'Subtitle dan terjemahan selesai dibuat.',
+        );
         return true;
       }
 
