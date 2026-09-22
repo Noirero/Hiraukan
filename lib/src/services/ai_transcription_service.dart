@@ -232,8 +232,9 @@ class AiTranscriptionService {
   Future<TranscriptionResult?> transcribe(
     String audioPath, {
     WhisperModel model = WhisperModel.base,
-    int threads = 4,
+    int threads = 6,
     bool splitOnWord = false,
+    bool speedUp = true,
     String language = 'auto',
   }) async {
     final audio = File(audioPath);
@@ -252,6 +253,7 @@ class AiTranscriptionService {
           withTimestamps: true,
           splitOnWord: splitOnWord,
           threads: threads.clamp(1, 16).toInt(),
+          speedUp: speedUp,
         ),
       );
       if (result == null || result.transcription.text.trim().isEmpty) return null;
@@ -282,9 +284,10 @@ class AiTranscriptionService {
   Future<String?> transcribeAndSave(
     String audioPath, {
     WhisperModel model = WhisperModel.base,
-    int threads = 4,
+    int threads = 6,
     bool overwrite = false,
     bool splitOnWord = false,
+    bool speedUp = true,
     String language = 'auto',
   }) async {
     final extension = p.extension(audioPath).toLowerCase();
@@ -297,6 +300,7 @@ class AiTranscriptionService {
       model: model,
       threads: threads,
       splitOnWord: splitOnWord,
+      speedUp: speedUp,
       language: language,
     );
     if (result == null) return null;
@@ -325,9 +329,10 @@ class AiTranscriptionService {
   Future<BatchTranscriptionResult> transcribeDirectory(
     Directory root, {
     WhisperModel model = WhisperModel.base,
-    int threads = 4,
+    int threads = 6,
     bool skipExisting = true,
     bool splitOnWord = false,
+    bool speedUp = true,
     String language = 'auto',
     bool Function()? isCancelled,
     void Function(int done, int total, String path)? onProgress,
@@ -352,6 +357,7 @@ class AiTranscriptionService {
           threads: threads,
           overwrite: !skipExisting,
           splitOnWord: splitOnWord,
+          speedUp: speedUp,
           language: language,
         );
         if (saved == null) {
