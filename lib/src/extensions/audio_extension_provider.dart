@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/auth_provider.dart';
-import '../services/kikoeru_api_service.dart';
+import '../services/kikoeru_api_service.dart' hide kikoeruApiServiceProvider;
 import 'asmr_one_audio_extension.dart';
 import 'audio_extension.dart';
 import 'ero_voice_audio_extension.dart';
