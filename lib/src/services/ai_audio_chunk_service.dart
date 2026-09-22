@@ -54,6 +54,8 @@ class AiAudioChunkService {
       (session) {
         if (!completer.isCompleted) completer.complete(session);
       },
+      (_) {},
+      (_) {},
     );
 
     final session = await completer.future;
