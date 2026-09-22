@@ -15,7 +15,11 @@ final _log = LogService.instance;
 
 // Kikoeru API Service Provider
 final kikoeruApiServiceProvider = Provider<KikoeruApiService>((ref) {
-  return KikoeruApiService();
+  // Anonymous-by-default: the app must have a usable public source before any
+  // optional account authentication is configured.
+  final service = KikoeruApiService();
+  service.init('', KikoeruApiService.remoteHost);
+  return service;
 });
 
 // Auth state
@@ -30,7 +34,7 @@ class AuthState extends Equatable {
   const AuthState({
     this.currentUser,
     this.token,
-    this.host,
+    this.host = KikoeruApiService.remoteHost,
     this.isLoading = false,
     this.error,
     this.isLoggedIn = false,
@@ -558,6 +562,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       _log.captureOutput('Failed to clear storage: $e');
     }
 
+    // Return to a fully usable anonymous session instead of an unconfigured
+    // state. Public audio sources must remain available after logout.
+    _apiService.init('', KikoeruApiService.remoteHost);
     state = const AuthState();
   }
 

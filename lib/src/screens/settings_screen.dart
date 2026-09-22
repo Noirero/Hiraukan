@@ -4,6 +4,7 @@ import '../../l10n/app_localizations.dart';
 import 'dart:io';
 
 import 'account_management_screen.dart';
+import 'audio_extensions_screen.dart';
 import 'download_path_settings_screen.dart';
 import 'theme_settings_screen.dart';
 import 'ui_settings_screen.dart';
@@ -188,6 +189,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     return SettingsSectionList(
       children: [
+        SettingsNavigationTile(
+          icon: Icons.extension_outlined,
+          title: 'Audio Extensions',
+          subtitle: 'Miyorare Pack · manage audio sources',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const AudioExtensionsScreen(),
+              ),
+            );
+          },
+        ),
         SettingsNavigationTile(
           icon: Icons.manage_accounts,
           title: S.of(context).accountManagement,

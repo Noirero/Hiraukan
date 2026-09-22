@@ -17,7 +17,6 @@ import 'dart:ffi' as ffi;
 import 'package:ffi/ffi.dart';
 import 'package:sqlite3/open.dart' as sqlite3_open;
 
-import 'src/screens/login_screen.dart';
 import 'src/screens/main_screen.dart';
 import 'src/widgets/desktop_floating_lyric.dart';
 import 'src/utils/theme.dart';
@@ -553,14 +552,9 @@ class _KikoeruAppState extends ConsumerState<KikoeruApp>
   }
 
   Widget _buildHomeScreen() {
-    final authState = ref.watch(authProvider);
-
-    // 如果有用户信息（包括离线模式），显示主页
-    // 这样用户可以访问本地下载的内�?
-    if (authState.currentUser != null) {
-      return const MainScreen();
-    } else {
-      return const LoginScreen();
-    }
+    // Authentication is optional. Hiraukan always opens into the main
+    // experience; individual sources/extensions may request authentication
+    // only when their own manifest declares it.
+    return const MainScreen();
   }
 }
