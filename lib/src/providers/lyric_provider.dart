@@ -1059,43 +1059,57 @@ class LyricController extends StateNotifier<LyricState> {
         final pending = indexMap.toSet();
         var completed = 0;
 
+        const maxConcurrentTranslations = 3;
         while (pending.isNotEmpty) {
           if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
             return null;
           }
 
-          final rawPlaybackPosition =
-              ref.read(positionProvider).value ?? Duration.zero;
-          final effectivePlaybackPosition =
-              rawPlaybackPosition - sourceOffset;
-          final lyricIndex = translationQuality.playbackPriorityEnabled
-              ? SubtitleTranslationPlanner.pickNextIndex(
-                  pending: pending,
-                  lyrics: sourceLyrics,
-                  playbackPosition: effectivePlaybackPosition,
-                )
-              : pending.first;
-
-          final translatedText =
-              await subtitleTranslator.translateSegment(
-            sourceLines: allSourceTexts,
-            index: lyricIndex,
-            glossary: glossary,
-            sourceLanguage: selectedPair.$1,
-            targetLanguage: selectedPair.$2,
-            contextEnabled: translationQuality.contextEnabled,
-          );
-          if (!_isCurrentGeneration(generation, requestId, currentTrack)) {
-            return null;
+          final batch = <int>[];
+          while (batch.length < maxConcurrentTranslations &&
+              pending.isNotEmpty) {
+            final rawPlaybackPosition =
+                ref.read(positionProvider).value ?? Duration.zero;
+            final effectivePlaybackPosition =
+                rawPlaybackPosition - sourceOffset;
+            final lyricIndex = translationQuality.playbackPriorityEnabled
+                ? SubtitleTranslationPlanner.pickNextIndex(
+                    pending: pending,
+                    lyrics: sourceLyrics,
+                    playbackPosition: effectivePlaybackPosition,
+                  )
+                : pending.first;
+            pending.remove(lyricIndex);
+            batch.add(lyricIndex);
           }
 
-          pending.remove(lyricIndex);
-          completed++;
-          publishProgress(
-            lyricIndex,
-            translatedText,
-            completed,
-            textsToTranslate.length,
+          await Future.wait(
+            batch.map((lyricIndex) async {
+              final translatedText =
+                  await subtitleTranslator.translateSegment(
+                sourceLines: allSourceTexts,
+                index: lyricIndex,
+                glossary: glossary,
+                sourceLanguage: selectedPair.$1,
+                targetLanguage: selectedPair.$2,
+                contextEnabled: translationQuality.contextEnabled,
+              );
+              if (!_isCurrentGeneration(
+                generation,
+                requestId,
+                currentTrack,
+              )) {
+                return;
+              }
+
+              completed++;
+              publishProgress(
+                lyricIndex,
+                translatedText,
+                completed,
+                textsToTranslate.length,
+              );
+            }),
           );
         }
       } else {
