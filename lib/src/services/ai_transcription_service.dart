@@ -235,6 +235,7 @@ class AiTranscriptionService {
     int threads = 6,
     bool splitOnWord = false,
     bool speedUp = true,
+    bool convert = true,
     String language = 'auto',
   }) async {
     final audio = File(audioPath);
@@ -254,6 +255,7 @@ class AiTranscriptionService {
           splitOnWord: splitOnWord,
           threads: threads.clamp(1, 16).toInt(),
           speedUp: speedUp,
+          convert: convert,
         ),
       );
       if (result == null || result.transcription.text.trim().isEmpty) return null;
