@@ -43,6 +43,28 @@ class MiyorareAudioCatalogService {
     }
   }
 
+  static Set<String>? lastKnownGoodExtensionIds() {
+    final raw = StorageService.getString(_cacheJsonKey);
+    final digest = StorageService.getString(_cacheDigestKey);
+    if (raw == null || digest == null) return null;
+
+    final bytes = utf8.encode(raw);
+    if (sha256.convert(bytes).toString() != digest) return null;
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return null;
+      final pack = MiyorareAudioPack.fromJson(
+        Map<String, dynamic>.from(decoded),
+      );
+      return pack.extensions
+          .map((entry) => entry.runtimeId)
+          .toSet();
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<MiyorareAudioCatalogSnapshot?> loadLastKnownGood() async {
     final raw = StorageService.getString(_cacheJsonKey);
     final digest = StorageService.getString(_cacheDigestKey);
