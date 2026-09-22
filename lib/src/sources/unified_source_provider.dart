@@ -4,8 +4,11 @@ import '../extensions/audio_extension_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/miyorare_audio_catalog_service.dart';
 import 'asmr_one_source_adapter.dart';
+import 'asmr18_source_adapter.dart';
+import 'asmr_hentai_net_source_adapter.dart';
 import 'ero_voice_source_adapter.dart';
 import 'hentai_asmr_source_adapter.dart';
+import 'japanese_asmr_source_adapter.dart';
 import 'source_adapter.dart';
 import 'unified_source_models.dart';
 import 'unified_source_registry.dart';
@@ -72,7 +75,11 @@ final unifiedSourceServiceProvider = Provider<UnifiedSourceService>((ref) {
     adapters: [
       if (enabled('miyorare.audio.asmr_one')) AsmrOneSourceAdapter(kikoeru),
       if (enabled('miyorare.audio.hentai_asmr')) HentaiAsmrSourceAdapter(),
+      if (enabled('miyorare.audio.japanese_asmr')) JapaneseAsmrSourceAdapter(),
+      if (enabled('miyorare.audio.asmr18')) Asmr18SourceAdapter(),
       if (enabled('miyorare.audio.ero_voice')) EroVoiceSourceAdapter(),
+      if (enabled('miyorare.audio.asmr_hentai_net'))
+        AsmrHentaiNetSourceAdapter(),
     ],
     registry: UnifiedSourceRegistry.instance,
   );

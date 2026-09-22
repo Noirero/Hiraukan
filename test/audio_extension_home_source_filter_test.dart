@@ -26,8 +26,20 @@ void main() {
       'miyorare.audio.hentai_asmr',
     );
     expect(
+      HomeSourceFilter.japaneseAsmr.extensionId,
+      'miyorare.audio.japanese_asmr',
+    );
+    expect(
+      HomeSourceFilter.asmr18.extensionId,
+      'miyorare.audio.asmr18',
+    );
+    expect(
       HomeSourceFilter.eroVoice.extensionId,
       'miyorare.audio.ero_voice',
+    );
+    expect(
+      HomeSourceFilter.asmrHentaiNet.extensionId,
+      'miyorare.audio.asmr_hentai_net',
     );
     expect(HomeSourceFilter.all.extensionId, isNull);
   });

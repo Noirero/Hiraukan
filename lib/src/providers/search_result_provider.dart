@@ -82,7 +82,10 @@ class SearchResultState extends Equatable {
     this.enabledSources = const {
       UnifiedSourceKind.asmrOne,
       UnifiedSourceKind.hentaiAsmr,
+      UnifiedSourceKind.japaneseAsmr,
+      UnifiedSourceKind.asmr18,
       UnifiedSourceKind.eroVoice,
+      UnifiedSourceKind.asmrHentaiNet,
     },
     this.sourceHealth = const {},
   });

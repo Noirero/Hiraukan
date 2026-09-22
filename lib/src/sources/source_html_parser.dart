@@ -119,6 +119,15 @@ class SourceHtmlParser {
   }
 
   static String? extractFirstImage(String html, {Uri? base}) {
+    final poster = RegExp(
+      r'''<video\b[^>]*poster=["']([^"']+)["']''',
+      caseSensitive: false,
+    ).firstMatch(html);
+    if (poster != null) {
+      final resolved = resolveUrl(poster.group(1), base: base);
+      if (resolved != null && resolved.isNotEmpty) return resolved;
+    }
+
     final meta = extractMetaContent(html, 'og:image');
     if (meta != null && meta.isNotEmpty) return resolveUrl(meta, base: base);
 
@@ -150,6 +159,34 @@ class SourceHtmlParser {
         final resolved = resolveUrl(raw, base: base);
         if (resolved != null &&
             (resolved.startsWith('http://') || resolved.startsWith('https://'))) {
+          urls.add(resolved);
+        }
+      }
+    }
+    return urls.toList(growable: false);
+  }
+
+  static List<String> extractPlayableUrls(String html, {Uri? base}) {
+    final urls = <String>{...extractAudioUrls(html, base: base)};
+    final normalized = html.replaceAll(r'\/', '/');
+    final patterns = <RegExp>[
+      RegExp(
+        r'''(?:src|href|file|url)\s*[:=]\s*["']([^"']+\.m3u8(?:\?[^"']*)?)["']''',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'''(https?://[^\s"'<>]+\.m3u8(?:\?[^\s"'<>]*)?)''',
+        caseSensitive: false,
+      ),
+    ];
+
+    for (final pattern in patterns) {
+      for (final match in pattern.allMatches(normalized)) {
+        final raw = decodeEntities(match.group(1)!);
+        final resolved = resolveUrl(raw, base: base);
+        if (resolved != null &&
+            (resolved.startsWith('http://') ||
+                resolved.startsWith('https://'))) {
           urls.add(resolved);
         }
       }

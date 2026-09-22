@@ -75,7 +75,11 @@ class UnifiedSourceRegistry {
 
     final localId = switch (source) {
       UnifiedSourceKind.asmrOne => work.id.toString(),
-      UnifiedSourceKind.hentaiAsmr || UnifiedSourceKind.eroVoice =>
+      UnifiedSourceKind.hentaiAsmr ||
+      UnifiedSourceKind.japaneseAsmr ||
+      UnifiedSourceKind.asmr18 ||
+      UnifiedSourceKind.eroVoice ||
+      UnifiedSourceKind.asmrHentaiNet =>
         canonical ?? detailUrl,
     };
     final cover = work.images?.isNotEmpty == true ? work.images!.first : null;
@@ -105,6 +109,15 @@ class UnifiedSourceRegistry {
     if (host.contains('hentaiasmr.moe')) {
       return UnifiedSourceKind.hentaiAsmr;
     }
+    if (host.contains('japaneseasmr.com')) {
+      return UnifiedSourceKind.japaneseAsmr;
+    }
+    if (host.contains('asmr18.fans')) {
+      return UnifiedSourceKind.asmr18;
+    }
+    if (host.contains('asmrhentai.net')) {
+      return UnifiedSourceKind.asmrHentaiNet;
+    }
     if (host.contains('erovoice.us')) {
       return UnifiedSourceKind.eroVoice;
     }
@@ -123,7 +136,14 @@ class UnifiedSourceRegistry {
       UnifiedSourceKind.hentaiAsmr => work.sourceId == null
           ? null
           : 'https://hentaiasmr.moe/${work.sourceId!.toLowerCase()}.html',
+      UnifiedSourceKind.japaneseAsmr => null,
+      UnifiedSourceKind.asmr18 => work.sourceId == null
+          ? null
+          : 'https://asmr18.fans/boys/' +
+              work.sourceId!.toLowerCase() +
+              '/',
       UnifiedSourceKind.eroVoice => null,
+      UnifiedSourceKind.asmrHentaiNet => null,
     };
   }
 

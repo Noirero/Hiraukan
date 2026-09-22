@@ -495,10 +495,21 @@ class _UnifiedWorkDetailScreenState
                 ] else ...[
                   const SizedBox(height: 18),
                   _InfoCard(
-                    icon: Icons.download_for_offline_outlined,
-                    title: 'Khusus unduhan',
-                    message:
-                        'Karya ini tersedia melalui EroVoice sebagai sumber unduhan.',
+                    icon: bundle.canDownload
+                        ? Icons.download_for_offline_outlined
+                        : Icons.info_outline,
+                    title: bundle.canDownload
+                        ? 'Khusus unduhan'
+                        : 'Metadata saja',
+                    message: bundle.canDownload
+                        ? 'Karya ini tersedia melalui ' +
+                            bundle.downloadSources
+                                .map((source) => source.source.label)
+                                .join(', ') +
+                            ' sebagai sumber unduhan.'
+                        : 'Sumber ini menyediakan katalog dan detail, tetapi '
+                            'belum menyediakan pemutaran atau unduhan langsung '
+                            'di Hiraukan.',
                   ),
                 ],
                 if (bundle.downloadOnlySources.isNotEmpty) ...[
@@ -580,6 +591,7 @@ class _UnifiedWorkDetailScreenState
   Widget _buildSources(UnifiedWorkBundle bundle) {
     final playable = bundle.playableSources;
     final downloadOnly = bundle.downloadOnlySources;
+    final metadataOnly = bundle.metadataOnlySources;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -590,8 +602,9 @@ class _UnifiedWorkDetailScreenState
             icon: Icons.play_circle_outline,
             sources: playable,
             health: _health,
-            subtitleFor: (source, health) =>
-                '${_healthLabel(health)} · Putar & unduh',
+            subtitleFor: (source, health) => source.source.canDownload
+                ? _healthLabel(health) + ' · Putar & unduh'
+                : _healthLabel(health) + ' · Putar',
             onOpen: _openSource,
           ),
         if (playable.isNotEmpty && downloadOnly.isNotEmpty)
@@ -603,7 +616,20 @@ class _UnifiedWorkDetailScreenState
             sources: downloadOnly,
             health: _health,
             subtitleFor: (source, health) =>
-                '${_healthLabel(health)} · Khusus unduhan',
+                _healthLabel(health) + ' · Khusus unduhan',
+            onOpen: _openSource,
+          ),
+        if ((playable.isNotEmpty || downloadOnly.isNotEmpty) &&
+            metadataOnly.isNotEmpty)
+          const SizedBox(height: 12),
+        if (metadataOnly.isNotEmpty)
+          _SourceSectionCard(
+            title: 'Sumber Metadata',
+            icon: Icons.info_outline,
+            sources: metadataOnly,
+            health: _health,
+            subtitleFor: (source, health) =>
+                _healthLabel(health) + ' · Metadata saja',
             onOpen: _openSource,
           ),
       ],

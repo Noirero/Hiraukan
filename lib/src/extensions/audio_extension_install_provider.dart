@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/storage_service.dart';
@@ -5,10 +7,21 @@ import 'audio_extension.dart';
 import 'miyorare_audio_pack.dart';
 
 const _installedAudioExtensionsKey = 'installed_audio_extensions_v1';
+const _installedAudioExtensionsDefaultsVersionKey =
+    'installed_audio_extensions_defaults_version';
+const _installedAudioExtensionsDefaultsVersion = 2;
+const _newAudioExtensionsV2 = <String>{
+  'miyorare.audio.asmr_hentai_net',
+  'miyorare.audio.japanese_asmr',
+  'miyorare.audio.asmr18',
+};
 const _defaultInstalledAudioExtensions = <String>{
   'miyorare.audio.asmr_one',
   'miyorare.audio.hentai_asmr',
+  'miyorare.audio.japanese_asmr',
+  'miyorare.audio.asmr18',
   'miyorare.audio.ero_voice',
+  'miyorare.audio.asmr_hentai_net',
 };
 
 class AudioExtensionInstallState {
@@ -45,9 +58,31 @@ class AudioExtensionInstallController
       _installedAudioExtensionsKey,
     );
     if (stored == null) {
+      unawaited(
+        StorageService.setSetting(
+          _installedAudioExtensionsDefaultsVersionKey,
+          _installedAudioExtensionsDefaultsVersion,
+        ),
+      );
       return Set<String>.from(_defaultInstalledAudioExtensions);
     }
-    return stored.map((value) => value.toString()).toSet();
+
+    final installed = stored.map((value) => value.toString()).toSet();
+    final defaultsVersion = StorageService.getSetting<int>(
+          _installedAudioExtensionsDefaultsVersionKey,
+        ) ??
+        1;
+    if (defaultsVersion < _installedAudioExtensionsDefaultsVersion) {
+      installed.addAll(_newAudioExtensionsV2);
+      unawaited(_persistInstalledIds(installed));
+      unawaited(
+        StorageService.setSetting(
+          _installedAudioExtensionsDefaultsVersionKey,
+          _installedAudioExtensionsDefaultsVersion,
+        ),
+      );
+    }
+    return installed;
   }
 
   Future<void> install(MiyorareAudioPackEntry entry) async {

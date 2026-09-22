@@ -5,7 +5,10 @@ import '../models/work.dart';
 enum UnifiedSourceKind {
   asmrOne,
   hentaiAsmr,
+  japaneseAsmr,
+  asmr18,
   eroVoice,
+  asmrHentaiNet,
 }
 
 enum UnifiedSourceCapability {
@@ -18,19 +21,30 @@ extension UnifiedSourceKindX on UnifiedSourceKind {
   String get id => switch (this) {
         UnifiedSourceKind.asmrOne => 'asmr_one',
         UnifiedSourceKind.hentaiAsmr => 'hentai_asmr',
+        UnifiedSourceKind.japaneseAsmr => 'japanese_asmr',
+        UnifiedSourceKind.asmr18 => 'asmr18',
         UnifiedSourceKind.eroVoice => 'ero_voice',
+        UnifiedSourceKind.asmrHentaiNet => 'asmr_hentai_net',
       };
+
+  String get extensionId => 'miyorare.audio.' + id;
 
   String get label => switch (this) {
         UnifiedSourceKind.asmrOne => 'ASMR.one',
         UnifiedSourceKind.hentaiAsmr => 'HentaiASMR',
+        UnifiedSourceKind.japaneseAsmr => 'JapaneseASMR',
+        UnifiedSourceKind.asmr18 => 'ASMR+18',
         UnifiedSourceKind.eroVoice => 'EroVoice',
+        UnifiedSourceKind.asmrHentaiNet => 'ASMR Hentai',
       };
 
   int get priority => switch (this) {
         UnifiedSourceKind.asmrOne => 0,
         UnifiedSourceKind.hentaiAsmr => 1,
-        UnifiedSourceKind.eroVoice => 2,
+        UnifiedSourceKind.japaneseAsmr => 2,
+        UnifiedSourceKind.asmr18 => 3,
+        UnifiedSourceKind.eroVoice => 4,
+        UnifiedSourceKind.asmrHentaiNet => 5,
       };
 
   Set<UnifiedSourceCapability> get capabilities => switch (this) {
@@ -44,9 +58,21 @@ extension UnifiedSourceKindX on UnifiedSourceKind {
             UnifiedSourceCapability.playback,
             UnifiedSourceCapability.download,
           },
+        UnifiedSourceKind.japaneseAsmr => const {
+            UnifiedSourceCapability.metadata,
+            UnifiedSourceCapability.playback,
+            UnifiedSourceCapability.download,
+          },
+        UnifiedSourceKind.asmr18 => const {
+            UnifiedSourceCapability.metadata,
+            UnifiedSourceCapability.playback,
+          },
         UnifiedSourceKind.eroVoice => const {
             UnifiedSourceCapability.metadata,
             UnifiedSourceCapability.download,
+          },
+        UnifiedSourceKind.asmrHentaiNet => const {
+            UnifiedSourceCapability.metadata,
           },
       };
 
@@ -198,6 +224,10 @@ class UnifiedWorkBundle {
 
   List<UnifiedSourceRef> get downloadOnlySources => sources
       .where((ref) => ref.source.isDownloadOnly)
+      .toList(growable: false);
+
+  List<UnifiedSourceRef> get metadataOnlySources => sources
+      .where((ref) => !ref.source.canPlay && !ref.source.canDownload)
       .toList(growable: false);
 
   bool get canPlay => playableSources.isNotEmpty;

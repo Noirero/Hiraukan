@@ -3,10 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/auth_provider.dart';
 import '../services/kikoeru_api_service.dart' hide kikoeruApiServiceProvider;
 import '../services/miyorare_audio_catalog_service.dart';
+import 'asmr18_audio_extension.dart';
+import 'asmr_hentai_net_audio_extension.dart';
 import 'asmr_one_audio_extension.dart';
 import 'audio_extension.dart';
 import 'ero_voice_audio_extension.dart';
 import 'hentai_asmr_audio_extension.dart';
+import 'japanese_asmr_audio_extension.dart';
 import 'audio_extension_install_provider.dart';
 import 'audio_extension_registry.dart';
 
@@ -21,7 +24,10 @@ final bundledAudioExtensionsProvider = Provider<List<AudioExtension>>((ref) {
       token: () => auth.token ?? '',
     ),
     createHentaiAsmrAudioExtension(),
+    createJapaneseAsmrAudioExtension(),
+    createAsmr18AudioExtension(),
     createEroVoiceAudioExtension(),
+    createAsmrHentaiNetAudioExtension(),
   ];
 });
 

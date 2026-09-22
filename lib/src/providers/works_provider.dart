@@ -39,7 +39,10 @@ enum HomeSourceFilter {
   all,
   asmrOne,
   hentaiAsmr,
+  japaneseAsmr,
+  asmr18,
   eroVoice,
+  asmrHentaiNet,
 }
 
 extension HomeSourceFilterX on HomeSourceFilter {
@@ -47,21 +50,30 @@ extension HomeSourceFilterX on HomeSourceFilter {
         HomeSourceFilter.all => 'Semua Sumber',
         HomeSourceFilter.asmrOne => 'ASMR.one',
         HomeSourceFilter.hentaiAsmr => 'HentaiASMR',
+        HomeSourceFilter.japaneseAsmr => 'JapaneseASMR',
+        HomeSourceFilter.asmr18 => 'ASMR+18',
         HomeSourceFilter.eroVoice => 'EroVoice',
+        HomeSourceFilter.asmrHentaiNet => 'ASMR Hentai',
       };
 
   UnifiedSourceKind? get unifiedSource => switch (this) {
         HomeSourceFilter.all => null,
         HomeSourceFilter.asmrOne => UnifiedSourceKind.asmrOne,
         HomeSourceFilter.hentaiAsmr => UnifiedSourceKind.hentaiAsmr,
+        HomeSourceFilter.japaneseAsmr => UnifiedSourceKind.japaneseAsmr,
+        HomeSourceFilter.asmr18 => UnifiedSourceKind.asmr18,
         HomeSourceFilter.eroVoice => UnifiedSourceKind.eroVoice,
+        HomeSourceFilter.asmrHentaiNet => UnifiedSourceKind.asmrHentaiNet,
       };
 
   String? get extensionId => switch (this) {
         HomeSourceFilter.all => null,
         HomeSourceFilter.asmrOne => 'miyorare.audio.asmr_one',
         HomeSourceFilter.hentaiAsmr => 'miyorare.audio.hentai_asmr',
+        HomeSourceFilter.japaneseAsmr => 'miyorare.audio.japanese_asmr',
+        HomeSourceFilter.asmr18 => 'miyorare.audio.asmr18',
         HomeSourceFilter.eroVoice => 'miyorare.audio.ero_voice',
+        HomeSourceFilter.asmrHentaiNet => 'miyorare.audio.asmr_hentai_net',
       };
 
   bool isAvailableIn(Set<String> enabledExtensionIds) =>
