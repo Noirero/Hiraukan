@@ -65,7 +65,18 @@ void main() {
 
   group('AudioExtensionInstallController', () {
     test('install and remove gate a bundled runtime', () async {
-      final extension = _FakeExtension('miyorare.audio.asmr_one');
+      final extension = _FakeExtension(
+        'miyorare.audio.asmr_one',
+        auth: AudioExtensionAuthRequirement.optional,
+        capabilities: const {
+          AudioExtensionCapability.catalog,
+          AudioExtensionCapability.search,
+          AudioExtensionCapability.detail,
+          AudioExtensionCapability.playback,
+          AudioExtensionCapability.download,
+          AudioExtensionCapability.subtitles,
+        },
+      );
       Set<String>? persisted;
       final controller = AudioExtensionInstallController(
         [extension],
@@ -102,15 +113,28 @@ void main() {
 }
 
 class _FakeExtension implements AudioExtension {
-  _FakeExtension(this.id);
+  _FakeExtension(
+    this.id, {
+    this.auth = AudioExtensionAuthRequirement.none,
+    this.capabilities = const {
+      AudioExtensionCapability.catalog,
+      AudioExtensionCapability.search,
+      AudioExtensionCapability.detail,
+      AudioExtensionCapability.playback,
+    },
+  });
 
   final String id;
+  final AudioExtensionAuthRequirement auth;
+  final Set<AudioExtensionCapability> capabilities;
 
   @override
   AudioExtensionManifest get manifest => AudioExtensionManifest(
         id: id,
-        name: 'Fake',
+        name: id == 'miyorare.audio.asmr_one' ? 'ASMR.one' : 'Fake',
         version: '1.0.0',
+        auth: auth,
+        capabilities: capabilities,
       );
 
   @override
