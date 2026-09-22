@@ -12,8 +12,9 @@ class AdapterBackedDirectAudioExtension implements AudioExtension {
   final AudioExtensionManifest _manifest;
   final AudioExtensionRefBuilder refBuilder;
   final bool playbackEnabled;
+  final Map<String, UnifiedSourceRef> _knownRefs = {};
 
-  const AdapterBackedDirectAudioExtension({
+  AdapterBackedDirectAudioExtension({
     required this.adapter,
     required AudioExtensionManifest manifest,
     required this.refBuilder,
@@ -50,13 +51,13 @@ class AdapterBackedDirectAudioExtension implements AudioExtension {
 
   @override
   Future<AudioExtensionWork> getDetail(String workId) async {
-    final detail = await adapter.loadDetail(refBuilder(workId));
+    final detail = await adapter.loadDetail(_refFor(workId));
     return _workFromSource(detail, localId: workId);
   }
 
   @override
   Future<List<AudioExtensionTrack>> getTracks(String workId) async {
-    final files = await adapter.loadTracks(refBuilder(workId));
+    final files = await adapter.loadTracks(_refFor(workId));
     return _flatten(files)
         .map(
           (entry) => AudioExtensionTrack(
@@ -84,7 +85,7 @@ class AdapterBackedDirectAudioExtension implements AudioExtension {
       );
     }
 
-    final files = await adapter.loadTracks(refBuilder(workId));
+    final files = await adapter.loadTracks(_refFor(workId));
     _DirectTrackEntry? selected;
     for (final entry in _flatten(files)) {
       if (entry.id == trackId) {
@@ -124,6 +125,9 @@ class AdapterBackedDirectAudioExtension implements AudioExtension {
   }
 
   AudioExtensionPage _pageFromSource(SourceSearchPage source) {
+    for (final candidate in source.items) {
+      _knownRefs[candidate.ref.localId] = candidate.ref;
+    }
     return AudioExtensionPage(
       items: source.items
           .map(
@@ -166,6 +170,10 @@ class AdapterBackedDirectAudioExtension implements AudioExtension {
       durationSeconds: work.duration,
       detailUrl: detailUrl ?? work.sourceUrl,
     );
+  }
+
+  UnifiedSourceRef _refFor(String workId) {
+    return _knownRefs[workId] ?? refBuilder(workId);
   }
 
   List<_DirectTrackEntry> _flatten(List<dynamic> files) {
