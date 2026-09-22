@@ -36,7 +36,8 @@ class MiyorareAudioCatalogService {
 
   Future<MiyorareAudioCatalogSnapshot?> loadLatest() async {
     try {
-      return await _loadRemote();
+      final remote = await _loadRemote();
+      return remote ?? await loadLastKnownGood();
     } catch (_) {
       return loadLastKnownGood();
     }
