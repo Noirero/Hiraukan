@@ -128,11 +128,13 @@ class _AiFeaturesScreenState extends State<AiFeaturesScreen> {
 
   Future<void> _deleteModel() async {
     await _service.deleteModel(_config.model);
+    await _settings.setAiTranscriptionEnabled(false);
     await _refreshModel();
     if (mounted) {
       setState(() {
         _progress = null;
-        _status = 'Model ${_config.displayName} dihapus.';
+        _status =
+            'Model ${_config.displayName} dihapus. Subtitle ASR yang sudah dibuat tetap dapat dipakai dari cache.';
       });
     }
   }
@@ -264,6 +266,75 @@ class _AiFeaturesScreenState extends State<AiFeaturesScreen> {
                         List.filled(5 - config.accuracyRating, '☆').join(),
                   ),
                   _specRow('Min RAM', config.minRam),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.table_chart_outlined, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Model Comparison',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Base direkomendasikan untuk keseimbangan ukuran, kecepatan, dan akurasi. '
+                    'Model besar membutuhkan RAM dan waktu proses lebih tinggi.',
+                  ),
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      columns: const [
+                        DataColumn(label: Text('Model')),
+                        DataColumn(label: Text('Size')),
+                        DataColumn(label: Text('Speed')),
+                        DataColumn(label: Text('RAM')),
+                      ],
+                      rows: [
+                        for (final item in localAiModelConfigs)
+                          DataRow(
+                            selected: item.model == config.model,
+                            cells: [
+                              DataCell(
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (item.recommended)
+                                      const Padding(
+                                        padding: EdgeInsets.only(right: 6),
+                                        child: Icon(
+                                          Icons.star_rounded,
+                                          size: 16,
+                                        ),
+                                      ),
+                                    Text(item.displayName),
+                                  ],
+                                ),
+                              ),
+                              DataCell(Text(item.sizeLabel)),
+                              DataCell(
+                                Text(
+                                  List.filled(item.speedRating, '⚡').join(),
+                                ),
+                              ),
+                              DataCell(Text(item.minRam)),
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
