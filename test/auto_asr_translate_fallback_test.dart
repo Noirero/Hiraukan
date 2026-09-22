@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kikoeru_flutter/src/providers/lyric_provider.dart';
 import 'package:kikoeru_flutter/src/services/asr_subtitle_cache.dart';
+import 'package:kikoeru_flutter/src/services/ai_transcription_service.dart';
 import 'package:kikoeru_flutter/src/services/online_asr_service.dart';
 
 void main() {
@@ -53,6 +54,42 @@ void main() {
     );
     expect(localDispatch, greaterThanOrEqualTo(0));
     expect(onlineDispatch, greaterThan(localDispatch));
+  });
+
+  test('quantized Whisper choices are first-class local models', () {
+    final byId = <String, LocalAiModelConfig>{
+      for (final config in localAiModelConfigs) config.id: config,
+    };
+
+    expect(byId['base_q5_1']?.fileName, 'ggml-base-q5_1.bin');
+    expect(byId['base_q8_0']?.fileName, 'ggml-base-q8_0.bin');
+    expect(byId['small_q5_1']?.fileName, 'ggml-small-q5_1.bin');
+    expect(
+      byId['large_v3_turbo_q5_0']?.fileName,
+      'ggml-large-v3-turbo-q5_0.bin',
+    );
+    expect(byId['base_q5_1']?.quantized, isTrue);
+    expect(byId['small_q5_1']?.model, WhisperModel.small);
+    expect(
+      byId['large_v3_turbo_q5_0']?.model,
+      WhisperModel.largeV3Turbo,
+    );
+  });
+
+  test('automatic fallback uses selected quantized model config', () {
+    final fallback = File(
+      'lib/src/services/asr_subtitle_fallback_service.dart',
+    ).readAsStringSync();
+    final service = File(
+      'lib/src/services/ai_transcription_service.dart',
+    ).readAsStringSync();
+
+    expect(fallback, contains('modelConfigFor(localModelName)'));
+    expect(fallback, contains('isModelConfigInstalled(modelConfig)'));
+    expect(fallback, contains('transcribeConfigured('));
+    expect(service, contains('modelPathForConfig'));
+    expect(service, contains('config.downloadUri'));
+    expect(service, contains('TranscribeRequest('));
   });
 
   test('online ASR endpoint can be supplied by build or app configuration', () {
