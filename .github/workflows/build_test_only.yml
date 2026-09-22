@@ -96,7 +96,7 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           if [ -z "$HIRAUAKAN_ONLINE_ASR_ENDPOINT" ]; then
-            echo "::warning::No online ASR endpoint configured; APK will build but audio-without-subtitle ASR is unavailable."
+            echo "::notice::No online ASR endpoint configured; local Whisper remains available after the user downloads a model."
           fi
           flutter build apk \
             --release \
