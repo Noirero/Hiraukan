@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../extensions/audio_extension.dart';
-import '../extensions/audio_extension_install_provider.dart';
 import '../extensions/audio_extension_provider.dart';
 import '../extensions/miyorare_audio_pack.dart';
 import '../widgets/scrollable_appbar.dart';
