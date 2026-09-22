@@ -527,6 +527,19 @@ class _AiFeaturesScreenState extends State<AiFeaturesScreen> {
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
+                    title: const Text('Mode Cepat'),
+                    subtitle: const Text(
+                      'Memakai optimasi speed-up Whisper. Lebih cepat muncul, '
+                      'dengan sedikit kompromi akurasi pada audio yang sulit.',
+                    ),
+                    value: _settings.whisperSpeedUp,
+                    onChanged: (value) async {
+                      await _settings.setWhisperSpeedUp(value);
+                      if (mounted) setState(() {});
+                    },
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
                     title: const Text('Word-Level Timestamps'),
                     subtitle: const Text(
                       'OFF lebih cepat. ON membuat segmentasi lebih detail.',
