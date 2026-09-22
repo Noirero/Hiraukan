@@ -8,6 +8,7 @@ import '../models/ai_job_identity.dart';
 import '../models/audio_track.dart';
 import '../models/lyric.dart';
 import '../utils/local_file_url.dart';
+import 'ai_audio_chunk_service.dart';
 import 'ai_transcription_service.dart';
 import 'asr_subtitle_cache.dart';
 import 'cache_service.dart';
@@ -40,6 +41,10 @@ class AsrSubtitleFallbackResult {
 }
 
 typedef AsrFallbackStatusCallback = void Function(String status);
+typedef AsrPartialLyricsCallback = Future<void> Function(
+  List<LyricLine> lyrics,
+  bool isComplete,
+);
 
 class AsrSubtitleFallbackService {
   AsrSubtitleFallbackService._();
@@ -49,6 +54,7 @@ class AsrSubtitleFallbackService {
   Future<AsrSubtitleFallbackResult?> generate({
     required AudioTrack track,
     AsrFallbackStatusCallback? onStatus,
+    AsrPartialLyricsCallback? onPartialLyrics,
     bool Function()? isCancelled,
   }) async {
     final identity = TrackIdentity.fromTrack(track);
@@ -104,37 +110,22 @@ class AsrSubtitleFallbackService {
         );
         if (prepared != null) {
           try {
-            onStatus?.call(
-              'Membuat subtitle dengan Whisper lokal ($localModelName)…',
-            );
-            final result = await transcription.transcribe(
-              prepared.path,
+            final lyrics = await _transcribeLocalAudio(
+              audioPath: prepared.path,
+              totalDuration: track.duration,
+              transcription: transcription,
+              modelName: localModelName,
               model: model,
               threads: featureSettings.whisperThreads,
               splitOnWord: featureSettings.whisperSplitOnWord,
               speedUp: featureSettings.whisperSpeedUp,
               language: requestedLanguage,
+              onStatus: onStatus,
+              onPartialLyrics: onPartialLyrics,
+              isCancelled: isCancelled,
             );
-            if (isCancelled?.call() == true) return null;
-            final lyrics = result == null
-                ? const <LyricLine>[]
-                : result.segments
-                    .where((segment) => segment.text.trim().isNotEmpty)
-                    .map(
-                      (segment) => LyricLine(
-                        startTime: Duration(
-                          milliseconds:
-                              (segment.startSeconds * 1000).round(),
-                        ),
-                        endTime: Duration(
-                          milliseconds:
-                              (segment.endSeconds * 1000).round(),
-                        ),
-                        text: segment.text.trim(),
-                      ),
-                    )
-                    .toList(growable: false);
 
+            if (isCancelled?.call() == true) return null;
             if (lyrics.isNotEmpty) {
               await AsrSubtitleCache.instance.save(
                 track: identity,
@@ -228,6 +219,148 @@ class AsrSubtitleFallbackService {
       serviceName: result.serviceName,
       sourceLanguage: result.sourceLanguage,
     );
+  }
+
+  Future<List<LyricLine>> _transcribeLocalAudio({
+    required String audioPath,
+    required Duration? totalDuration,
+    required AiTranscriptionService transcription,
+    required String modelName,
+    required dynamic model,
+    required int threads,
+    required bool splitOnWord,
+    required bool speedUp,
+    required String language,
+    AsrFallbackStatusCallback? onStatus,
+    AsrPartialLyricsCallback? onPartialLyrics,
+    bool Function()? isCancelled,
+  }) async {
+    const chunkDuration = Duration(seconds: 15);
+    const chunkThreshold = Duration(seconds: 25);
+
+    if (totalDuration == null || totalDuration <= chunkThreshold) {
+      onStatus?.call(
+        'Membuat subtitle dengan Whisper lokal ($modelName)…',
+      );
+      final result = await transcription.transcribe(
+        audioPath,
+        model: model,
+        threads: threads,
+        splitOnWord: splitOnWord,
+        speedUp: speedUp,
+        language: language,
+      );
+      return _lyricsFromSegments(
+        result?.segments ?? const <WhisperSegment>[],
+      );
+    }
+
+    final cumulative = <LyricLine>[];
+    var start = Duration.zero;
+
+    while (start < totalDuration) {
+      if (isCancelled?.call() == true) break;
+
+      final remaining = totalDuration - start;
+      final currentDuration =
+          remaining < chunkDuration ? remaining : chunkDuration;
+      final end = start + currentDuration;
+
+      onStatus?.call(
+        'Membuat subtitle cepat '
+        '${_formatClock(start)}–${_formatClock(end)}…',
+      );
+
+      final chunk = await AiAudioChunkService.instance.extractWavChunk(
+        inputPath: audioPath,
+        start: start,
+        duration: currentDuration,
+      );
+      if (chunk == null) {
+        if (start == Duration.zero) {
+          onStatus?.call(
+            'Mode cepat gagal menyiapkan potongan audio; mencoba file penuh…',
+          );
+          final fallback = await transcription.transcribe(
+            audioPath,
+            model: model,
+            threads: threads,
+            splitOnWord: splitOnWord,
+            speedUp: speedUp,
+            language: language,
+          );
+          return _lyricsFromSegments(
+            fallback?.segments ?? const <WhisperSegment>[],
+          );
+        }
+        break;
+      }
+
+      try {
+        final result = await transcription.transcribe(
+          chunk.path,
+          model: model,
+          threads: threads,
+          splitOnWord: splitOnWord,
+          speedUp: speedUp,
+          convert: false,
+          language: language,
+        );
+        if (isCancelled?.call() == true) break;
+
+        final offsetLines = _lyricsFromSegments(
+          result?.segments ?? const <WhisperSegment>[],
+          offset: start,
+        );
+        if (offsetLines.isNotEmpty) {
+          cumulative.addAll(offsetLines);
+          final isComplete = end >= totalDuration;
+          if (onPartialLyrics != null) {
+            await onPartialLyrics(
+              List<LyricLine>.unmodifiable(cumulative),
+              isComplete,
+            );
+          }
+        }
+      } finally {
+        try {
+          if (await chunk.exists()) await chunk.delete();
+        } catch (_) {}
+      }
+
+      start = end;
+    }
+
+    return List<LyricLine>.unmodifiable(cumulative);
+  }
+
+  List<LyricLine> _lyricsFromSegments(
+    List<WhisperSegment> segments, {
+    Duration offset = Duration.zero,
+  }) {
+    return segments
+        .where((segment) => segment.text.trim().isNotEmpty)
+        .map(
+          (segment) => LyricLine(
+            startTime: offset +
+                Duration(
+                  milliseconds: (segment.startSeconds * 1000).round(),
+                ),
+            endTime: offset +
+                Duration(
+                  milliseconds: (segment.endSeconds * 1000).round(),
+                ),
+            text: segment.text.trim(),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  String _formatClock(Duration value) {
+    final minutes = value.inMinutes;
+    final seconds = value.inSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:'
+        '${seconds.toString().padLeft(2, '0')}';
   }
 
   Future<_PreparedAsrAudio?> _prepareAudioInput(
