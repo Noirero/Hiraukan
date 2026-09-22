@@ -34,9 +34,9 @@ class _AiFeaturesScreenState extends State<AiFeaturesScreen> {
   }
 
   Future<void> _refreshModel() async {
-    final model = _config.model;
-    final installed = await _service.isModelInstalled(model);
-    final size = await _service.modelSize(model);
+    final config = _config;
+    final installed = await _service.isModelConfigInstalled(config);
+    final size = await _service.modelConfigSize(config);
     if (!mounted) return;
     setState(() {
       _installed = installed;
@@ -65,8 +65,8 @@ class _AiFeaturesScreenState extends State<AiFeaturesScreen> {
       _status = 'Mengunduh ${config.displayName}…';
     });
     try {
-      await _service.downloadModel(
-        config.model,
+      await _service.downloadModelConfig(
+        config,
         onProgress: (received, total) {
           if (!mounted) return;
           setState(() {
@@ -90,7 +90,7 @@ class _AiFeaturesScreenState extends State<AiFeaturesScreen> {
 
   Future<void> _openBrowser() async {
     final launched = await launchUrl(
-      _config.model.modelUri,
+      _config.downloadUri,
       mode: LaunchMode.externalApplication,
     );
     if (!launched && mounted) {
@@ -112,9 +112,9 @@ class _AiFeaturesScreenState extends State<AiFeaturesScreen> {
       _status = 'Mengimpor model…';
     });
     try {
-      await _service.importModelFromFile(
+      await _service.importModelConfigFromFile(
         sourceFilePath: path,
-        model: _config.model,
+        config: _config,
       );
       await _settings.setAiTranscriptionEnabled(true);
       await _refreshModel();
@@ -127,7 +127,7 @@ class _AiFeaturesScreenState extends State<AiFeaturesScreen> {
   }
 
   Future<void> _deleteModel() async {
-    await _service.deleteModel(_config.model);
+    await _service.deleteModelConfig(_config);
     await _settings.setAiTranscriptionEnabled(false);
     await _refreshModel();
     if (mounted) {
@@ -235,7 +235,7 @@ class _AiFeaturesScreenState extends State<AiFeaturesScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    initialValue: config.model.name,
+                    initialValue: config.id,
                     isExpanded: true,
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
@@ -243,11 +243,12 @@ class _AiFeaturesScreenState extends State<AiFeaturesScreen> {
                     items: [
                       for (final item in localAiModelConfigs)
                         DropdownMenuItem(
-                          value: item.model.name,
+                          value: item.id,
                           child: Text(
                             '${item.recommended ? '★ ' : ''}'
                             '${item.displayName}'
-                            '${item.recommended ? ' (Recommended)' : ''} '
+                            '${item.recommended ? ' (Recommended)' : ''}'
+                            '${item.badge == null ? '' : ' · ${item.badge}'} '
                             '${item.sizeLabel}',
                           ),
                         ),
@@ -305,7 +306,7 @@ class _AiFeaturesScreenState extends State<AiFeaturesScreen> {
                       rows: [
                         for (final item in localAiModelConfigs)
                           DataRow(
-                            selected: item.model == config.model,
+                            selected: item.id == config.id,
                             cells: [
                               DataCell(
                                 Row(
@@ -359,7 +360,9 @@ class _AiFeaturesScreenState extends State<AiFeaturesScreen> {
                     'Model',
                     config.recommended
                         ? '${config.displayName} (Recommended)'
-                        : config.displayName,
+                        : config.badge == null
+                            ? config.displayName
+                            : '${config.displayName} · ${config.badge}',
                   ),
                   if (_installedSize != null)
                     _infoRow(
