@@ -112,6 +112,7 @@ class AsrSubtitleFallbackService {
               model: model,
               threads: featureSettings.whisperThreads,
               splitOnWord: featureSettings.whisperSplitOnWord,
+              speedUp: featureSettings.whisperSpeedUp,
               language: requestedLanguage,
             );
             if (isCancelled?.call() == true) return null;
