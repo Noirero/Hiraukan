@@ -291,7 +291,9 @@ class _AiFeaturesScreenState extends State<AiFeaturesScreen> {
                   const SizedBox(height: 8),
                   const Text(
                     'Base direkomendasikan untuk keseimbangan ukuran, kecepatan, dan akurasi. '
-                    'Model besar membutuhkan RAM dan waktu proses lebih tinggi.',
+                    'Varian Q5/Q8 adalah model quantized: ukuran dan RAM lebih ringan '
+                    'dengan kompromi akurasi kecil. Model besar tetap membutuhkan '
+                    'RAM dan waktu proses lebih tinggi.',
                   ),
                   const SizedBox(height: 8),
                   SingleChildScrollView(
