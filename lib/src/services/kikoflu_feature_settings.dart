@@ -21,9 +21,11 @@ class KikoFluFeatureSettings {
   String get whisperModel =>
       StorageService.getString('${_prefix}whisper_model') ?? 'base';
   int get whisperThreads =>
-      StorageService.getInt('${_prefix}whisper_threads') ?? 4;
+      StorageService.getInt('${_prefix}whisper_threads') ?? 6;
   bool get whisperSplitOnWord =>
       StorageService.getBool('${_prefix}whisper_split_on_word') ?? false;
+  bool get whisperSpeedUp =>
+      StorageService.getBool('${_prefix}whisper_speed_up') ?? true;
 
   /// Endpoint ASR online milik gateway/backend Hiraukan.
   /// Dapat diisi oleh build dengan --dart-define=HIRAUAKAN_ONLINE_ASR_ENDPOINT=...
@@ -62,6 +64,8 @@ class KikoFluFeatureSettings {
       );
   Future<void> setWhisperSplitOnWord(bool value) =>
       StorageService.setBool('${_prefix}whisper_split_on_word', value);
+  Future<void> setWhisperSpeedUp(bool value) =>
+      StorageService.setBool('${_prefix}whisper_speed_up', value);
 
   Future<void> setOnlineAsrEndpoint(String value) =>
       StorageService.setString('${_prefix}online_asr_endpoint', value.trim());
