@@ -241,47 +241,54 @@ class AiTranscriptionService {
     '.mp3', '.wav', '.flac', '.m4a', '.aac', '.ogg', '.opus', '.wma', '.m4b',
   };
 
-  WhisperModel modelFromName(String value) => WhisperModel.values.firstWhere(
-        (model) => model.name == value,
-        orElse: () => WhisperModel.base,
-      );
+  WhisperModel modelFromName(String value) => modelConfigFor(value).model;
 
-  Future<bool> isModelInstalled(WhisperModel model) async {
+  Future<String> modelPathForConfig(LocalAiModelConfig config) async {
+    if (!config.quantized) {
+      return _ctrl.getPath(config.model);
+    }
+    final basePath = await _ctrl.getPath(config.model);
+    return p.join(p.dirname(basePath), config.fileName);
+  }
+
+  Future<bool> isModelConfigInstalled(LocalAiModelConfig config) async {
     try {
-      return File(await _ctrl.getPath(model)).exists();
+      return File(await modelPathForConfig(config)).exists();
     } catch (_) {
       return false;
     }
   }
 
-
-  Future<String> modelPath(WhisperModel model) => _ctrl.getPath(model);
-
-  Future<int?> modelSize(WhisperModel model) async {
+  Future<int?> modelConfigSize(LocalAiModelConfig config) async {
     try {
-      final file = File(await _ctrl.getPath(model));
+      final file = File(await modelPathForConfig(config));
       return await file.exists() ? await file.length() : null;
     } catch (_) {
       return null;
     }
   }
 
-  Future<void> deleteModel(WhisperModel model) async {
-    final file = File(await _ctrl.getPath(model));
+  Future<void> deleteModelConfig(LocalAiModelConfig config) async {
+    final path = await modelPathForConfig(config);
+    final file = File(path);
     if (await file.exists()) await file.delete();
-    final partial = File('${file.path}.downloading');
+    final partial = File('$path.downloading');
     if (await partial.exists()) await partial.delete();
   }
 
-  Future<String> importModelFromFile({
+  Future<String> importModelConfigFromFile({
     required String sourceFilePath,
-    required WhisperModel model,
+    required LocalAiModelConfig config,
   }) async {
     final source = File(sourceFilePath);
     if (!await source.exists()) {
       throw FileSystemException('Model file not found', sourceFilePath);
     }
-    final destination = await _ctrl.getPath(model);
+    if (p.extension(sourceFilePath).toLowerCase() != '.bin') {
+      throw const FormatException('Whisper model must be a .bin file');
+    }
+
+    final destination = await modelPathForConfig(config);
     final target = File(destination);
     await target.parent.create(recursive: true);
     if (await target.exists()) await target.delete();
@@ -289,12 +296,12 @@ class AiTranscriptionService {
     return destination;
   }
 
-  Future<String> downloadModel(
-    WhisperModel model, {
+  Future<String> downloadModelConfig(
+    LocalAiModelConfig config, {
     void Function(int received, int total)? onProgress,
     bool Function()? isCancelled,
   }) async {
-    final destination = await _ctrl.getPath(model);
+    final destination = await modelPathForConfig(config);
     final complete = File(destination);
     if (await complete.exists()) return destination;
 
@@ -310,7 +317,7 @@ class AiTranscriptionService {
 
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 30);
     try {
-      var request = await client.getUrl(model.modelUri);
+      var request = await client.getUrl(config.downloadUri);
       if (existing > 0) request.headers.set('Range', 'bytes=$existing-');
       var response = await request.close();
 
@@ -318,7 +325,9 @@ class AiTranscriptionService {
         existing = 0;
         if (await partial.exists()) await partial.delete();
       } else if (response.statusCode != 200 && response.statusCode != 206) {
-        throw HttpException('Whisper download failed: ${response.statusCode}');
+        throw HttpException(
+          'Whisper download failed: ${response.statusCode}',
+        );
       }
 
       final total = response.contentLength > 0
@@ -354,6 +363,52 @@ class AiTranscriptionService {
       }
     }
   }
+
+  // Backward-compatible helpers for legacy screens/tests.
+  Future<bool> isModelInstalled(WhisperModel model) =>
+      isModelConfigInstalled(
+        localAiModelConfigs.firstWhere(
+          (config) => config.model == model && !config.quantized,
+        ),
+      );
+
+  Future<String> modelPath(WhisperModel model) => _ctrl.getPath(model);
+
+  Future<int?> modelSize(WhisperModel model) => modelConfigSize(
+        localAiModelConfigs.firstWhere(
+          (config) => config.model == model && !config.quantized,
+        ),
+      );
+
+  Future<void> deleteModel(WhisperModel model) => deleteModelConfig(
+        localAiModelConfigs.firstWhere(
+          (config) => config.model == model && !config.quantized,
+        ),
+      );
+
+  Future<String> importModelFromFile({
+    required String sourceFilePath,
+    required WhisperModel model,
+  }) =>
+      importModelConfigFromFile(
+        sourceFilePath: sourceFilePath,
+        config: localAiModelConfigs.firstWhere(
+          (config) => config.model == model && !config.quantized,
+        ),
+      );
+
+  Future<String> downloadModel(
+    WhisperModel model, {
+    void Function(int received, int total)? onProgress,
+    bool Function()? isCancelled,
+  }) =>
+      downloadModelConfig(
+        localAiModelConfigs.firstWhere(
+          (config) => config.model == model && !config.quantized,
+        ),
+        onProgress: onProgress,
+        isCancelled: isCancelled,
+      );
 
   Future<TranscriptionResult?> transcribe(
     String audioPath, {
