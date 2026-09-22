@@ -36,11 +36,23 @@ void main() {
     expect(fallback, contains('AiTranscriptionService.instance'));
     expect(fallback, contains('isModelInstalled'));
     expect(fallback, isNot(contains('downloadModel(')));
+    expect(fallback, contains('_transcribeLocalAudio('));
+    expect(fallback, contains('AiAudioChunkService.instance.extractWavChunk'));
     expect(fallback, contains('OnlineAsrService.instance.transcribe'));
-    expect(
-      fallback.indexOf('transcription.transcribe('),
-      lessThan(fallback.indexOf('OnlineAsrService.instance.transcribe')),
+
+    final generateStart = fallback.indexOf(
+      'Future<AsrSubtitleFallbackResult?> generate',
     );
+    final localDispatch = fallback.indexOf(
+      '_transcribeLocalAudio(',
+      generateStart,
+    );
+    final onlineDispatch = fallback.indexOf(
+      'OnlineAsrService.instance.transcribe',
+      generateStart,
+    );
+    expect(localDispatch, greaterThanOrEqualTo(0));
+    expect(onlineDispatch, greaterThan(localDispatch));
   });
 
   test('online ASR endpoint can be supplied by build or app configuration', () {
