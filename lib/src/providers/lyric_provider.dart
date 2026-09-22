@@ -414,6 +414,35 @@ class LyricController extends StateNotifier<LyricState> {
     }
   }
 
+  Future<void> _resumePlaybackWhenFirstTranslationIsReady({
+    required int requestId,
+    required bool shouldResume,
+  }) async {
+    if (!shouldResume) return;
+
+    const timeout = Duration(seconds: 20);
+    const pollInterval = Duration(milliseconds: 80);
+    final startedAt = DateTime.now();
+
+    while (_isCurrentLoadRequest(requestId)) {
+      if (state.translatedCount > 0 || !state.isTranslating) {
+        break;
+      }
+      if (DateTime.now().difference(startedAt) >= timeout) {
+        break;
+      }
+      await Future<void>.delayed(pollInterval);
+    }
+
+    if (!_isCurrentLoadRequest(requestId)) return;
+    state = state.copyWith(
+      subtitleGenerationStatus: state.translatedCount > 0
+          ? 'Subtitle terjemahan awal siap. Melanjutkan playback…'
+          : 'Subtitle sumber siap. Melanjutkan playback…',
+    );
+    await ref.read(audioPlayerControllerProvider.notifier).play();
+  }
+
   Future<bool> _tryAutomaticAsrFallback(
     AudioTrack track,
     int requestId,
@@ -423,13 +452,21 @@ class LyricController extends StateNotifier<LyricState> {
       return false;
     }
 
+    final wasPlaying = ref.read(isPlayingProvider);
+    if (wasPlaying) {
+      await ref.read(audioPlayerControllerProvider.notifier).pause();
+      if (!_isCurrentLoadRequest(requestId)) return true;
+    }
+
     _setStateForLoadRequest(
       requestId,
       LyricState(
         lyrics: const [],
         isLoading: false,
         isGeneratingSubtitle: true,
-        subtitleGenerationStatus: 'Menyiapkan mesin subtitle…',
+        subtitleGenerationStatus: wasPlaying
+            ? 'Playback dijeda sementara untuk menyiapkan subtitle…'
+            : 'Menyiapkan mesin subtitle…',
         subtitleGeneratedByAsr: true,
       ),
     );
@@ -489,6 +526,10 @@ class LyricController extends StateNotifier<LyricState> {
       if (!_isCurrentLoadRequest(requestId)) return true;
 
       if (shouldTranslate) {
+        state = state.copyWith(
+          subtitleGenerationStatus:
+              'Menerjemahkan bagian subtitle terdekat dengan playback…',
+        );
         unawaited(
           translateAndSaveCurrentLyrics().catchError((error) {
             _log.captureOutput(
@@ -497,10 +538,21 @@ class LyricController extends StateNotifier<LyricState> {
             return null;
           }),
         );
+        unawaited(
+          _resumePlaybackWhenFirstTranslationIsReady(
+            requestId: requestId,
+            shouldResume: wasPlaying,
+          ),
+        );
+      } else if (wasPlaying) {
+        await ref.read(audioPlayerControllerProvider.notifier).play();
       }
       return true;
     } on AsrLocalModelNotInstalledException catch (error) {
       if (!_isCurrentLoadRequest(requestId)) return true;
+      if (wasPlaying) {
+        await ref.read(audioPlayerControllerProvider.notifier).play();
+      }
       _setStateForLoadRequest(
         requestId,
         LyricState(
@@ -514,6 +566,9 @@ class LyricController extends StateNotifier<LyricState> {
       return true;
     } on OnlineAsrNotConfiguredException {
       if (!_isCurrentLoadRequest(requestId)) return true;
+      if (wasPlaying) {
+        await ref.read(audioPlayerControllerProvider.notifier).play();
+      }
       _setStateForLoadRequest(
         requestId,
         LyricState(
@@ -528,6 +583,9 @@ class LyricController extends StateNotifier<LyricState> {
     } catch (error) {
       _log.captureOutput('[Lyric] ASR fallback gagal: $error');
       if (!_isCurrentLoadRequest(requestId)) return true;
+      if (wasPlaying) {
+        await ref.read(audioPlayerControllerProvider.notifier).play();
+      }
       _setStateForLoadRequest(
         requestId,
         LyricState(
