@@ -74,3 +74,29 @@ Pack signing, compatibility, rollback, and last-known-good behavior should remai
 - P5: harden cache, fallback, health, compatibility, rollback, and failure isolation.
 
 Do not delete the existing Unified Sources layer during P0-P2. It is the compatibility bridge while extensions are introduced.
+
+
+## Sealed Miyorare catalog discovery
+
+Hiraukan schema v1 discovers audio extension metadata from the latest stable
+`Noirero/Miyorare-Source-Packs` release when that release includes
+`miyorare-audio-extensions.json`.
+
+Before accepting the catalog, Hiraukan requires:
+
+- the stable Source Pack tag format;
+- `miyorare-release-lock.json`;
+- `miyorare-release-lock.sha256`;
+- an immutable lock created before stable publication;
+- a lock entry for the audio catalog with matching byte size and SHA-256.
+
+A validated catalog is stored locally as last-known-good. Network failure, API
+rate limiting, or a later release temporarily omitting the audio asset does not
+erase the last-known-good catalog. If no validated remote/LKG catalog exists,
+Hiraukan falls back to the compatible runtimes bundled in the application.
+
+Schema v1 still uses `delivery.kind = "builtin"`. A remote catalog can
+announce a newer extension version, but Hiraukan only enables it when the
+bundled runtime has compatible version/auth/capabilities. Unknown runtimes are
+shown as requiring an application update instead of being downloaded or
+executed.
