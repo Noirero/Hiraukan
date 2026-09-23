@@ -539,14 +539,37 @@ class AudioPlayerService {
 
       if (!loaded) {
         final streamUrl = fallbackStreamUrl ?? track.url;
-        await _player.setUrl(
-          streamUrl,
-          headers: track.playbackHeaders.isEmpty
-              ? null
-              : track.playbackHeaders,
-        );
+        try {
+          await _player.setUrl(
+            streamUrl,
+            headers: track.playbackHeaders.isEmpty
+                ? null
+                : track.playbackHeaders,
+          );
+          _log.captureOutput('[Audio] 流式播放: $streamUrl');
+        } catch (error) {
+          if (!AudioStreamStrategy.shouldTryHeaderAwareFallback(track) ||
+              track.hash == null ||
+              track.hash!.isEmpty) {
+            rethrow;
+          }
+
+          _log.captureOutput(
+            '[Audio] Native external stream failed, trying header-aware '
+            'range fallback: $error',
+          );
+          await CacheService.resetAudioCachePartial(track.hash!);
+          final source = CachingStreamAudioSource(
+            uri: Uri.parse(streamUrl),
+            hash: track.hash!,
+            headers: track.playbackHeaders,
+          );
+          await _player.setAudioSource(source);
+          _log.captureOutput(
+            '[Audio] Header-aware fallback stream: $streamUrl',
+          );
+        }
         unawaited(_hapticsService.prepareForTrack(track));
-        _log.captureOutput('[Audio] 流式播放: $streamUrl');
       }
 
       await _seekToSegmentStart(track);
