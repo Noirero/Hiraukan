@@ -26,12 +26,14 @@ class _CatalogAwareUnifiedSourceService extends UnifiedSourceService {
     required int page,
     required int pageSize,
     Set<UnifiedSourceKind>? enabledSources,
+    Asmr18CatalogCategory asmr18Category = Asmr18CatalogCategory.all,
   }) async {
     final result = await super.search(
       keyword: keyword,
       page: page,
       pageSize: pageSize,
       enabledSources: enabledSources,
+      asmr18Category: asmr18Category,
     );
 
     final enabled = enabledSources ?? UnifiedSourceKind.values.toSet();
