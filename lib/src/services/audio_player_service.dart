@@ -17,6 +17,7 @@ import 'audio_haptics_service.dart';
 import 'log_service.dart';
 import 'playback_history_service.dart';
 import 'playback_session_store.dart';
+import 'track_playback_progress_store.dart';
 import 'download_path_service.dart';
 import 'storage_service.dart';
 import '../utils/image_blur_util.dart';
@@ -683,6 +684,15 @@ class AudioPlayerService {
     _handlingTrackCompletion = true;
     try {
       final pauseGeneration = _pauseGeneration;
+      final completedTrack = currentTrack;
+      if (completedTrack != null) {
+        await TrackPlaybackProgressStore.instance.save(
+          completedTrack,
+          duration ?? position,
+          duration: duration ?? completedTrack.segmentDuration,
+          completed: true,
+        );
+      }
       _trackEndController.add(null);
       if (pauseGeneration != _pauseGeneration) return;
       if (_appLoopMode == LoopMode.one) {
