@@ -164,6 +164,7 @@ void main() {
           <h1>Chapter Work</h1>
           <div>2026年9月18日4時</div>
           <div>RJ01717942</div>
+          <a href="#bad">String.fromCharCode(c+29):c.toString(36));function(x){return x.replace(/a/g,'b')}00:00:00</a>
           <a href="#t1">track1_First00:00:00</a>
           <a href="#t2">track2_Second00:04:18</a>
           <a href="#t3">track3_Third00:11:23</a>
