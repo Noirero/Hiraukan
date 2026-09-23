@@ -1,0 +1,199 @@
+name: Temporary JapaneseASMR Verified Catalog Builder
+
+on:
+  push:
+    branches: [beta]
+    paths:
+      - .github/workflows/temporary-japaneseasmr-catalog-builder.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build-catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Build verified JapaneseASMR fallback catalog
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import concurrent.futures, json, re, urllib.request, urllib.error
+          from pathlib import Path
+
+          UA="Hiraukan/3.8 UnifiedSources"
+          GATEWAYS=[
+            "https://r.jina.ai/https://japaneseasmr.com",
+            "https://r.jina.ai/http://japaneseasmr.com",
+          ]
+
+          def fetch_text(url, timeout=30):
+              req=urllib.request.Request(url,headers={"User-Agent":UA,"Accept":"text/plain,*/*;q=0.8"})
+              with urllib.request.urlopen(req,timeout=timeout) as r:
+                  return r.read().decode("utf-8","replace")
+
+          def gateway_page(page):
+              suffix="/" if page==1 else f"/page/{page}/"
+              last=None
+              for base in GATEWAYS:
+                  try:
+                      text=fetch_text(base+suffix)
+                      if text.strip(): return text
+                  except Exception as e:
+                      last=e
+              raise RuntimeError(f"gateway page {page} failed: {last}")
+
+          heading_re=re.compile(r'^##\s+\[([^\]]+)\]\((https?://(?:www\.)?japaneseasmr\.com/(\d+)/?)\)\s*$',re.I|re.M)
+          rj_re=re.compile(r'RJ\d{3,10}',re.I)
+          cover_re=re.compile(r'!\[[^\]]*\]\((https?://(?:pic|img|pic1)\.weeabo0\.xyz/[^)\s]+)\)',re.I)
+          meta_re=re.compile(r'^\*\*\[(\d{6})\]\[([^\]]+)\].*?\[(RJ\d{3,10})\]\*\*\s*$',re.I|re.M)
+          voice_re=re.compile(r'^CV\s*:\s*(.+)$',re.I|re.M)
+
+          raw=[]
+          seen=set()
+          empty_streak=0
+          for page in range(1,31):
+              try:
+                  md=gateway_page(page)
+              except Exception as e:
+                  print("PAGE",page,"ERR",e)
+                  empty_streak += 1
+                  if empty_streak >= 2: break
+                  continue
+              heads=list(heading_re.finditer(md))
+              print("PAGE",page,"HEADINGS",len(heads))
+              if not heads:
+                  empty_streak += 1
+                  if empty_streak >= 2: break
+                  continue
+              empty_streak=0
+              for i,m in enumerate(heads):
+                  numeric=m.group(3)
+                  if numeric in seen: continue
+                  end=heads[i+1].start() if i+1<len(heads) else len(md)
+                  ctx=md[m.start():end]
+                  meta=meta_re.search(ctx)
+                  rj=(meta.group(3) if meta else (rj_re.search(ctx).group(0) if rj_re.search(ctx) else "")).upper()
+                  if not rj: continue
+                  cover_m=cover_re.search(ctx)
+                  cover=cover_m.group(1) if cover_m else f"https://pic.weeabo0.xyz/{rj}_img_main.jpg"
+                  voice_m=voice_re.search(ctx)
+                  raw.append({
+                    "numericId": numeric,
+                    "rj": rj,
+                    "title": m.group(1).strip(),
+                    "detailUrl": m.group(2),
+                    "coverUrl": cover,
+                    "mediaUrl": f"https://v.weeab0o.xyz/{rj}.m3u8",
+                    "releaseCode": meta.group(1) if meta else "",
+                    "circle": meta.group(2).strip() if meta else "",
+                    "voice": voice_m.group(1).strip() if voice_m else "",
+                  })
+                  seen.add(numeric)
+
+          print("RAW_TOTAL",len(raw))
+
+          def probe(entry):
+              headers={
+                "User-Agent":UA,
+                "Referer":entry["detailUrl"],
+                "Origin":"https://japaneseasmr.com",
+                "Range":"bytes=0-2047",
+              }
+              try:
+                  req=urllib.request.Request(entry["mediaUrl"],headers=headers)
+                  with urllib.request.urlopen(req,timeout=15) as r:
+                      data=r.read(2048)
+                      if r.status not in (200,206) or b"#EXTM3U" not in data:
+                          return None
+                  req=urllib.request.Request(entry["coverUrl"],headers=headers)
+                  with urllib.request.urlopen(req,timeout=15) as r:
+                      data=r.read(64)
+                      ctype=(r.headers.get("Content-Type") or "").lower()
+                      if r.status not in (200,206) or not ctype.startswith("image/") or not data:
+                          return None
+                  return entry
+              except Exception:
+                  return None
+
+          verified=[]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=16) as ex:
+              for item in ex.map(probe, raw):
+                  if item is not None:
+                      verified.append(item)
+          print("VERIFIED_TOTAL",len(verified))
+
+          def ds(value):
+              # JSON string syntax is also valid Dart double-quoted syntax.
+              return json.dumps(value, ensure_ascii=False).replace("$", r"\$")
+
+          lines=[
+            "// GENERATED by temporary-japaneseasmr-catalog-builder.yml.",
+            "// Verified catalog metadata: cover + HLS both answered successfully",
+            "// with JapaneseASMR source headers when this snapshot was built.",
+            "",
+            "class JapaneseAsmrVerifiedCatalogEntry {",
+            "  final String numericId;",
+            "  final String rj;",
+            "  final String title;",
+            "  final String detailUrl;",
+            "  final String coverUrl;",
+            "  final String mediaUrl;",
+            "  final String releaseCode;",
+            "  final String circle;",
+            "  final String voice;",
+            "",
+            "  const JapaneseAsmrVerifiedCatalogEntry({",
+            "    required this.numericId,",
+            "    required this.rj,",
+            "    required this.title,",
+            "    required this.detailUrl,",
+            "    required this.coverUrl,",
+            "    required this.mediaUrl,",
+            "    required this.releaseCode,",
+            "    required this.circle,",
+            "    required this.voice,",
+            "  });",
+            "}",
+            "",
+            "const japaneseAsmrVerifiedCatalog = <JapaneseAsmrVerifiedCatalogEntry>[",
+          ]
+          for e in verified:
+              lines += [
+                "  JapaneseAsmrVerifiedCatalogEntry(",
+                f"    numericId: {ds(e['numericId'])},",
+                f"    rj: {ds(e['rj'])},",
+                f"    title: {ds(e['title'])},",
+                f"    detailUrl: {ds(e['detailUrl'])},",
+                f"    coverUrl: {ds(e['coverUrl'])},",
+                f"    mediaUrl: {ds(e['mediaUrl'])},",
+                f"    releaseCode: {ds(e['releaseCode'])},",
+                f"    circle: {ds(e['circle'])},",
+                f"    voice: {ds(e['voice'])},",
+                "  ),",
+              ]
+          lines += ["];",""]
+          Path("lib/src/sources/japanese_asmr_verified_catalog.dart").write_text("\n".join(lines),encoding="utf-8")
+
+          if len(verified) < 100:
+              raise SystemExit(f"Verified catalog too small: {len(verified)}")
+          PY
+
+      - name: Commit generated catalog
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/src/sources/japanese_asmr_verified_catalog.dart
+          if git diff --cached --quiet; then
+            echo "Catalog unchanged"
+            exit 0
+          fi
+          git commit -m "data(beta): refresh verified JapaneseASMR catalog"
+          git push origin HEAD:beta
