@@ -114,6 +114,7 @@ class Asmr18PageParser {
       if (start == null || !seenStarts.add(start)) continue;
       var chapterTitle = text.substring(0, time.start).trim();
       if (chapterTitle.isEmpty) chapterTitle = 'Track ${raw.length + 1}';
+      if (!_looksLikeChapterTitle(chapterTitle)) continue;
       raw.add((start: start, title: chapterTitle, order: order++));
     }
 
@@ -142,6 +143,33 @@ class Asmr18PageParser {
       );
     }
     return result;
+  }
+
+  static bool _looksLikeChapterTitle(String value) {
+    final normalized = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (normalized.isEmpty || normalized.length > 220) return false;
+
+    final lower = normalized.toLowerCase();
+    const scriptSignals = <String>[
+      'string.fromcharcode',
+      'tostring(36)',
+      'function(',
+      '=>',
+      'document.',
+      'window.',
+      'eval(',
+      'replace(/',
+    ];
+    if (scriptSignals.any(lower.contains)) return false;
+
+    // A real chapter title may contain punctuation, but dense JavaScript-like
+    // punctuation around a timestamp is a strong signal that an ad/player
+    // script leaked into the anchor scan.
+    final scriptPunctuation =
+        RegExp(r'[{};=]').allMatches(normalized).length;
+    if (scriptPunctuation >= 4) return false;
+
+    return true;
   }
 
   static int? totalDurationSeconds(String html) {
