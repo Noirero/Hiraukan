@@ -30,6 +30,9 @@ AudioTrack _$AudioTrackFromJson(Map<String, dynamic> json) => AudioTrack(
       endOffset: json['endOffset'] == null
           ? null
           : Duration(microseconds: (json['endOffset'] as num).toInt()),
+      playbackHeaders: (json['playbackHeaders'] as Map<String, dynamic>?)
+              ?.map((k, e) => MapEntry(k, e as String)) ??
+          const {},
     );
 
 Map<String, dynamic> _$AudioTrackToJson(AudioTrack instance) =>
@@ -51,6 +54,7 @@ Map<String, dynamic> _$AudioTrackToJson(AudioTrack instance) =>
       'sourceTrackId': instance.sourceTrackId,
       'startOffset': instance.startOffset?.inMicroseconds,
       'endOffset': instance.endOffset?.inMicroseconds,
+      'playbackHeaders': instance.playbackHeaders,
     };
 
 Playlist _$PlaylistFromJson(Map<String, dynamic> json) => Playlist(
