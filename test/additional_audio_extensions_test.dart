@@ -141,6 +141,30 @@ void main() {
     );
   });
 
+  test('JapaneseASMR verified LKG stays browsable and playable', () {
+    final items = JapaneseAsmrGatewayParser.catalog(
+      JapaneseAsmrLastKnownGood.catalogMarkdown,
+      pageSize: 20,
+    );
+    expect(items, hasLength(1));
+    expect(items.single.ref.localId, 'RJ01717942');
+    expect(items.single.ref.detailUrl, 'https://japaneseasmr.com/150698/');
+
+    final detail = JapaneseAsmrLastKnownGood.detailMarkdown(
+      'https://japaneseasmr.com/150698/',
+    );
+    expect(detail, isNotNull);
+    final normalized = JapaneseAsmrGatewayParser.normalizeDetail(detail!);
+    expect(
+      SourceHtmlParser.extractPlayableUrls(normalized),
+      contains('https://v.weeab0o.xyz/RJ01717942.m3u8'),
+    );
+    expect(
+      JapaneseAsmrPageParser.totalDurationSeconds(normalized),
+      4778,
+    );
+  });
+
   test('JapaneseASMR gateway markdown keeps catalog, chapters and HLS', () {
     const catalogMarkdown = '''
 Title: Japanese ASMR
