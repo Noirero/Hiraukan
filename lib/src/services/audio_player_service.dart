@@ -35,6 +35,12 @@ class AudioPlayerService {
     if (Platform.isAndroid) {
       _androidLoudnessEnhancer = AndroidLoudnessEnhancer();
       _player = AudioPlayer(
+        // External sources such as ASMR Hentai require Referer on every
+        // range request, while HLS sources may need headers on manifest and
+        // segment requests. Send these through ExoPlayer directly instead of
+        // the localhost request-header proxy so Android cannot lose the
+        // source headers between the logical track and the real media request.
+        useProxyForRequestHeaders: false,
         audioPipeline: AudioPipeline(
           androidAudioEffects: [_androidLoudnessEnhancer!],
         ),
