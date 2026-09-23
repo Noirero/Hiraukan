@@ -26,6 +26,17 @@ class AudioTrack extends Equatable {
   /// every provider uses numeric work ids.
   final String? sourceWorkId;
 
+  /// Stable source-local track/chapter identity. Unlike [hash], this may be
+  /// unique for multiple virtual tracks that share one physical media URL.
+  final String? sourceTrackId;
+
+  /// Absolute offset in the physical source where this logical track starts.
+  final Duration? startOffset;
+
+  /// Absolute offset in the physical source where this logical track ends.
+  /// When null, the source/player duration is used as the natural end.
+  final Duration? endOffset;
+
   const AudioTrack({
     required this.id,
     required this.title,
@@ -41,12 +52,56 @@ class AudioTrack extends Equatable {
     this.subtitleWorkDirPath,
     this.sourceKey,
     this.sourceWorkId,
-  });
+    this.sourceTrackId,
+    this.startOffset,
+    this.endOffset,
+  })  : assert(startOffset == null || !startOffset.isNegative),
+        assert(endOffset == null || !endOffset.isNegative),
+        assert(
+          startOffset == null ||
+              endOffset == null ||
+              endOffset.inMicroseconds >= startOffset.inMicroseconds,
+        );
 
   factory AudioTrack.fromJson(Map<String, dynamic> json) =>
       _$AudioTrackFromJson(json);
 
   Map<String, dynamic> toJson() => _$AudioTrackToJson(this);
+
+  Duration get segmentStart => startOffset ?? Duration.zero;
+
+  Duration? get segmentEnd => endOffset;
+
+  bool get isSegmented =>
+      segmentStart > Duration.zero || segmentEnd != null;
+
+  /// Logical duration shown to the user for a virtual/segmented track.
+  Duration? get segmentDuration {
+    final end = segmentEnd;
+    if (end != null) {
+      final value = end - segmentStart;
+      return value < Duration.zero ? Duration.zero : value;
+    }
+    return duration;
+  }
+
+  /// Converts an absolute source position to this track's relative position.
+  Duration toRelativePosition(Duration absolutePosition) {
+    var relative = absolutePosition - segmentStart;
+    if (relative < Duration.zero) relative = Duration.zero;
+    final maximum = segmentDuration;
+    if (maximum != null && relative > maximum) return maximum;
+    return relative;
+  }
+
+  /// Converts a relative track position to an absolute source position.
+  Duration toAbsolutePosition(Duration relativePosition) {
+    var relative = relativePosition;
+    if (relative < Duration.zero) relative = Duration.zero;
+    final maximum = segmentDuration;
+    if (maximum != null && relative > maximum) relative = maximum;
+    return segmentStart + relative;
+  }
 
   AudioTrack copyWith({
     String? id,
@@ -63,6 +118,9 @@ class AudioTrack extends Equatable {
     String? subtitleWorkDirPath,
     String? sourceKey,
     String? sourceWorkId,
+    String? sourceTrackId,
+    Duration? startOffset,
+    Duration? endOffset,
   }) {
     return AudioTrack(
       id: id ?? this.id,
@@ -80,6 +138,9 @@ class AudioTrack extends Equatable {
           subtitleWorkDirPath ?? this.subtitleWorkDirPath,
       sourceKey: sourceKey ?? this.sourceKey,
       sourceWorkId: sourceWorkId ?? this.sourceWorkId,
+      sourceTrackId: sourceTrackId ?? this.sourceTrackId,
+      startOffset: startOffset ?? this.startOffset,
+      endOffset: endOffset ?? this.endOffset,
     );
   }
 
@@ -99,6 +160,9 @@ class AudioTrack extends Equatable {
         subtitleWorkDirPath,
         sourceKey,
         sourceWorkId,
+        sourceTrackId,
+        startOffset,
+        endOffset,
       ];
 }
 
