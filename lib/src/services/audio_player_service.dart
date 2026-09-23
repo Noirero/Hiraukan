@@ -866,9 +866,9 @@ class AudioPlayerService {
       _completionHandled = false;
     }
     final track = currentTrack;
-    final absolutePosition =
-        track?.toAbsolutePosition(position) ??
-        (position < Duration.zero ? Duration.zero : position);
+    final absolutePosition = track?.isSegmented == true
+        ? track!.toAbsolutePosition(position)
+        : (position < Duration.zero ? Duration.zero : position);
     await _player.seek(absolutePosition);
     _hapticsService.seek(absolutePosition);
     _updatePlaybackState();
