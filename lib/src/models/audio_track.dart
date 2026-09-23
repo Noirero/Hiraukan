@@ -55,13 +55,7 @@ class AudioTrack extends Equatable {
     this.sourceTrackId,
     this.startOffset,
     this.endOffset,
-  })  : assert(startOffset == null || !startOffset.isNegative),
-        assert(endOffset == null || !endOffset.isNegative),
-        assert(
-          startOffset == null ||
-              endOffset == null ||
-              endOffset.inMicroseconds >= startOffset.inMicroseconds,
-        );
+  });
 
   factory AudioTrack.fromJson(Map<String, dynamic> json) =>
       _$AudioTrackFromJson(json);
