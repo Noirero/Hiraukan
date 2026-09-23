@@ -131,6 +131,75 @@ void main() {
     );
   });
 
+  test('JapaneseASMR gateway markdown keeps catalog, chapters and HLS', () {
+    const catalogMarkdown = '''
+Title: Japanese ASMR
+
+## [Gateway Work](https://japaneseasmr.com/150698/)
+
+[![Image 1](https://pic.weeabo0.xyz/RJ01717942_img_main.jpg)](https://japaneseasmr.com/150698/)
+
+**[260913][Another] Gateway Work [RJ01717942]**
+
+CV: Kosuzu Momoka
+''';
+
+    final candidates = JapaneseAsmrGatewayParser.catalog(
+      catalogMarkdown,
+      page: 1,
+      pageSize: 20,
+    );
+    expect(candidates, hasLength(1));
+    expect(candidates.single.ref.localId, 'RJ01717942');
+    expect(candidates.single.ref.canonicalId, 'RJ01717942');
+    expect(candidates.single.ref.circle, 'Another');
+    expect(
+      candidates.single.ref.coverUrl,
+      'https://pic.weeabo0.xyz/RJ01717942_img_main.jpg',
+    );
+    expect(candidates.single.work.release, '2026-09-13');
+
+    const detailMarkdown = '''
+Title: Gateway Work – Japanese ASMR
+
+**[260913][Another] Gateway Work [RJ01717942]**
+CV: Kosuzu Momoka
+
+[Video 7](https://v.weeab0o.xyz/RJ01717942.m3u8)
+
+[00:00:00](https://japaneseasmr.com/150698/#)[track1_First](https://japaneseasmr.com/150698/#)
+[00:04:18](https://japaneseasmr.com/150698/#)[track2_Second](https://japaneseasmr.com/150698/#)
+[00:11:23](https://japaneseasmr.com/150698/#)[track3_Third](https://japaneseasmr.com/150698/#)
+
+総再生時間: 1時間19分38秒
+''';
+
+    expect(
+      JapaneseAsmrPageParser.title(
+        detailMarkdown,
+        canonical: 'RJ01717942',
+      ),
+      'Gateway Work',
+    );
+    expect(JapaneseAsmrPageParser.circle(detailMarkdown), 'Another');
+    expect(JapaneseAsmrPageParser.releaseDate(detailMarkdown), '2026-09-13');
+
+    final chapters = JapaneseAsmrPageParser.chapters(
+      detailMarkdown,
+      totalDurationSeconds:
+          JapaneseAsmrPageParser.totalDurationSeconds(detailMarkdown),
+    );
+    expect(chapters, hasLength(3));
+    expect(chapters[0].title, 'track1_First');
+    expect(chapters[1].startSeconds, 258);
+    expect(chapters[2].endSeconds, 4778);
+
+    expect(
+      SourceHtmlParser.extractPlayableUrls(detailMarkdown),
+      contains('https://v.weeab0o.xyz/RJ01717942.m3u8'),
+    );
+  });
+
   test('JapaneseASMR chapter parser de-duplicates repeated track tables', () {
     const html = '''
       <table>
