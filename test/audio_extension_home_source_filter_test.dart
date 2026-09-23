@@ -1,7 +1,18 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kikoeru_flutter/src/providers/works_provider.dart';
+import 'package:kikoeru_flutter/src/sources/asmr18_source_adapter.dart';
 
 void main() {
+  test('ASMR+18 exposes independent catalog category filters', () {
+    expect(
+      Asmr18CatalogCategory.values.map((value) => value.id),
+      <String>['all', 'boys', 'girls', 'allages'],
+    );
+    expect(Asmr18CatalogCategory.boys.label, 'Boys');
+    expect(Asmr18CatalogCategory.girls.label, 'Girls');
+  });
+
+
   test('disabled audio extensions are removed from Home source choices', () {
     const enabled = <String>{
       'miyorare.audio.hentai_asmr',
