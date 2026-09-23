@@ -133,6 +133,60 @@ void main() {
       );
     });
 
+    test('ASMR Hentai Referer survives Unified Source track mapping', () {
+      final service = UnifiedSourceService(
+        adapters: const [],
+        registry: UnifiedSourceRegistry.instance,
+      );
+      const source = UnifiedSourceRef(
+        source: UnifiedSourceKind.asmrHentaiNet,
+        localId: 'RJ244551',
+        canonicalId: 'RJ244551',
+        detailUrl: 'https://asmrhentai.net/RJ244551',
+      );
+      const resolved = ResolvedSourceTracks(
+        source: source,
+        files: <dynamic>[
+          <String, dynamic>{
+            'title': '(すすり、水音弱め)',
+            'type': 'audio',
+            'hash': 'asmr_hentai_net:RJ244551:a_cpz',
+            'sourceTrackId': 'a_cpz',
+            'mediaStreamUrl':
+                'https://newapi.asmrhentai.net/storage/RJ244551/a_cpz.opus',
+            'duration': 1285,
+            'startOffset': 0,
+            'endOffset': 1285,
+            'headers': <String, String>{
+              'Referer': 'https://asmrhentai.net',
+              'Origin': 'https://asmrhentai.net',
+              'User-Agent': 'Hiraukan/3.8 UnifiedSources',
+            },
+          },
+        ],
+        usedFallback: false,
+      );
+
+      final tracks = service.buildAudioTracks(
+        work: const Work(id: -244551, title: 'ASMR Hentai Work'),
+        resolved: resolved,
+        host: '',
+        token: '',
+      );
+
+      expect(tracks, hasLength(1));
+      expect(tracks.single.sourceKey, 'asmr_hentai_net');
+      expect(tracks.single.sourceTrackId, 'a_cpz');
+      expect(
+        tracks.single.playbackHeaders['Referer'],
+        'https://asmrhentai.net',
+      );
+      expect(
+        tracks.single.playbackHeaders['Origin'],
+        'https://asmrhentai.net',
+      );
+    });
+
     test('progress is isolated per virtual track even with one shared media hash',
         () async {
       SharedPreferences.setMockInitialValues(const <String, Object>{});
