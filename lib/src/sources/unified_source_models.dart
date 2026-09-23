@@ -15,6 +15,7 @@ enum UnifiedSourceCapability {
   metadata,
   playback,
   download,
+  subtitles,
 }
 
 extension UnifiedSourceKindX on UnifiedSourceKind {
@@ -73,6 +74,8 @@ extension UnifiedSourceKindX on UnifiedSourceKind {
           },
         UnifiedSourceKind.asmrHentaiNet => const {
             UnifiedSourceCapability.metadata,
+            UnifiedSourceCapability.playback,
+            UnifiedSourceCapability.subtitles,
           },
       };
 
@@ -83,6 +86,9 @@ extension UnifiedSourceKindX on UnifiedSourceKind {
 
   bool get canDownload =>
       capabilities.contains(UnifiedSourceCapability.download);
+
+  bool get canProvideSubtitles =>
+      capabilities.contains(UnifiedSourceCapability.subtitles);
 
   bool get isDownloadOnly => canDownload && !canPlay;
 }
