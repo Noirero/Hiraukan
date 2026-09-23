@@ -58,6 +58,9 @@ void main() {
         startOffset: Duration(minutes: 18, seconds: 24),
         endOffset: Duration(minutes: 33, seconds: 12),
         duration: Duration(minutes: 14, seconds: 48),
+        playbackHeaders: <String, String>{
+          'Referer': 'https://asmr18.fans/',
+        },
       );
 
       final restored = AudioTrack.fromJson(track.toJson());
@@ -67,6 +70,7 @@ void main() {
       expect(restored.startOffset, const Duration(minutes: 18, seconds: 24));
       expect(restored.endOffset, const Duration(minutes: 33, seconds: 12));
       expect(restored.segmentDuration, const Duration(minutes: 14, seconds: 48));
+      expect(restored.playbackHeaders['Referer'], 'https://asmr18.fans/');
     });
 
     test('unified source maps chapter rows into tracks sharing one source URL', () {
@@ -97,6 +101,9 @@ void main() {
             'mediaStreamUrl': 'https://cdn.example/work.m4a',
             'startOffset': '00:04:18',
             'endOffset': '00:11:23',
+            'headers': <String, String>{
+              'Referer': 'https://japaneseasmr.com/',
+            },
           },
         ],
         usedFallback: false,
@@ -116,6 +123,10 @@ void main() {
       expect(tracks[1].startOffset, const Duration(minutes: 4, seconds: 18));
       expect(tracks[1].endOffset, const Duration(minutes: 11, seconds: 23));
       expect(tracks[1].duration, const Duration(minutes: 7, seconds: 5));
+      expect(
+        tracks[1].playbackHeaders['Referer'],
+        'https://japaneseasmr.com/',
+      );
     });
   });
 }
