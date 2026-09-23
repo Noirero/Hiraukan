@@ -16,11 +16,12 @@ AudioExtension createAsmrHentaiNetAudioExtension() {
         AudioExtensionCapability.catalog,
         AudioExtensionCapability.search,
         AudioExtensionCapability.detail,
+        AudioExtensionCapability.playback,
+        AudioExtensionCapability.subtitles,
       },
       languages: ['ja'],
       homepage: AsmrHentaiNetSourceAdapter.baseUrl,
     ),
-    playbackEnabled: false,
     refBuilder: (workId) {
       final id = workId.toUpperCase();
       return UnifiedSourceRef(
