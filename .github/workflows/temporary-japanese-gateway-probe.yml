@@ -41,6 +41,10 @@ jobs:
                       media = re.findall(r'https?://[^\\"\'<>\\s)]+?\\.(?:m3u8|mp3|m4a|opus)(?:\\?[^\\"\'<>\\s)]*)?', text, re.I)
                       print("MEDIA", media[:10])
                       print("HEAD", re.sub(r'\\s+', ' ', text[:1200])[:1200])
+                      for needle in ["00:00:00", "総再生時間", "Player 1", "weeab0o", "weeabo0"]:
+                          idx = text.find(needle)
+                          if idx >= 0:
+                              print("CTX", needle, re.sub(r'\\s+', ' ', text[max(0,idx-500):idx+1800])[:2300])
               except Exception as e:
                   print("ERROR", type(e).__name__, str(e)[:240])
           PY
