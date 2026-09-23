@@ -49,7 +49,35 @@ jobs:
               "https://r.jina.ai/https://japaneseasmr.com/",
               "https://r.jina.ai/http://japaneseasmr.com/",
           ]:
-              get("japanese-home", url)
+              text = get("japanese-home", url)
+              if "r.jina.ai/https://" in url and text:
+                  print("\nLKG_CATALOG_BEGIN")
+                  lines = text.splitlines()
+                  for i, line in enumerate(lines):
+                      if line.startswith("## [") and "japaneseasmr.com/" in line:
+                          print(line)
+                          for extra in lines[i+1:i+8]:
+                              if extra.strip():
+                                  print(extra)
+                  print("LKG_CATALOG_END")
+
+          detail = get(
+              "japanese-detail-lkg",
+              "https://r.jina.ai/https://japaneseasmr.com/150698/",
+          )
+          print("\nLKG_DETAIL_BEGIN")
+          for line in detail.splitlines():
+              if (
+                  line.startswith("Title:")
+                  or line.startswith("**[")
+                  or line.startswith("CV:")
+                  or "weeabo0.xyz" in line
+                  or "weeab0o.xyz" in line
+                  or re.match(r"^\\[\\d{1,2}:\\d{2}:\\d{2}\\]", line)
+                  or "総再生時間" in line
+              ):
+                  print(line)
+          print("LKG_DETAIL_END")
           PY
 
       - name: Probe ASMR+18 work from device video
