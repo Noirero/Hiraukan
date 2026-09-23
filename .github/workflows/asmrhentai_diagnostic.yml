@@ -61,10 +61,10 @@ jobs:
                   if m not in seen:
                       seen.append(m)
           for x in seen:
-              if 'asmr' in x.lower() or 'Get' in x:
+              if 'asmr' in x.lower() or x.startswith('/Core/') or 'Get' in x:
                   print(x)
           print('=== contexts ===')
-          tokens=['InfoGet','TranscriptGet','CommentGet','Search','List','Newest','Latest','Page','Popular','Home','axios','fetch(','XMLHttpRequest']
+          tokens=['function ia','function ma','/Core/','Search','Discover','Newest','Latest','Popular','fetch(']
           for token in tokens:
               start=0
               count=0
