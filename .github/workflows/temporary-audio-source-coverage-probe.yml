@@ -1,0 +1,150 @@
+name: Temporary Audio Source Coverage Probe
+
+on:
+  push:
+    branches: [beta]
+    paths:
+      - .github/workflows/temporary-audio-source-coverage-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Probe JapaneseASMR LKG media and cover paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request, urllib.error
+
+          ids = [
+            "RJ01717942","RJ01716791","RJ01716745","RJ01715342",
+            "RJ01713737","RJ01713620","RJ01712009","RJ01711659",
+            "RJ01711059","RJ01711348","RJ01710787","RJ01710028",
+            "RJ01709638","RJ01709862",
+          ]
+          ua="Hiraukan/3.8 UnifiedSources"
+          for rid in ids:
+              print("\nID", rid)
+              urls = [
+                  ("hls", f"https://v.weeab0o.xyz/{rid}.m3u8"),
+                  ("cover", f"https://pic.weeabo0.xyz/{rid}_img_main.jpg"),
+                  ("cover-proxy", f"https://wsrv.nl/?url=pic.weeabo0.xyz/{rid}_img_main.jpg&output=webp"),
+              ]
+              for label,url in urls:
+                  try:
+                      req=urllib.request.Request(url,headers={"User-Agent":ua,"Range":"bytes=0-2047"})
+                      with urllib.request.urlopen(req,timeout=12) as r:
+                          data=r.read(2048)
+                          print(label, r.status, r.headers.get("Content-Type"), len(data), r.geturl(),
+                                "m3u8" if b"#EXTM3U" in data else data[:8].hex())
+                  except urllib.error.HTTPError as e:
+                      print(label, "HTTP", e.code, e.headers.get("Content-Type"))
+                  except Exception as e:
+                      print(label, "ERR", type(e).__name__, str(e)[:180])
+          PY
+
+      - name: Probe ASMR+18 category coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re, urllib.request
+          ua="Hiraukan/3.8 UnifiedSources"
+          for cat in ["boys","girls","all-ages"]:
+              for page in [1,2]:
+                  url=f"https://asmr18.fans/{cat}/" if page==1 else f"https://asmr18.fans/{cat}/page/{page}/"
+                  try:
+                      req=urllib.request.Request(url,headers={"User-Agent":ua,"Referer":"https://asmr18.fans/"})
+                      with urllib.request.urlopen(req,timeout=16) as r:
+                          html=r.read().decode("utf-8","replace")
+                          ids=[]
+                          for m in re.finditer(r'href=["\']([^"\']+/rj\d+/?)[^"\']*["\']',html,re.I):
+                              rid=re.search(r'RJ\d+',m.group(1),re.I)
+                              if rid and rid.group(0).upper() not in ids:
+                                  ids.append(rid.group(0).upper())
+                          print(cat, page, r.status, "count", len(ids), "ids", ids[:30])
+                  except Exception as e:
+                      print(cat, page, "ERR", type(e).__name__, str(e)[:180])
+          PY
+
+      - name: Probe ASMR Hentai recent playback coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, urllib.request, urllib.error
+
+          API="https://newapi.asmrhentai.net"
+          UA="Hiraukan/3.8 UnifiedSources"
+
+          def encode(v):
+              src=json.dumps(v,separators=(",",":")).encode()
+              return bytes(((~b)&0xff) for b in src)[::-1]
+          def decode(v):
+              raw=bytes(((~b)&0xff) for b in v)[::-1]
+              return json.loads(raw.decode())
+          def post(path,payload):
+              req=urllib.request.Request(API+path,data=encode(payload),
+                  headers={"Content-Type":"f/s","Accept-Language":"","User-Agent":UA},method="POST")
+              with urllib.request.urlopen(req,timeout=18) as r:
+                  return decode(r.read())
+          def tracks(nodes):
+              out=[]
+              if not isinstance(nodes,list): return out
+              for node in nodes:
+                  if not isinstance(node,dict): continue
+                  direct=node.get("b")
+                  if isinstance(direct,list):
+                      for t in direct:
+                          if isinstance(t,dict) and t.get("a"):
+                              out.append((str(t.get("a")),str(t.get("b") or ""),t.get("c")))
+                  out += tracks(node.get("c"))
+              return out
+
+          discover=post("/Core/Discover",{"a":"ja","b":0,"c":0,"d":[]})
+          raw=discover.get("b") or discover.get("a") or []
+          # API parser shape can vary. Recursively collect RJ ids.
+          ids=[]
+          def walk(x):
+              if isinstance(x,dict):
+                  for v in x.values(): walk(v)
+              elif isinstance(x,list):
+                  for v in x: walk(v)
+              elif isinstance(x,str) and x.upper().startswith("RJ") and x[2:].isdigit():
+                  u=x.upper()
+                  if u not in ids: ids.append(u)
+          walk(discover)
+          print("DISCOVER_IDS", ids[:16])
+          for wid in ids[:10]:
+              try:
+                  info=post("/Core/Info",{"a":"ja","b":wid})
+                  ts=tracks(info.get("h"))
+                  print("\nWORK",wid,"TRACKS",len(ts),ts[:4])
+                  for media_id,title,dur in ts[:3]:
+                      found=False
+                      for ext in ["opus","ogg","m4a","mp3"]:
+                          url=f"{API}/storage/{wid}/{media_id}.{ext}"
+                          h={"User-Agent":UA,"Referer":"https://asmrhentai.net","Range":"bytes=0-4095"}
+                          try:
+                              req=urllib.request.Request(url,headers=h)
+                              with urllib.request.urlopen(req,timeout=10) as r:
+                                  data=r.read(4096)
+                                  print(" ",media_id,ext,r.status,r.headers.get("Content-Type"),
+                                        r.headers.get("Content-Range"),data[:8].hex())
+                                  found=True
+                                  break
+                          except urllib.error.HTTPError as e:
+                              if e.code not in (404,403):
+                                  print(" ",media_id,ext,"HTTP",e.code)
+                          except Exception as e:
+                              print(" ",media_id,ext,"ERR",type(e).__name__,str(e)[:100])
+                      if not found:
+                          print(" ",media_id,"NO_MEDIA_VARIANT")
+              except Exception as e:
+                  print("\nWORK",wid,"ERR",type(e).__name__,str(e)[:180])
+          PY
