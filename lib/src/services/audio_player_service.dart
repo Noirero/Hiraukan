@@ -64,6 +64,7 @@ class AudioPlayerService {
   bool _isSwitchingTrack = false; // Flag to indicate track switching state
 
   static const Duration _sessionCheckpointInterval = Duration(seconds: 5);
+  static const Duration _segmentEndTolerance = Duration(milliseconds: 120);
   final PlaybackSessionStore _playbackSessionStore =
       const SharedPreferencesPlaybackSessionStore();
   Future<void> _sessionWrite = Future.value();
@@ -261,9 +262,12 @@ class AudioPlayerService {
 
   void _setupPlayerListeners() {
     // 预加载下一首：当前剩余时长低于阈值时，后台提前缓存队列中下一首
-    _player.positionStream.listen((position) {
-      _maybePreloadNextTrack(position, _player.duration);
-      _checkpointPlaybackSession(position);
+    _player.positionStream.listen((absolutePosition) {
+      final logicalPosition = _logicalPosition(absolutePosition);
+      final logicalDuration = _logicalDuration(_player.duration);
+      _maybePreloadNextTrack(logicalPosition, logicalDuration);
+      _checkpointPlaybackSession(logicalPosition);
+      _maybeCompleteActiveSegment(absolutePosition);
     });
 
     // Listen to player state changes
@@ -359,8 +363,8 @@ class AudioPlayerService {
         androidCompactActionIndices: const [0, 1, 2],
         processingState: effectiveProcessingState,
         playing: playing,
-        updatePosition: _player.position,
-        bufferedPosition: _player.bufferedPosition,
+        updatePosition: position,
+        bufferedPosition: _logicalPosition(_player.bufferedPosition),
         speed: _player.speed,
         queueIndex: _currentIndex >= 0 ? _currentIndex : null,
       ),
@@ -527,6 +531,8 @@ class AudioPlayerService {
         _log.captureOutput('[Audio] 流式播放: $streamUrl');
       }
 
+      await _seekToSegmentStart(track);
+
       // Do not replace system Now Playing metadata until the source itself is
       // known to be usable. Metadata failure must not invalidate playable audio.
       try {
@@ -555,6 +561,44 @@ class AudioPlayerService {
       _currentTrackController.add(track);
     }
     await persistPlaybackSession();
+  }
+
+  Future<void> _seekToSegmentStart(AudioTrack track) async {
+    final start = track.segmentStart;
+    if (start <= Duration.zero) return;
+    await _player.seek(start);
+  }
+
+  Duration _logicalPosition(Duration absolutePosition) {
+    final track = currentTrack;
+    if (track == null || !track.isSegmented) return absolutePosition;
+    return track.toRelativePosition(absolutePosition);
+  }
+
+  Duration? _logicalDuration(Duration? sourceDuration) {
+    final track = currentTrack;
+    if (track == null) return sourceDuration;
+    if (!track.isSegmented) return sourceDuration ?? track.duration;
+
+    final explicit = track.segmentDuration;
+    if (explicit != null) return explicit;
+    if (sourceDuration == null) return null;
+
+    final remaining = sourceDuration - track.segmentStart;
+    return remaining < Duration.zero ? Duration.zero : remaining;
+  }
+
+  void _maybeCompleteActiveSegment(Duration absolutePosition) {
+    final track = currentTrack;
+    final end = track?.segmentEnd;
+    if (track == null ||
+        end == null ||
+        !_player.playing ||
+        _handlingTrackCompletion) {
+      return;
+    }
+    if (absolutePosition + _segmentEndTolerance < end) return;
+    unawaited(_handleTrackCompletion());
   }
 
   // Update media item for system notification
@@ -604,7 +648,7 @@ class AudioPlayerService {
         album: track.album ?? '',
         title: displayTitle,
         artist: track.artist ?? '',
-        duration: track.duration,
+        duration: track.segmentDuration ?? track.duration,
         artUri: displayArtworkUrl != null ? Uri.parse(displayArtworkUrl) : null,
       ),
     );
@@ -821,33 +865,26 @@ class AudioPlayerService {
     if (Platform.isMacOS) {
       _completionHandled = false;
     }
-    await _player.seek(position);
-    _hapticsService.seek(position);
+    final track = currentTrack;
+    final absolutePosition =
+        track?.toAbsolutePosition(position) ??
+        (position < Duration.zero ? Duration.zero : position);
+    await _player.seek(absolutePosition);
+    _hapticsService.seek(absolutePosition);
     _updatePlaybackState();
     await persistPlaybackPosition();
   }
 
-  Future<void> seekForward(Duration duration) async {
-    final currentPosition = _player.position;
-    final totalDuration = _player.duration;
-    if (totalDuration != null) {
-      final newPosition = currentPosition + duration;
-      await _player.seek(
-        newPosition > totalDuration ? totalDuration : newPosition,
-      );
-      _updatePlaybackState();
-      await persistPlaybackPosition();
-    }
+  Future<void> seekForward(Duration amount) async {
+    final totalDuration = duration;
+    if (totalDuration == null) return;
+    final newPosition = position + amount;
+    await seek(newPosition > totalDuration ? totalDuration : newPosition);
   }
 
-  Future<void> seekBackward(Duration duration) async {
-    final currentPosition = _player.position;
-    final newPosition = currentPosition - duration;
-    await _player.seek(
-      newPosition < Duration.zero ? Duration.zero : newPosition,
-    );
-    _updatePlaybackState();
-    await persistPlaybackPosition();
+  Future<void> seekBackward(Duration amount) async {
+    final newPosition = position - amount;
+    await seek(newPosition < Duration.zero ? Duration.zero : newPosition);
   }
 
   Future<void> skipToNext() async {
@@ -1037,7 +1074,7 @@ class AudioPlayerService {
     final snapshot = PlaybackSessionSnapshot(
       queue: List<AudioTrack>.from(_queue),
       currentIndex: _currentIndex,
-      position: _player.position,
+      position: position,
       ownerKey: _sessionOwnerKey ??= _currentSessionOwnerKey() ?? '',
     );
     if (snapshot.ownerKey.isEmpty) return _sessionWrite;
@@ -1049,10 +1086,10 @@ class AudioPlayerService {
     if (_queue.isEmpty || _isRestoringSession || _sessionCompleted) {
       return _sessionWrite;
     }
-    final position = _player.position;
-    _lastSessionPositionMs = position.inMilliseconds;
+    final logicalPosition = position;
+    _lastSessionPositionMs = logicalPosition.inMilliseconds;
     return _enqueueSessionWrite(
-      () => _playbackSessionStore.savePosition(position),
+      () => _playbackSessionStore.savePosition(logicalPosition),
     );
   }
 
@@ -1091,13 +1128,15 @@ class AudioPlayerService {
       await _loadTrack(_queue[_currentIndex], emitCurrentTrack: false);
 
       var restoredPosition = snapshot.position;
-      final trackDuration = _player.duration;
+      final trackDuration = duration;
       if (trackDuration != null &&
           trackDuration > Duration.zero &&
           restoredPosition >= trackDuration) {
-        restoredPosition = trackDuration - const Duration(milliseconds: 1);
+        restoredPosition = trackDuration > const Duration(milliseconds: 1)
+            ? trackDuration - const Duration(milliseconds: 1)
+            : Duration.zero;
       }
-      await _player.seek(restoredPosition);
+      await seek(restoredPosition);
       _lastSessionPositionMs = restoredPosition.inMilliseconds;
       _updatePlaybackState();
       _currentTrackController.add(_queue[_currentIndex]);
@@ -1152,14 +1191,16 @@ class AudioPlayerService {
 
   // Getters and Streams
   Stream<PlayerState> get playerStateStream => _player.playerStateStream;
-  Stream<Duration> get positionStream => _player.positionStream;
-  Stream<Duration?> get durationStream => _player.durationStream;
+  Stream<Duration> get positionStream =>
+      _player.positionStream.map(_logicalPosition);
+  Stream<Duration?> get durationStream =>
+      _player.durationStream.map(_logicalDuration);
   Stream<List<AudioTrack>> get queueStream => _queueController.stream;
   Stream<AudioTrack?> get currentTrackStream => _currentTrackController.stream;
   Stream<bool> get trackLoadingStream => _trackLoadingController.stream;
 
-  Duration get position => _player.position;
-  Duration? get duration => _player.duration;
+  Duration get position => _logicalPosition(_player.position);
+  Duration? get duration => _logicalDuration(_player.duration);
   bool get playing => _player.playing;
   PlayerState get playerState => _player.playerState;
 
