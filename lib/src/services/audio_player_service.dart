@@ -80,6 +80,8 @@ class AudioPlayerService {
   bool _isRestoringSession = false;
   bool _sessionCompleted = false;
   bool _handlingTrackCompletion = false;
+  bool _headerAwareRecoveryInProgress = false;
+  String? _headerAwareFallbackTrackId;
   int _pauseGeneration = 0;
   String? _sessionOwnerKey;
 
@@ -446,6 +448,7 @@ class AudioPlayerService {
 
     // 换曲目后清空预加载标记，让新的"下一首"可重新触发预取
     _prefetchedNextHash = null;
+    _headerAwareFallbackTrackId = null;
     _sessionCompleted = false;
     _lastSessionPositionMs = 0;
 
@@ -563,8 +566,10 @@ class AudioPlayerService {
             uri: Uri.parse(streamUrl),
             hash: track.hash!,
             headers: track.playbackHeaders,
+            contentTypeOverride: 'audio/ogg',
           );
           await _player.setAudioSource(source);
+          _headerAwareFallbackTrackId = track.id;
           _log.captureOutput(
             '[Audio] Header-aware fallback stream: $streamUrl',
           );
@@ -898,8 +903,69 @@ class AudioPlayerService {
     unawaited(
       playback.catchError((Object error, StackTrace stackTrace) {
         _log.captureOutput('[Audio] Playback failed: $error');
+        final track = currentTrack;
+        if (track != null &&
+            AudioStreamStrategy.shouldTryHeaderAwareFallback(track)) {
+          unawaited(_recoverHeaderAwarePlayback(track, error));
+        }
       }),
     );
+  }
+
+  Future<void> _recoverHeaderAwarePlayback(
+    AudioTrack track,
+    Object originalError,
+  ) async {
+    if (_headerAwareRecoveryInProgress ||
+        _headerAwareFallbackTrackId == track.id ||
+        currentTrack?.id != track.id) {
+      return;
+    }
+    final hash = track.hash;
+    if (hash == null || hash.isEmpty) return;
+
+    _headerAwareRecoveryInProgress = true;
+    final resumePosition = _logicalPosition(_player.position);
+    try {
+      _log.captureOutput(
+        '[Audio] Retrying protected Opus through header-aware range source '
+        'after runtime playback error: $originalError',
+      );
+      await _player.stop();
+      await CacheService.resetAudioCachePartial(hash);
+      final source = CachingStreamAudioSource(
+        uri: Uri.parse(track.url),
+        hash: hash,
+        headers: track.playbackHeaders,
+        contentTypeOverride: 'audio/ogg',
+      );
+      await _player.setAudioSource(source);
+      _headerAwareFallbackTrackId = track.id;
+
+      final absolutePosition = track.isSegmented
+          ? track.toAbsolutePosition(resumePosition)
+          : resumePosition;
+      if (absolutePosition > Duration.zero) {
+        await _player.seek(absolutePosition);
+      }
+
+      final retryPlayback = _player.play();
+      _updatePlaybackState();
+      unawaited(
+        retryPlayback.catchError((Object error, StackTrace stackTrace) {
+          _log.captureOutput(
+            '[Audio] Header-aware runtime retry failed: $error',
+          );
+        }),
+      );
+    } catch (error) {
+      _headerAwareFallbackTrackId = null;
+      _log.captureOutput(
+        '[Audio] Header-aware runtime recovery failed: $error',
+      );
+    } finally {
+      _headerAwareRecoveryInProgress = false;
+    }
   }
 
   Future<void> pause() async {
