@@ -336,6 +336,99 @@ class Asmr18SourceAdapter extends HtmlAudioSiteSourceAdapter {
           dio: client,
         );
 
+  static const List<String> _catalogCategories = <String>[
+    'boys',
+    'girls',
+    'allages',
+  ];
+
+  @override
+  Future<SourceSearchPage> search({
+    required String keyword,
+    required int page,
+    required int pageSize,
+  }) async {
+    final logicalPage = page < 1 ? 1 : page;
+    final logicalPageSize = pageSize < 1 ? 1 : pageSize;
+    final requests = <Future<SourceSearchPage?>>[];
+
+    // ASMR+18 splits its catalog into independent categories. Build a logical
+    // combined feed from every provider page up to the requested page so
+    // items left over after a 40-item Hiraukan page are not skipped.
+    for (var providerPage = 1; providerPage <= logicalPage; providerPage++) {
+      for (final category in _catalogCategories) {
+        requests.add(
+          _searchCategoryPage(
+            category: category,
+            keyword: keyword,
+            page: providerPage,
+          ),
+        );
+      }
+    }
+
+    final pages = await Future.wait(requests);
+    final available = pages.whereType<SourceSearchPage>().toList();
+    if (available.isEmpty) {
+      throw StateError('ASMR+18 catalog categories are unavailable');
+    }
+
+    final merged = <SourceWorkCandidate>[];
+    final seen = <String>{};
+    for (final sourcePage in available) {
+      for (final candidate in sourcePage.items) {
+        final key = candidate.ref.canonicalId?.trim().toUpperCase() ??
+            candidate.ref.detailUrl.toLowerCase();
+        if (seen.add(key)) merged.add(candidate);
+      }
+    }
+
+    final start = (logicalPage - 1) * logicalPageSize;
+    final selected = start >= merged.length
+        ? const <SourceWorkCandidate>[]
+        : merged.skip(start).take(logicalPageSize).toList(growable: false);
+    final providerHasMore = available.any((sourcePage) => sourcePage.hasMore);
+    final bufferedHasMore = start + selected.length < merged.length;
+    final hasMore = bufferedHasMore || providerHasMore;
+    final totalCount =
+        merged.length + (providerHasMore ? logicalPageSize : 0);
+
+    return SourceSearchPage(
+      items: selected,
+      totalCount: totalCount,
+      hasMore: hasMore,
+    );
+  }
+
+  Future<SourceSearchPage?> _searchCategoryPage({
+    required String category,
+    required String keyword,
+    required int page,
+  }) async {
+    try {
+      final adapter = HtmlAudioSiteSourceAdapter(
+        kind: UnifiedSourceKind.asmr18,
+        baseUrl: baseUrl,
+        cacheNamespace: 'asmr18:$category',
+        catalogUrlBuilder: (query, providerPage) =>
+            _categoryCatalogUrl(category, query, providerPage),
+        detailUrlMatcher: _isDetailUrl,
+        dio: _client,
+      );
+      // Provider category pages currently contain about 24 works. A large
+      // local limit ensures the parser never truncates a provider page before
+      // the combined Hiraukan pagination is applied.
+      return await adapter.search(
+        keyword: keyword,
+        page: page,
+        pageSize: 200,
+      );
+    } catch (_) {
+      // A single category outage must not empty the other ASMR+18 categories.
+      return null;
+    }
+  }
+
   @override
   Future<Work> loadDetail(UnifiedSourceRef ref) async {
     final html = await _getHtml(ref.detailUrl);
@@ -536,6 +629,21 @@ class Asmr18SourceAdapter extends HtmlAudioSiteSourceAdapter {
   }
 }
 
+String _categoryCatalogUrl(
+  String category,
+  String keyword,
+  int page,
+) {
+  final encoded = Uri.encodeQueryComponent(keyword);
+  final prefix = '${Asmr18SourceAdapter.baseUrl}/$category/';
+  if (keyword.isEmpty) {
+    return page <= 1 ? prefix : '${prefix}page/$page/';
+  }
+  return page <= 1
+      ? '${prefix}?s=$encoded'
+      : '${prefix}page/$page/?s=$encoded';
+}
+
 String _catalogUrl(String keyword, int page) {
   final encoded = Uri.encodeQueryComponent(keyword);
   const prefix = '${Asmr18SourceAdapter.baseUrl}/boys/';
@@ -551,7 +659,7 @@ bool _isDetailUrl(Uri uri) {
   final host = uri.host.toLowerCase().replaceFirst('www.', '');
   if (host != 'asmr18.fans') return false;
   return RegExp(
-    r'^/(?:boys|girls|all-ages)/rj\d+/?',
+    r'^/(?:boys|girls|allages|all-ages)/(?:rj|bj)\d+/?',
     caseSensitive: false,
   ).hasMatch(uri.path);
 }
