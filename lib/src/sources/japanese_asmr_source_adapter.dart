@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 
 import '../models/work.dart';
 import 'html_audio_site_source_adapter.dart';
+import 'japanese_asmr_verified_catalog.dart';
 import 'source_html_parser.dart';
 import 'unified_source_models.dart';
 
@@ -404,182 +405,30 @@ class JapaneseAsmrGatewayParser {
       .replaceAll('>', '&gt;');
 }
 
-class _JapaneseAsmrLkgEntry {
-  final String numericId;
-  final String rj;
-  final String title;
-  final String circle;
-  final String voice;
-  final String releaseCode;
-  final int? durationSeconds;
-
-  const _JapaneseAsmrLkgEntry({
-    required this.numericId,
-    required this.rj,
-    required this.title,
-    required this.circle,
-    required this.voice,
-    required this.releaseCode,
-    this.durationSeconds,
-  });
-
-  String get detailUrl => 'https://japaneseasmr.com/$numericId/';
-  String get coverUrl => 'https://pic.weeabo0.xyz/${rj}_img_main.jpg';
-  String get mediaUrl => 'https://v.weeab0o.xyz/$rj.m3u8';
-
-  String get catalogMarkdown => '''
-## [$title]($detailUrl)
-
-[![Image](${coverUrl})](${detailUrl})
-
-**[$releaseCode][$circle] $title [$rj]**
-
-CV: $voice
-''';
-
-  String get detailMarkdown => '''
-Title: $title – Japanese ASMR
-
-![Image](${coverUrl})
-
-**[$releaseCode][$circle] $title [$rj]**
-
-CV: $voice
-
-[Audio](${mediaUrl})
-${durationSeconds == null ? '' : '総再生時間:${_durationLabel(durationSeconds!)}'}
-''';
-
-  static String _durationLabel(int totalSeconds) {
-    final hours = totalSeconds ~/ 3600;
-    final minutes = (totalSeconds % 3600) ~/ 60;
-    final seconds = totalSeconds % 60;
-    return '${hours}時間${minutes}分${seconds}秒';
-  }
-}
-
 class JapaneseAsmrLastKnownGood {
   const JapaneseAsmrLastKnownGood._();
 
-  static const List<_JapaneseAsmrLkgEntry> entries = <
-      _JapaneseAsmrLkgEntry>[
-    _JapaneseAsmrLkgEntry(
-      numericId: '150698',
-      rj: 'RJ01717942',
-      title: '【KU100★恋鈴桃歌】彼女といちゃらぶ温泉旅行',
-      circle: 'Another',
-      voice: 'Kosuzu Momoka',
-      releaseCode: '260913',
-      durationSeconds: 4778,
-    ),
-    _JapaneseAsmrLkgEntry(
-      numericId: '150697',
-      rj: 'RJ01716791',
-      title: '【バブみ×搾精】爆乳ママお姉さんのよしよし射精管理〜赤ちゃんプレイで甘とろ授乳しながら全部吸い取られる夜〜',
-      circle: 'M屋',
-      voice: '田中',
-      releaseCode: '260912',
-    ),
-    _JapaneseAsmrLkgEntry(
-      numericId: '150696',
-      rj: 'RJ01716745',
-      title: '【オホ声ギャル】陰キャ専用に堕ちたクラスのギャルの分からせ生ハメ性活〜「キモいとか言ってごめん、もうチンポなしじゃ無理ぃ」〜',
-      circle: 'バタリンコちゃん',
-      voice: '未想可みいろ',
-      releaseCode: '260912',
-    ),
-    _JapaneseAsmrLkgEntry(
-      numericId: '150695',
-      rj: 'RJ01715342',
-      title: '【早期購入特典付き】“ベロチュー義務違反”により強○あまあまベロチューをしてくる、ラブラブふわふわベロチューポリス',
-      circle: '防鯖潤滑剤',
-      voice: 'Haru Koyama',
-      releaseCode: '260914',
-    ),
-    _JapaneseAsmrLkgEntry(
-      numericId: '150694',
-      rj: 'RJ01713737',
-      title: '稲荷の湯宿～お狐様が交尾でおもてなし～',
-      circle: 'Hello,Sound!!',
-      voice: 'Gemiko Yamada, 星野天',
-      releaseCode: '260909',
-    ),
-    _JapaneseAsmrLkgEntry(
-      numericId: '150693',
-      rj: 'RJ01713620',
-      title: '【ご奉仕大好き♡】清楚系生徒会長のアヘ顔下品喘ぎは僕しか知らない2～生徒会室ハメ撮り&卒業前の檀上騎乗位でオホ声中出し答辞～',
-      circle: 'うこんちゃん☆かんぱにぃ',
-      voice: '都みみち',
-      releaseCode: '260913',
-    ),
-    _JapaneseAsmrLkgEntry(
-      numericId: '150692',
-      rj: 'RJ01712009',
-      title: '「プロデューサー、さっさと 私のちんぽ 抜いてくれませんか」～ダウナーふたなりアイドルと秘密の『性欲処理係』～【逆レ・逆アナル・逆イラマ】',
-      circle: 'もちちコンロ',
-      voice: 'Izumi Mikoshiba',
-      releaseCode: '260912',
-    ),
-    _JapaneseAsmrLkgEntry(
-      numericId: '150691',
-      rj: 'RJ01711659',
-      title: '【たっぷり4時間半】サキュバスホームステイ 甘々ねっとり家族旅行♡ いつでもどこでも空っぽになるまでぴゅっぴゅしようね…?',
-      circle: 'Ogre illust',
-      voice: 'Chiroru Oyama, Yui Otokura',
-      releaseCode: '260916',
-    ),
-    _JapaneseAsmrLkgEntry(
-      numericId: '150689',
-      rj: 'RJ01711059',
-      title: '耳キッスオナニー ドスケベえっちな後輩ギャルたちのお耳ちゅっちゅ♡に合わせてとろとろシコシコ♡',
-      circle: 'おーだーめいど',
-      voice: 'Haru Amachi, Koyori Engawa',
-      releaseCode: '260911',
-    ),
-    _JapaneseAsmrLkgEntry(
-      numericId: '150690',
-      rj: 'RJ01711348',
-      title: 'パパ幼稚園2 清楚JKは通いママ♡新人パパさんの家庭教師♡赤ちゃん体験子育て学習☆(ママ、オホ声)',
-      circle: 'シコリテック∞ジョイント',
-      voice: '都みみち, Tsubame Yuzuki',
-      releaseCode: '260912',
-    ),
-    _JapaneseAsmrLkgEntry(
-      numericId: '150688',
-      rj: 'RJ01710787',
-      title: '【ギャル×性癖バレ】オタクの夢を叶えてくれるネカフェ店員さん。舌ピを覗かせるエロギャルに気に入られました',
-      circle: 'あぶそりゅ～と',
-      voice: '伊倉える',
-      releaseCode: '260911',
-    ),
-    _JapaneseAsmrLkgEntry(
-      numericId: '150687',
-      rj: 'RJ01710028',
-      title: '【DM特典付き!!壁越しNTR】後輩バレー部エースの最愛彼女がヤリチンDQNに寝取られるまで～体育倉庫から聞こえる、僕の知らない下品なメス声～',
-      circle: 'エモイ堂',
-      voice: 'Suika Nishiuri',
-      releaseCode: '260912',
-    ),
-    _JapaneseAsmrLkgEntry(
-      numericId: '150684',
-      rj: 'RJ01709638',
-      title: '【対魔忍RPGX】水城ゆきかぜ、秋山凜子ASMR～最強バディ対魔忍、連鎖堕ちで完全敗北。焦らして、堕として、マゾオナホ～',
-      circle: 'Lilith [リリス]',
-      voice: '氷室百合, 北板利亜',
-      releaseCode: '260911',
-    ),
-    _JapaneseAsmrLkgEntry(
-      numericId: '150686',
-      rj: 'RJ01709862',
-      title: '戦隊ピンク敗北NTR報告～負け癖のついたヒロインの末路～',
-      circle: 'hyper-mind Graphics',
-      voice: 'Ryou Suzuki, 鬼霧茜',
-      releaseCode: '260912',
-    ),
-  ];
+  static List<JapaneseAsmrVerifiedCatalogEntry> get entries =>
+      japaneseAsmrVerifiedCatalog;
 
-  static String get catalogMarkdown =>
-      entries.map((entry) => entry.catalogMarkdown).join('\n');
+  static String get catalogMarkdown => entries.map((entry) {
+        final metadata = <String>[
+          if (entry.releaseCode.isNotEmpty) entry.releaseCode,
+          if (entry.circle.isNotEmpty) entry.circle,
+        ];
+        final metadataLine = metadata.isEmpty
+            ? '[${entry.rj}]'
+            : '[${metadata.join('][')}] ${entry.title} [${entry.rj}]';
+        return '''
+## [${entry.title}](${entry.detailUrl})
+
+[![Image](${entry.coverUrl})](${entry.detailUrl})
+
+**$metadataLine**
+
+CV: ${entry.voice}
+''';
+      }).join('\n');
 
   static String? detailMarkdown(String sourceUrl) {
     final uri = Uri.tryParse(sourceUrl);
@@ -588,10 +437,35 @@ class JapaneseAsmrLastKnownGood {
         uri.path.split('/').where((segment) => segment.isNotEmpty).toList();
     if (segments.isEmpty) return null;
     final numericId = segments.last;
+
+    JapaneseAsmrVerifiedCatalogEntry? selected;
     for (final entry in entries) {
-      if (entry.numericId == numericId) return entry.detailMarkdown;
+      if (entry.numericId == numericId) {
+        selected = entry;
+        break;
+      }
     }
-    return null;
+    if (selected == null) return null;
+
+    final entry = selected;
+    final metadata = <String>[
+      if (entry.releaseCode.isNotEmpty) entry.releaseCode,
+      if (entry.circle.isNotEmpty) entry.circle,
+    ];
+    final metadataLine = metadata.isEmpty
+        ? '[${entry.rj}]'
+        : '[${metadata.join('][')}] ${entry.title} [${entry.rj}]';
+    return '''
+Title: ${entry.title} – Japanese ASMR
+
+![Image](${entry.coverUrl})
+
+**$metadataLine**
+
+CV: ${entry.voice}
+
+[Audio](${entry.mediaUrl})
+''';
   }
 }
 
@@ -669,7 +543,7 @@ class JapaneseAsmrSourceAdapter extends HtmlAudioSiteSourceAdapter {
     final normalizedKeyword = keyword.trim().toLowerCase();
     var items = JapaneseAsmrGatewayParser.catalog(
       JapaneseAsmrLastKnownGood.catalogMarkdown,
-      pageSize: 100,
+      pageSize: JapaneseAsmrLastKnownGood.entries.length,
     );
     if (normalizedKeyword.isNotEmpty) {
       items = items.where((candidate) {
