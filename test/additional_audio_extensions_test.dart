@@ -3,6 +3,7 @@ import 'package:kikoeru_flutter/src/extensions/asmr18_audio_extension.dart';
 import 'package:kikoeru_flutter/src/extensions/asmr_hentai_net_audio_extension.dart';
 import 'package:kikoeru_flutter/src/extensions/audio_extension_manifest.dart';
 import 'package:kikoeru_flutter/src/extensions/japanese_asmr_audio_extension.dart';
+import 'package:kikoeru_flutter/src/sources/asmr18_source_adapter.dart';
 import 'package:kikoeru_flutter/src/sources/asmr_hentai_net_source_adapter.dart';
 import 'package:kikoeru_flutter/src/sources/japanese_asmr_source_adapter.dart';
 import 'package:kikoeru_flutter/src/sources/source_html_parser.dart';
@@ -149,6 +150,89 @@ void main() {
     expect(chapters, hasLength(2));
     expect(chapters[0].title, 'Track 1');
     expect(chapters[1].title, 'Track 2');
+  });
+
+  test('ASMR+18 parser reads chapter timeline and source metadata', () {
+    const html = '''
+      <html>
+        <head>
+          <meta property="og:title"
+              content="Chapter Work - 男子向け - 同人ボイス ASMR+18">
+          <meta property="og:image" content="/cover.jpg">
+        </head>
+        <body>
+          <h1>Chapter Work</h1>
+          <div>2026年9月18日4時</div>
+          <div>RJ01717942</div>
+          <a href="#t1">track1_First00:00:00</a>
+          <a href="#t2">track2_Second00:04:18</a>
+          <a href="#t3">track3_Third00:11:23</a>
+          <div>
+            声優 <a href="/cv/voice/">Kosuzu Momoka</a>
+            サークル <a href="/circle/another/">Another</a>
+            シナリオ <a href="/scenario/x/">Writer</a>
+            ジャンル <a href="/genre/ear/">Ear Cleaning</a>
+          </div>
+          <p>Track1 First (4:18)</p>
+          <p>Track2 Second (7:05)</p>
+          <p>Track3 Third (9:44)</p>
+          <div>Comments</div>
+        </body>
+      </html>
+    ''';
+
+    expect(Asmr18PageParser.canonicalId(html), 'RJ01717942');
+    expect(
+      Asmr18PageParser.title(
+        html,
+        canonical: 'RJ01717942',
+      ),
+      'Chapter Work',
+    );
+    expect(
+      Asmr18PageParser.releaseDate(html, canonical: 'RJ01717942'),
+      '2026-09-18',
+    );
+    expect(
+      Asmr18PageParser.voiceActors(html, canonical: 'RJ01717942'),
+      ['Kosuzu Momoka'],
+    );
+    expect(
+      Asmr18PageParser.circle(html, canonical: 'RJ01717942'),
+      'Another',
+    );
+    expect(
+      Asmr18PageParser.genres(html, canonical: 'RJ01717942'),
+      contains('Ear Cleaning'),
+    );
+
+    final chapters = Asmr18PageParser.chapters(html);
+    expect(chapters, hasLength(3));
+    expect(chapters[0].startSeconds, 0);
+    expect(chapters[0].endSeconds, 258);
+    expect(chapters[1].startSeconds, 258);
+    expect(chapters[1].endSeconds, 683);
+    expect(chapters[1].durationSeconds, 425);
+    expect(chapters[2].endSeconds, 1267);
+    expect(Asmr18PageParser.totalDurationSeconds(html), 1267);
+  });
+
+  test('ASMR+18 media candidates prefer URLs exposed by page/player data', () {
+    const html = '''
+      <audio src="/media/work.m4a"></audio>
+      <script>const stream = "https://cdn.example.test/work/master.m3u8";</script>
+    ''';
+
+    final candidates = Asmr18PageParser.playableCandidates(
+      html,
+      pageUri: Uri.parse('https://asmr18.fans/boys/rj01717942/'),
+    );
+
+    expect(candidates.first, 'https://asmr18.fans/media/work.m4a');
+    expect(
+      candidates,
+      contains('https://cdn.example.test/work/master.m3u8'),
+    );
   });
 
   test('ASMR Hentai wire codec round-trips API payloads', () {
