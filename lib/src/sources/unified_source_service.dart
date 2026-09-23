@@ -352,6 +352,7 @@ class UnifiedSourceService {
       final title = file['title']?.toString() ??
           file['name']?.toString() ??
           SourceHtmlParser.basenameFromUrl(url, entry.key);
+      final playbackHeaders = _trackHeaders(file['headers']);
       final rawSourceTrackId = file['sourceTrackId'] ??
           file['trackId'] ??
           file['id'];
@@ -380,10 +381,24 @@ class UnifiedSourceService {
                   : sourceTrackId,
           startOffset: startOffset,
           endOffset: endOffset,
+          playbackHeaders: playbackHeaders,
         ),
       );
     }
     return tracks;
+  }
+
+  Map<String, String> _trackHeaders(Object? raw) {
+    if (raw is! Map) return const {};
+    final result = <String, String>{};
+    for (final entry in raw.entries) {
+      final key = entry.key?.toString().trim() ?? '';
+      final value = entry.value?.toString() ?? '';
+      if (key.isNotEmpty && value.isNotEmpty) {
+        result[key] = value;
+      }
+    }
+    return result;
   }
 
   Duration? _trackOffset(Object? raw) {
