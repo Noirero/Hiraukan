@@ -160,6 +160,20 @@ void main() {
     );
   });
 
+  test('JapaneseASMR browse paginates the full verified snapshot', () async {
+    final adapter = JapaneseAsmrSourceAdapter();
+
+    final first = await adapter.search(keyword: '', page: 1, pageSize: 40);
+    final third = await adapter.search(keyword: '', page: 3, pageSize: 40);
+
+    expect(first.items, hasLength(40));
+    expect(first.totalCount, 104);
+    expect(first.hasMore, isTrue);
+    expect(third.items, hasLength(24));
+    expect(third.totalCount, 104);
+    expect(third.hasMore, isFalse);
+  });
+
   test('JapaneseASMR cover host receives required source headers', () {
     final headers = sourceImageHeadersFor(
       'https://pic.weeabo0.xyz/RJ01717942_img_main.jpg',
