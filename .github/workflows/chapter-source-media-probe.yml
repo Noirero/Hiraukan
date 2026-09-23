@@ -1,0 +1,151 @@
+name: Temporary Chapter Source Media Probe
+
+on:
+  push:
+    branches:
+      - beta
+    paths:
+      - .github/workflows/chapter-source-media-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Probe JapaneseASMR and ASMR+18 players
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import re, urllib.request, urllib.error
+          from urllib.parse import urljoin
+
+          UA = "Hiraukan/3.8 UnifiedSources Probe"
+          targets = [
+              ("JAPANESE", "https://japaneseasmr.com/150698/"),
+              ("ASMR18", "https://asmr18.fans/boys/rj01717942/"),
+          ]
+          media_re = re.compile(
+              r'''(?:(?:https?:)?//[^"'<>\\\s]+?\.(?:m3u8|mp3|m4a|aac|ogg|opus|wav|flac|m4b)(?:\?[^"'<>\\\s]*)?|/[^"'<>\\\s]+?\.(?:m3u8|mp3|m4a|aac|ogg|opus|wav|flac|m4b)(?:\?[^"'<>\\\s]*)?)''',
+              re.I,
+          )
+
+          def get(url, referer=None, limit=None):
+              headers = {"User-Agent": UA}
+              if referer:
+                  headers["Referer"] = referer
+              req = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(req, timeout=20) as r:
+                  data = r.read() if limit is None else r.read(limit)
+                  return r.status, r.headers, data
+
+          def probe_media(url, referer):
+              headers = {
+                  "User-Agent": UA,
+                  "Referer": referer,
+                  "Range": "bytes=0-63",
+              }
+              origin = re.match(r'^(https?://[^/]+)', referer)
+              if origin:
+                  headers["Origin"] = origin.group(1)
+              req = urllib.request.Request(url, headers=headers)
+              try:
+                  with urllib.request.urlopen(req, timeout=12) as r:
+                      data = r.read(64)
+                      print("MEDIA_OK", url, "STATUS", r.status,
+                            "TYPE", r.headers.get("Content-Type"),
+                            "LEN", r.headers.get("Content-Length"),
+                            "PREFIX", data[:12].hex())
+                      return True
+              except urllib.error.HTTPError as e:
+                  print("MEDIA_HTTP", url, e.code, e.headers.get("Content-Type"))
+              except Exception as e:
+                  print("MEDIA_ERR", url, type(e).__name__, str(e)[:100])
+              return False
+
+          for label, page in targets:
+              print("\n===", label, page, "===")
+              try:
+                  status, headers, body = get(page)
+              except Exception as e:
+                  print("PAGE_ERROR", type(e).__name__, str(e))
+                  continue
+              html = body.decode("utf-8", "replace")
+              print("PAGE", status, "BYTES", len(body), "TYPE", headers.get("Content-Type"))
+
+              pidx = html.lower().find("player 1")
+              if pidx >= 0:
+                  print("PLAYER_CONTEXT", re.sub(r'\s+', ' ', html[max(0,pidx-900):pidx+1800])[:2800])
+
+              frames = []
+              for match in re.finditer(r'''<iframe\b[^>]*(?:src|data-src)=["']([^"']+)["']''', html, re.I):
+                  frames.append(urljoin(page, match.group(1)))
+              print("IFRAMES", frames[:20])
+
+              scripts = []
+              for src in re.findall(r'''<script\b[^>]+src=["']([^"']+)["']''', html, re.I):
+                  full = urljoin(page, src)
+                  if full not in scripts:
+                      scripts.append(full)
+              print("SCRIPTS", scripts[:30])
+
+              documents = [(page, html)]
+              for frame in frames[:10]:
+                  try:
+                      st, hh, bb = get(frame, page)
+                      text = bb.decode("utf-8", "replace")
+                      print("FRAME", frame, st, len(bb), hh.get("Content-Type"))
+                      print("FRAME_HEAD", re.sub(r'\s+', ' ', text[:1600])[:1600])
+                      documents.append((frame, text))
+                  except Exception as e:
+                      print("FRAME_ERR", frame, type(e).__name__, str(e)[:120])
+
+              for script in scripts[:25]:
+                  try:
+                      st, hh, bb = get(script, page)
+                      text = bb.decode("utf-8", "replace")
+                      lowered = text.lower()
+                      if any(x in lowered for x in [".m3u8", ".mp3", ".m4a", "cloudintech", "jwplayer", "player"]):
+                          print("SCRIPT_HIT", script, st, len(bb))
+                          for needle in [".m3u8", ".mp3", ".m4a", "cloudintech", "jwplayer"]:
+                              idx = lowered.find(needle)
+                              if idx >= 0:
+                                  print("SCRIPT_CTX", needle, re.sub(r'\s+', ' ', text[max(0,idx-350):idx+700])[:1100])
+                          documents.append((script, text))
+                  except Exception as e:
+                      print("SCRIPT_ERR", script, type(e).__name__, str(e)[:100])
+
+              candidates = []
+              for base, text in documents:
+                  normalized = text.replace("\\/", "/")
+                  for raw in media_re.findall(normalized):
+                      full = raw
+                      if raw.startswith("//"):
+                          full = "https:" + raw
+                      elif raw.startswith("/"):
+                          full = urljoin(base, raw)
+                      if full not in candidates:
+                          candidates.append(full)
+              print("CANDIDATES", candidates[:30])
+
+              ok = False
+              direct = [u for u in candidates if ".m3u8" not in u.lower()]
+              hls = [u for u in candidates if ".m3u8" in u.lower()]
+              for candidate in direct + hls:
+                  if probe_media(candidate, page):
+                      ok = True
+                      break
+
+              if label == "ASMR18":
+                  for fallback in [
+                      "https://cdn3.cloudintech.net/file/RJ01717942/RJ01717942.m3u8",
+                      "https://cdn3.cloudintech.net/file/RJ01717942/1.m3u8",
+                  ]:
+                      if fallback not in candidates:
+                          if probe_media(fallback, page):
+                              ok = True
+                              break
+              print("VERIFIED_MEDIA", ok)
+          PY
