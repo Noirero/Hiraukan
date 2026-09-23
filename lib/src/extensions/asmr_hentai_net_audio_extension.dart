@@ -16,16 +16,19 @@ AudioExtension createAsmrHentaiNetAudioExtension() {
         AudioExtensionCapability.catalog,
         AudioExtensionCapability.search,
         AudioExtensionCapability.detail,
+        AudioExtensionCapability.playback,
       },
       languages: ['ja'],
       homepage: AsmrHentaiNetSourceAdapter.baseUrl,
     ),
-    playbackEnabled: false,
-    refBuilder: (workId) => UnifiedSourceRef(
-      source: UnifiedSourceKind.asmrHentaiNet,
-      localId: workId,
-      canonicalId: workId.toUpperCase().startsWith('RJ') ? workId.toUpperCase() : null,
-      detailUrl: AsmrHentaiNetSourceAdapter.baseUrl + '/' + workId + '/',
-    ),
+    refBuilder: (workId) {
+      final id = workId.toUpperCase();
+      return UnifiedSourceRef(
+        source: UnifiedSourceKind.asmrHentaiNet,
+        localId: id,
+        canonicalId: id.startsWith('RJ') ? id : null,
+        detailUrl: AsmrHentaiNetSourceAdapter.baseUrl + '/' + id,
+      );
+    },
   );
 }
