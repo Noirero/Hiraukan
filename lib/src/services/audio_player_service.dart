@@ -513,6 +513,7 @@ class AudioPlayerService {
             final source = CachingStreamAudioSource(
               uri: Uri.parse(streamUrl),
               hash: track.hash!,
+              headers: track.playbackHeaders,
             );
             await _player.setAudioSource(source);
             unawaited(_hapticsService.prepareForTrack(track));
@@ -526,7 +527,12 @@ class AudioPlayerService {
 
       if (!loaded) {
         final streamUrl = fallbackStreamUrl ?? track.url;
-        await _player.setUrl(streamUrl);
+        await _player.setUrl(
+          streamUrl,
+          headers: track.playbackHeaders.isEmpty
+              ? null
+              : track.playbackHeaders,
+        );
         unawaited(_hapticsService.prepareForTrack(track));
         _log.captureOutput('[Audio] 流式播放: $streamUrl');
       }
@@ -754,6 +760,7 @@ class AudioPlayerService {
       // 复用 CacheService 的下载 + finalize 流程，把整首流式音频写到本地缓存
       final dio = Dio();
       dio.options.headers.addAll(StorageService.serverCookieHeaders);
+      dio.options.headers.addAll(track.playbackHeaders);
       dio.options.connectTimeout = const Duration(seconds: 15);
       dio.options.receiveTimeout = const Duration(seconds: 60);
 
