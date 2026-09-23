@@ -259,6 +259,138 @@ class JapaneseAsmrPageParser {
   }
 }
 
+class JapaneseAsmrGatewayParser {
+  const JapaneseAsmrGatewayParser._();
+
+  static const String gatewayBaseUrl = 'https://r.jina.ai/';
+
+  static String gatewayUrl(String sourceUrl) => gatewayBaseUrl + sourceUrl;
+
+  static String? coverUrl(String markdown) {
+    return RegExp(
+      r'''!\[[^\]]*\]\((https?://(?:pic|img|pic1)\.weeabo0\.xyz/[^)\s]+)\)''',
+      caseSensitive: false,
+    ).firstMatch(markdown)?.group(1);
+  }
+
+  static String normalizeDetail(String markdown) {
+    final out = StringBuffer();
+
+    final title = RegExp(
+      r'^Title:\s*(.+)$',
+      caseSensitive: false,
+      multiLine: true,
+    ).firstMatch(markdown)?.group(1)?.trim();
+    if (title != null && title.isNotEmpty) {
+      out.writeln('<title>${_escapeHtml(title)}</title>');
+    }
+
+    final metadata = RegExp(
+      r'^\*\*(\[\d{6}\]\[[^\]]+\].*?)\*\*\s*$',
+      multiLine: true,
+    ).firstMatch(markdown)?.group(1)?.trim();
+    if (metadata != null && metadata.isNotEmpty) {
+      out.writeln('<p>${_escapeHtml(metadata)}</p>');
+    }
+
+    final voice = RegExp(
+      r'^CV\s*:\s*(.+)$',
+      caseSensitive: false,
+      multiLine: true,
+    ).firstMatch(markdown)?.group(0)?.trim();
+    if (voice != null && voice.isNotEmpty) {
+      out.writeln('<p>${_escapeHtml(voice)}</p>');
+    }
+
+    final cover = coverUrl(markdown);
+    if (cover != null) {
+      out.writeln('<img src="$cover">');
+    }
+
+    final chapters = RegExp(
+      r'''^\[(\d{1,2}:\d{2}:\d{2})\]\([^)]+\)\[([^\]]+)\]\([^)]+\)\s*$''',
+      multiLine: true,
+    );
+    for (final match in chapters.allMatches(markdown)) {
+      out.writeln(
+        '<p>${match.group(1)} ${_escapeHtml(match.group(2) ?? '')}</p>',
+      );
+    }
+
+    out.writeln(markdown);
+    return out.toString();
+  }
+
+  static List<SourceWorkCandidate> catalog(
+    String markdown, {
+    required int pageSize,
+  }) {
+    final headings = RegExp(
+      r'''^##\s+\[([^\]]+)\]\((https?://(?:www\.)?japaneseasmr\.com/(\d+)/?)\)\s*$''',
+      caseSensitive: false,
+      multiLine: true,
+    ).allMatches(markdown).toList(growable: false);
+    final results = <SourceWorkCandidate>[];
+    final seen = <String>{};
+
+    for (var index = 0; index < headings.length; index++) {
+      final match = headings[index];
+      final detailUrl = match.group(2)!;
+      if (!seen.add(detailUrl)) continue;
+
+      final end = index + 1 < headings.length
+          ? headings[index + 1].start
+          : markdown.length;
+      final context = markdown.substring(match.start, end);
+      final canonical = SourceHtmlParser.extractCanonicalId(context);
+      final numericId = match.group(3)!;
+      final localId = canonical ?? numericId;
+      final title = (match.group(1) ?? '').trim();
+      final cover = coverUrl(context);
+      final normalized = normalizeDetail(context);
+      final circle = JapaneseAsmrPageParser.circle(normalized);
+      final release = JapaneseAsmrPageParser.releaseDate(normalized);
+      final voices = JapaneseAsmrPageParser.voiceActors(normalized)
+          .map(
+            (name) => Va(
+              id: 'japaneseasmr-va:${SourceHtmlParser.stableNegativeId(name).abs()}',
+              name: name,
+            ),
+          )
+          .toList(growable: false);
+
+      final ref = UnifiedSourceRef(
+        source: UnifiedSourceKind.japaneseAsmr,
+        localId: localId,
+        canonicalId: canonical,
+        detailUrl: detailUrl,
+        coverUrl: cover,
+        title: title,
+        circle: circle,
+      );
+      final work = Work(
+        id: SourceHtmlParser.stableNegativeId('japaneseasmr:$localId'),
+        title: title.isEmpty ? (canonical ?? numericId) : title,
+        name: circle,
+        age: 'R18',
+        release: release,
+        vas: voices.isEmpty ? null : voices,
+        images: cover == null ? null : <String>[cover],
+        sourceUrl: detailUrl,
+        sourceId: canonical,
+      );
+      results.add(SourceWorkCandidate(work: work, ref: ref));
+      if (results.length >= pageSize) break;
+    }
+    return results;
+  }
+
+  static String _escapeHtml(String value) => value
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;');
+}
+
 class JapaneseAsmrSourceAdapter extends HtmlAudioSiteSourceAdapter {
   static const String baseUrl = 'https://japaneseasmr.com';
   static const String _userAgent = 'Hiraukan/3.8 UnifiedSources';
@@ -282,8 +414,40 @@ class JapaneseAsmrSourceAdapter extends HtmlAudioSiteSourceAdapter {
         );
 
   @override
+  Future<SourceSearchPage> search({
+    required String keyword,
+    required int page,
+    required int pageSize,
+  }) async {
+    try {
+      final direct = await super.search(
+        keyword: keyword,
+        page: page,
+        pageSize: pageSize,
+      );
+      if (direct.items.isNotEmpty) return direct;
+    } catch (_) {
+      // Fall through to the gateway below.
+    }
+
+    final logicalPage = page < 1 ? 1 : page;
+    final markdown = await _getGatewayText(
+      _catalogUrl(keyword.trim(), logicalPage),
+    );
+    final items = JapaneseAsmrGatewayParser.catalog(
+      markdown,
+      pageSize: pageSize,
+    );
+    return SourceSearchPage(
+      items: items,
+      totalCount: ((logicalPage - 1) * pageSize) + items.length,
+      hasMore: items.length >= pageSize,
+    );
+  }
+
+  @override
   Future<Work> loadDetail(UnifiedSourceRef ref) async {
-    final html = await _getHtml(ref.detailUrl);
+    final html = await _getSourceText(ref.detailUrl);
     final pageUri = Uri.parse(ref.detailUrl);
     final canonical = ref.canonicalId ?? JapaneseAsmrPageParser.canonicalId(html);
     final parsedTitle = JapaneseAsmrPageParser.title(
@@ -331,7 +495,7 @@ class JapaneseAsmrSourceAdapter extends HtmlAudioSiteSourceAdapter {
 
   @override
   Future<List<dynamic>> loadTracks(UnifiedSourceRef ref) async {
-    final html = await _getHtml(ref.detailUrl);
+    final html = await _getSourceText(ref.detailUrl);
     final pageUri = Uri.parse(ref.detailUrl);
     final totalDuration = JapaneseAsmrPageParser.totalDurationSeconds(html);
     final chapters = JapaneseAsmrPageParser.chapters(
@@ -481,6 +645,52 @@ class JapaneseAsmrSourceAdapter extends HtmlAudioSiteSourceAdapter {
       '.flac',
       '.m4b',
     ].any(path.endsWith);
+  }
+
+  @override
+  Future<UnifiedSourceHealth> checkHealth() async {
+    final direct = await super.checkHealth();
+    if (direct != UnifiedSourceHealth.broken) return direct;
+
+    try {
+      final markdown = await _getGatewayText('$baseUrl/');
+      return markdown.contains('japaneseasmr.com')
+          ? UnifiedSourceHealth.degraded
+          : UnifiedSourceHealth.broken;
+    } catch (_) {
+      return UnifiedSourceHealth.broken;
+    }
+  }
+
+  Future<String> _getSourceText(String url) async {
+    try {
+      return await _getHtml(url);
+    } catch (_) {
+      final markdown = await _getGatewayText(url);
+      return JapaneseAsmrGatewayParser.normalizeDetail(markdown);
+    }
+  }
+
+  Future<String> _getGatewayText(String sourceUrl) async {
+    final response = await _client.get<String>(
+      JapaneseAsmrGatewayParser.gatewayUrl(sourceUrl),
+      options: Options(
+        responseType: ResponseType.plain,
+        headers: const <String, String>{
+          'User-Agent': _userAgent,
+          'Accept': 'text/plain,*/*;q=0.8',
+        },
+        sendTimeout: const Duration(seconds: 12),
+        receiveTimeout: const Duration(seconds: 22),
+        validateStatus: (status) =>
+            status != null && status >= 200 && status < 400,
+      ),
+    );
+    final text = response.data ?? '';
+    if (text.trim().isEmpty) {
+      throw StateError('JapaneseASMR gateway returned an empty response');
+    }
+    return text;
   }
 
   Future<String> _getHtml(
