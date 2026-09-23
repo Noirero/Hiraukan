@@ -53,7 +53,7 @@ class JapaneseAsmrPageParser {
           .replaceAll(RegExp(r'\s+'), ' ')
           .trim();
     }
-    return value.isEmpty ? (canonical ?? fallback) : value;
+    return value.isEmpty ? (canonical ?? fallback ?? '') : value;
   }
 
   static String? circle(String html) {
