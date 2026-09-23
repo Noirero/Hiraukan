@@ -59,6 +59,19 @@ jobs:
           python3 - <<'PY'
           import re, urllib.request
           ua="Hiraukan/3.8 UnifiedSources"
+          try:
+              req=urllib.request.Request("https://asmr18.fans/",headers={"User-Agent":ua})
+              with urllib.request.urlopen(req,timeout=16) as r:
+                  home=r.read().decode("utf-8","replace")
+                  cats=[]
+                  for m in re.finditer(r'href=["\'](https?://asmr18\.fans/[^"\']+|/[^"\']+)["\']',home,re.I):
+                      href=m.group(1)
+                      if any(x in href.lower() for x in ["boy","girl","age"]):
+                          if href not in cats: cats.append(href)
+                  print("CATEGORY_LINKS",cats[:40])
+          except Exception as e:
+              print("CATEGORY_LINKS_ERR",type(e).__name__,str(e)[:180])
+
           for cat in ["boys","girls","all-ages"]:
               for page in [1,2]:
                   url=f"https://asmr18.fans/{cat}/" if page==1 else f"https://asmr18.fans/{cat}/page/{page}/"
