@@ -110,6 +110,8 @@ jobs:
         run: |
           flutter test \
             test/source_capabilities_test.dart \
+            test/additional_audio_extensions_test.dart \
+            test/chapter_audio_engine_test.dart \
             test/subtitle_foundation_test.dart \
             test/unified_source_playback_capability_test.dart \
             test/locale_default_indonesian_test.dart \
