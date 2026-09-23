@@ -209,6 +209,21 @@ class JapaneseAsmrPageParser {
       final uri = Uri.tryParse(resolved);
       if (uri == null || !uri.hasScheme) continue;
       if (uri.scheme != 'http' && uri.scheme != 'https') continue;
+
+      final contextStart = match.start > 1200 ? match.start - 1200 : 0;
+      final context = SourceHtmlParser.stripTags(
+        html.substring(contextStart, match.end),
+      ).toLowerCase();
+      final attributes = (match.group(0) ?? '').toLowerCase();
+      final hint = '$context $attributes ${resolved.toLowerCase()}';
+      final looksLikePlayer = hint.contains('player 1') ||
+          hint.contains('player 2') ||
+          hint.contains('audio player') ||
+          hint.contains('audio-player') ||
+          hint.contains('audioplayer');
+      final looksLikeAd =
+          context.contains('video ads') || hint.contains('doubleclick');
+      if (!looksLikePlayer || looksLikeAd) continue;
       result.add(resolved);
     }
     return result.toList(growable: false);
