@@ -3,6 +3,7 @@ import 'dart:async';
 import '../models/audio_track.dart';
 import '../models/work.dart';
 import 'source_adapter.dart';
+import 'asmr18_source_adapter.dart';
 import 'source_html_parser.dart';
 import 'unified_source_models.dart';
 import 'unified_source_preferences.dart';
@@ -22,6 +23,7 @@ class UnifiedSourceService {
     required int page,
     required int pageSize,
     Set<UnifiedSourceKind>? enabledSources,
+    Asmr18CatalogCategory asmr18Category = Asmr18CatalogCategory.all,
   }) async {
     final enabled = enabledSources ?? UnifiedSourceKind.values.toSet();
     final selected =
@@ -31,11 +33,18 @@ class UnifiedSourceService {
 
     await Future.wait(selected.map((adapter) async {
       try {
-        final result = await adapter.search(
-          keyword: keyword,
-          page: page,
-          pageSize: pageSize,
-        );
+        final result = adapter is Asmr18SourceAdapter
+            ? await adapter.searchWithCategory(
+                keyword: keyword,
+                page: page,
+                pageSize: pageSize,
+                category: asmr18Category,
+              )
+            : await adapter.search(
+                keyword: keyword,
+                page: page,
+                pageSize: pageSize,
+              );
         pages.add(result);
         health[adapter.kind] = UnifiedSourceHealth.healthy;
       } catch (_) {
@@ -71,9 +80,11 @@ class UnifiedSourceService {
     registry.registerAll(bundles);
 
     final hasMore = pages.any((item) => item.hasMore);
-    final totalCount = (page - 1) * pageSize +
-        bundles.length +
-        (hasMore ? pageSize : 0);
+    final totalCount = selected.length == 1 && pages.length == 1
+        ? pages.single.totalCount
+        : (page - 1) * pageSize +
+            bundles.length +
+            (hasMore ? pageSize : 0);
     return UnifiedSearchPage(
       works: bundles.map((bundle) => bundle.work).toList(growable: false),
       totalCount: totalCount,
