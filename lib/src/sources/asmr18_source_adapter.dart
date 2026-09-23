@@ -515,29 +515,50 @@ class Asmr18SourceAdapter extends HtmlAudioSiteSourceAdapter {
     final pageUri = Uri.parse(ref.detailUrl);
     final canonical = ref.canonicalId ?? Asmr18PageParser.canonicalId(html);
     final chapters = Asmr18PageParser.chapters(html);
-    final media = await _resolveMedia(
+    final media = await _resolveMediaCandidates(
       html,
       pageUri,
       canonical: canonical,
     );
-    if (media == null) return const [];
+    if (media.isEmpty) return const [];
 
     final headers = <String, String>{
       'Referer': ref.detailUrl,
       'Origin': baseUrl,
       'User-Agent': _userAgent,
     };
+
+    // Multiple direct audio files on ASMR+18 are distinct tracks, not mirrors.
+    // Keep all of them. Chapter segmentation is only meaningful when the page
+    // resolves to one continuous media stream.
+    if (media.length > 1) {
+      return media.asMap().entries.map((entry) {
+        final url = entry.value;
+        final mediaHash =
+            'asmr18:${ref.localId}:media:${SourceHtmlParser.stableNegativeId(url).abs()}';
+        return <String, dynamic>{
+          'title': SourceHtmlParser.basenameFromUrl(url, entry.key),
+          'type': 'audio',
+          'hash': mediaHash,
+          'sourceTrackId': 'media-${entry.key + 1}',
+          'mediaStreamUrl': url,
+          'headers': headers,
+        };
+      }).toList(growable: false);
+    }
+
+    final selectedMedia = media.single;
     final mediaHash =
-        'asmr18:${ref.localId}:media:${SourceHtmlParser.stableNegativeId(media).abs()}';
+        'asmr18:${ref.localId}:media:${SourceHtmlParser.stableNegativeId(selectedMedia).abs()}';
 
     if (chapters.isEmpty) {
       return <dynamic>[
         <String, dynamic>{
-          'title': SourceHtmlParser.basenameFromUrl(media, 0),
+          'title': SourceHtmlParser.basenameFromUrl(selectedMedia, 0),
           'type': 'audio',
           'hash': mediaHash,
           'sourceTrackId': 'full',
-          'mediaStreamUrl': media,
+          'mediaStreamUrl': selectedMedia,
           'headers': headers,
         },
       ];
@@ -549,7 +570,7 @@ class Asmr18SourceAdapter extends HtmlAudioSiteSourceAdapter {
         'type': 'audio',
         'hash': mediaHash,
         'sourceTrackId': chapter.id,
-        'mediaStreamUrl': media,
+        'mediaStreamUrl': selectedMedia,
         'startOffset': chapter.startSeconds,
         if (chapter.endSeconds != null) 'endOffset': chapter.endSeconds!,
         if (chapter.durationSeconds != null)
@@ -559,7 +580,7 @@ class Asmr18SourceAdapter extends HtmlAudioSiteSourceAdapter {
     }).toList(growable: false);
   }
 
-  Future<String?> _resolveMedia(
+  Future<List<String>> _resolveMediaCandidates(
     String html,
     Uri pageUri, {
     required String? canonical,
@@ -579,12 +600,21 @@ class Asmr18SourceAdapter extends HtmlAudioSiteSourceAdapter {
     }
 
     final unique = <String>{...candidates};
-    final direct = unique.where((url) => !_looksHls(url));
-    final hls = unique.where(_looksHls);
-    for (final candidate in <String>[...direct, ...hls]) {
-      if (await _probe(candidate, pageUri)) return candidate;
+    final direct = unique.where((url) => !_looksHls(url)).toList();
+    final hls = unique.where(_looksHls).toList();
+
+    final reachableDirect = <String>[];
+    for (final candidate in direct) {
+      if (await _probe(candidate, pageUri)) reachableDirect.add(candidate);
     }
-    return null;
+    if (reachableDirect.isNotEmpty) return reachableDirect;
+
+    // HLS entries are commonly alternate mirrors of the same continuous
+    // player. Use the first reachable HLS to avoid duplicate logical tracks.
+    for (final candidate in hls) {
+      if (await _probe(candidate, pageUri)) return <String>[candidate];
+    }
+    return const <String>[];
   }
 
   Future<bool> _probe(String url, Uri referer) async {
