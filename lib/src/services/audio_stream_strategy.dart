@@ -13,6 +13,18 @@ class AudioStreamStrategy {
     'asmr_hentai_net',
   };
 
+  static bool shouldTryHeaderAwareFallback(AudioTrack track) {
+    final sourceKey = track.sourceKey?.trim().toLowerCase();
+    if (sourceKey != 'asmr_hentai_net') return false;
+
+    final uri = Uri.tryParse(track.url);
+    final path = uri?.path.toLowerCase() ?? '';
+    return path.endsWith('.opus') &&
+        track.playbackHeaders.keys.any(
+          (key) => key.toLowerCase() == 'referer',
+        );
+  }
+
   static bool shouldUseCachingStream(AudioTrack track) {
     final uri = Uri.tryParse(track.url);
     final path = uri?.path.toLowerCase() ?? '';
