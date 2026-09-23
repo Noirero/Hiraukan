@@ -23,6 +23,13 @@ AudioTrack _$AudioTrackFromJson(Map<String, dynamic> json) => AudioTrack(
       subtitleWorkDirPath: json['subtitleWorkDirPath'] as String?,
       sourceKey: json['sourceKey'] as String?,
       sourceWorkId: json['sourceWorkId'] as String?,
+      sourceTrackId: json['sourceTrackId'] as String?,
+      startOffset: json['startOffset'] == null
+          ? null
+          : Duration(microseconds: (json['startOffset'] as num).toInt()),
+      endOffset: json['endOffset'] == null
+          ? null
+          : Duration(microseconds: (json['endOffset'] as num).toInt()),
     );
 
 Map<String, dynamic> _$AudioTrackToJson(AudioTrack instance) =>
@@ -41,6 +48,9 @@ Map<String, dynamic> _$AudioTrackToJson(AudioTrack instance) =>
       'subtitleWorkDirPath': instance.subtitleWorkDirPath,
       'sourceKey': instance.sourceKey,
       'sourceWorkId': instance.sourceWorkId,
+      'sourceTrackId': instance.sourceTrackId,
+      'startOffset': instance.startOffset?.inMicroseconds,
+      'endOffset': instance.endOffset?.inMicroseconds,
     };
 
 Playlist _$PlaylistFromJson(Map<String, dynamic> json) => Playlist(
