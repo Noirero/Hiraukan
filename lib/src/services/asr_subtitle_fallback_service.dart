@@ -113,7 +113,7 @@ class AsrSubtitleFallbackService {
           try {
             final lyrics = await _transcribeLocalAudio(
               audioPath: prepared.path,
-              totalDuration: track.duration,
+              totalDuration: track.segmentDuration ?? track.duration,
               transcription: transcription,
               modelName: localModelName,
               modelConfig: modelConfig,
@@ -184,10 +184,34 @@ class AsrSubtitleFallbackService {
     }
 
     onStatus?.call('Membuat subtitle melalui ASR online…');
-    final result = await OnlineAsrService.instance.transcribe(
-      track,
-      isCancelled: isCancelled,
-    );
+    _PreparedAsrAudio? onlinePrepared;
+    var onlineTrack = track;
+    if (_requiresSegmentExtraction(track)) {
+      onlinePrepared = await _prepareAudioInput(
+        track,
+        onStatus: onStatus,
+        isCancelled: isCancelled,
+      );
+      if (onlinePrepared == null) {
+        throw const OnlineAsrInvalidResponseException(
+          'Failed to isolate the active chapter for online ASR.',
+        );
+      }
+      onlineTrack = track.copyWith(
+        sourcePath: onlinePrepared.path,
+        duration: track.segmentDuration ?? track.duration,
+      );
+    }
+
+    final OnlineAsrResult result;
+    try {
+      result = await OnlineAsrService.instance.transcribe(
+        onlineTrack,
+        isCancelled: isCancelled,
+      );
+    } finally {
+      await onlinePrepared?.cleanup();
+    }
     if (isCancelled?.call() == true) return null;
 
     final lyrics = result.segments
@@ -379,7 +403,12 @@ class AsrSubtitleFallbackService {
       if (candidate == null || candidate.isEmpty) continue;
       final file = File(candidate);
       if (await file.exists()) {
-        return _PreparedAsrAudio(path: file.path);
+        return _prepareSegmentIfNeeded(
+          track,
+          _PreparedAsrAudio(path: file.path),
+          onStatus: onStatus,
+          isCancelled: isCancelled,
+        );
       }
     }
 
@@ -387,7 +416,12 @@ class AsrSubtitleFallbackService {
     if (hash != null && hash.isNotEmpty) {
       final cached = await CacheService.getCachedAudioFile(hash);
       if (cached != null && await File(cached).exists()) {
-        return _PreparedAsrAudio(path: cached);
+        return _prepareSegmentIfNeeded(
+          track,
+          _PreparedAsrAudio(path: cached),
+          onStatus: onStatus,
+          isCancelled: isCancelled,
+        );
       }
     }
 
@@ -412,7 +446,10 @@ class AsrSubtitleFallbackService {
       BaseOptions(
         connectTimeout: const Duration(seconds: 20),
         receiveTimeout: const Duration(minutes: 20),
-        headers: StorageService.serverCookieHeaders,
+        headers: <String, dynamic>{
+          ...StorageService.serverCookieHeaders,
+          ...track.playbackHeaders,
+        },
       ),
     );
     final cancelToken = CancelToken();
@@ -438,15 +475,77 @@ class AsrSubtitleFallbackService {
         if (await tempFile.exists()) await tempFile.delete();
         return null;
       }
-      return _PreparedAsrAudio(
-        path: tempFile.path,
-        deleteAfterUse: true,
+      return _prepareSegmentIfNeeded(
+        track,
+        _PreparedAsrAudio(
+          path: tempFile.path,
+          deleteAfterUse: true,
+        ),
+        onStatus: onStatus,
+        isCancelled: isCancelled,
       );
     } on DioException catch (error) {
       if (await tempFile.exists()) await tempFile.delete();
       if (CancelToken.isCancel(error)) return null;
       rethrow;
     }
+  }
+
+  bool _requiresSegmentExtraction(AudioTrack track) {
+    if (!track.isSegmented) return false;
+
+    // ASMR Hentai exposes one physical media file per source track. Its
+    // start=0/end=duration metadata is still useful to the unified player, but
+    // there is no longer source audio to cut away before ASR.
+    if (track.sourceKey == 'asmr_hentai_net' &&
+        track.segmentStart == Duration.zero) {
+      return false;
+    }
+
+    final segmentDuration = track.segmentDuration;
+    return segmentDuration != null && segmentDuration > Duration.zero;
+  }
+
+  Future<_PreparedAsrAudio?> _prepareSegmentIfNeeded(
+    AudioTrack track,
+    _PreparedAsrAudio prepared, {
+    AsrFallbackStatusCallback? onStatus,
+    bool Function()? isCancelled,
+  }) async {
+    if (!_requiresSegmentExtraction(track)) return prepared;
+    if (isCancelled?.call() == true) {
+      await prepared.cleanup();
+      return null;
+    }
+
+    final segmentDuration = track.segmentDuration;
+    if (segmentDuration == null || segmentDuration <= Duration.zero) {
+      await prepared.cleanup();
+      return null;
+    }
+
+    onStatus?.call('Menyiapkan chapter aktif untuk ASR…');
+    final chunk = await AiAudioChunkService.instance.extractWavChunk(
+      inputPath: prepared.path,
+      start: track.segmentStart,
+      duration: segmentDuration,
+    );
+    await prepared.cleanup();
+
+    if (isCancelled?.call() == true) {
+      if (chunk != null && await chunk.exists()) {
+        try {
+          await chunk.delete();
+        } catch (_) {}
+      }
+      return null;
+    }
+    if (chunk == null) return null;
+
+    return _PreparedAsrAudio(
+      path: chunk.path,
+      deleteAfterUse: true,
+    );
   }
 
   String _audioExtension(AudioTrack track) {
