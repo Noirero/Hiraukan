@@ -37,6 +37,9 @@ class AudioTrack extends Equatable {
   /// When null, the source/player duration is used as the natural end.
   final Duration? endOffset;
 
+  /// HTTP headers required by the source media endpoint (for example Referer).
+  final Map<String, String> playbackHeaders;
+
   const AudioTrack({
     required this.id,
     required this.title,
@@ -55,6 +58,7 @@ class AudioTrack extends Equatable {
     this.sourceTrackId,
     this.startOffset,
     this.endOffset,
+    this.playbackHeaders = const {},
   });
 
   factory AudioTrack.fromJson(Map<String, dynamic> json) =>
@@ -115,6 +119,7 @@ class AudioTrack extends Equatable {
     String? sourceTrackId,
     Duration? startOffset,
     Duration? endOffset,
+    Map<String, String>? playbackHeaders,
   }) {
     return AudioTrack(
       id: id ?? this.id,
@@ -135,6 +140,7 @@ class AudioTrack extends Equatable {
       sourceTrackId: sourceTrackId ?? this.sourceTrackId,
       startOffset: startOffset ?? this.startOffset,
       endOffset: endOffset ?? this.endOffset,
+      playbackHeaders: playbackHeaders ?? this.playbackHeaders,
     );
   }
 
@@ -157,6 +163,7 @@ class AudioTrack extends Equatable {
         sourceTrackId,
         startOffset,
         endOffset,
+        playbackHeaders,
       ];
 }
 
