@@ -13,6 +13,7 @@ import '../models/audio_track.dart';
 import '../models/audio_gain_settings.dart';
 import 'cache_service.dart';
 import 'caching_stream_audio_source.dart';
+import 'audio_stream_strategy.dart';
 import 'audio_haptics_service.dart';
 import 'log_service.dart';
 import 'playback_history_service.dart';
@@ -431,6 +432,7 @@ class AudioPlayerService {
         : (sourceUri?.scheme.isNotEmpty ?? false)
         ? sourceUri!.scheme
         : 'unknown';
+    final useStreamingCache = AudioStreamStrategy.shouldUseCachingStream(track);
     _log.captureOutput(
       '[Audio] _loadTrack: id="${track.id}", title="${track.title}", '
       'source=$sourceKind',
@@ -498,7 +500,10 @@ class AudioPlayerService {
       }
 
       // 如果不是本地文件，且有 hash，尝试使用缓存
-      if (!loaded && track.hash != null && track.hash!.isNotEmpty) {
+      if (!loaded &&
+          useStreamingCache &&
+          track.hash != null &&
+          track.hash!.isNotEmpty) {
         final streamUrl = fallbackStreamUrl ?? track.url;
         audioFilePath = await CacheService.settleAudioCacheDownload(
           track.hash!,
@@ -753,6 +758,13 @@ class AudioPlayerService {
   }
 
   Future<void> _preloadNextTrackToCache(AudioTrack track) async {
+    if (!AudioStreamStrategy.shouldUseCachingStream(track)) {
+      _log.captureOutput(
+        '[Audio] Lewati preload cache untuk external/adaptive stream: ${track.title}',
+      );
+      return;
+    }
+
     final hash = track.hash;
     if (hash == null || hash.isEmpty) return;
     final url = track.url;
