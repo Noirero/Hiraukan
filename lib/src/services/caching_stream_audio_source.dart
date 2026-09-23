@@ -11,16 +11,28 @@ class CachingStreamAudioSource extends StreamAudioSource {
   CachingStreamAudioSource({
     required this.uri,
     required this.hash,
+    this.headers = const {},
   });
 
   final Uri uri;
   final String hash;
+  final Map<String, String> headers;
 
   @override
   Future<StreamAudioResponse> request([int? start, int? end]) async {
     final resolvedStart = start ?? 0;
     final client = HttpClient();
     final request = await client.getUrl(uri);
+
+    for (final entry in headers.entries) {
+      final name = entry.key.trim();
+      if (name.isEmpty ||
+          name.toLowerCase() == HttpHeaders.rangeHeader ||
+          name.toLowerCase() == HttpHeaders.cookieHeader) {
+        continue;
+      }
+      request.headers.set(name, entry.value);
+    }
 
     if (resolvedStart != 0 || end != null) {
       final endInclusive = end != null ? end - 1 : null;
