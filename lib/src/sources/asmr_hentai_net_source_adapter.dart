@@ -76,11 +76,24 @@ class AsmrHentaiApiParser {
         if (mediaId == null || mediaId.isEmpty) continue;
         final title = track['b']?.toString().trim();
         final duration = track['c'];
+        final durationSeconds = duration is num ? duration.toInt() : null;
         children.add(<String, dynamic>{
           'title': title == null || title.isEmpty ? mediaId : title,
           'type': 'audio',
           'hash': 'asmr_hentai_net:$workId:$mediaId',
-          if (duration is num) 'duration': duration.toInt(),
+          'sourceTrackId': mediaId,
+          'mediaStreamUrl':
+              '${AsmrHentaiNetSourceAdapter.apiBaseUrl}/storage/$workId/$mediaId.opus',
+          'startOffset': 0,
+          if (durationSeconds != null) ...<String, dynamic>{
+            'duration': durationSeconds,
+            'endOffset': durationSeconds,
+          },
+          'headers': const <String, String>{
+            'Referer': AsmrHentaiNetSourceAdapter.baseUrl,
+            'Origin': AsmrHentaiNetSourceAdapter.baseUrl,
+            'User-Agent': 'Hiraukan/3.8 UnifiedSources',
+          },
         });
       }
     }
@@ -492,11 +505,13 @@ class AsmrHentaiNetSourceAdapter
         );
         continue;
       }
+      final url = value['mediaStreamUrl']?.toString();
       result.add(
         AudioFile(
           title: value['title']?.toString() ?? 'Track',
           type: 'audio',
           hash: value['hash']?.toString(),
+          mediaDownloadUrl: url == null || url.isEmpty ? null : url,
           duration: value['duration'],
         ),
       );
