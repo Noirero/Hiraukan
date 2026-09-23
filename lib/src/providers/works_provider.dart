@@ -9,6 +9,7 @@ import '../models/sort_options.dart';
 import '../services/kikoeru_api_service.dart' hide kikoeruApiServiceProvider;
 import '../services/log_service.dart';
 import '../sources/unified_source_models.dart';
+import '../sources/asmr18_source_adapter.dart';
 import '../sources/unified_source_provider.dart';
 import '../utils/paged_collection.dart';
 import '../utils/persistent_enum_preference.dart';
@@ -177,6 +178,7 @@ class WorksState extends Equatable {
   final SortDirection sortDirection;
   final DisplayMode displayMode;
   final HomeSourceFilter sourceFilter;
+  final Asmr18CatalogCategory asmr18Category;
   final Map<UnifiedSourceKind, UnifiedSourceHealth> sourceHealth;
   final int subtitleFilter;
   final int basePageSize;
@@ -188,6 +190,7 @@ class WorksState extends Equatable {
     this.sortDirection = SortDirection.desc,
     this.displayMode = DisplayMode.all,
     this.sourceFilter = HomeSourceFilter.all,
+    this.asmr18Category = Asmr18CatalogCategory.all,
     this.sourceHealth = const {},
     this.subtitleFilter = 0,
     this.basePageSize = 40,
@@ -198,7 +201,8 @@ class WorksState extends Equatable {
       ? basePageSize * 2
       : basePageSize;
 
-  String get activeFeedKey => '${displayMode.name}|${sourceFilter.name}';
+  String get activeFeedKey =>
+      '${displayMode.name}|${sourceFilter.name}|${asmr18Category.name}';
 
   WorksModeSnapshot get _currentModeState =>
       modeStates[activeFeedKey] ?? const WorksModeSnapshot();
@@ -229,6 +233,7 @@ class WorksState extends Equatable {
     SortDirection? sortDirection,
     DisplayMode? displayMode,
     HomeSourceFilter? sourceFilter,
+    Asmr18CatalogCategory? asmr18Category,
     Map<UnifiedSourceKind, UnifiedSourceHealth>? sourceHealth,
     int? subtitleFilter,
     int? basePageSize,
@@ -240,6 +245,7 @@ class WorksState extends Equatable {
       sortDirection: sortDirection ?? this.sortDirection,
       displayMode: displayMode ?? this.displayMode,
       sourceFilter: sourceFilter ?? this.sourceFilter,
+      asmr18Category: asmr18Category ?? this.asmr18Category,
       sourceHealth: sourceHealth ?? this.sourceHealth,
       subtitleFilter: subtitleFilter ?? this.subtitleFilter,
       basePageSize: basePageSize ?? this.basePageSize,
@@ -254,6 +260,7 @@ class WorksState extends Equatable {
         sortDirection,
         displayMode,
         sourceFilter,
+        asmr18Category,
         sourceHealth,
         subtitleFilter,
         basePageSize,
@@ -264,6 +271,8 @@ class WorksState extends Equatable {
 class WorksNotifier extends StateNotifier<WorksState> {
   static const String layoutPreferenceKey = 'works_layout_type';
   static const String sourcePreferenceKey = 'home_unified_source_filter';
+  static const String asmr18CategoryPreferenceKey =
+      'home_asmr18_category_filter';
 
   final KikoeruApiService _apiService;
   final Ref _ref;
@@ -276,6 +285,12 @@ class WorksNotifier extends StateNotifier<WorksState> {
     key: sourcePreferenceKey,
     values: HomeSourceFilter.values,
     fallback: HomeSourceFilter.all,
+  );
+  final _asmr18CategoryPreference =
+      PersistentEnumPreference<Asmr18CatalogCategory>(
+    key: asmr18CategoryPreferenceKey,
+    values: Asmr18CatalogCategory.values,
+    fallback: Asmr18CatalogCategory.all,
   );
   final Map<String, PagedRequestGate> _requestGates = {};
   int _catalogGeneration = 0;
@@ -298,12 +313,15 @@ class WorksNotifier extends StateNotifier<WorksState> {
     final values = await Future.wait<Object?>([
       _layoutPreference.load(),
       _sourcePreference.load(),
+      _asmr18CategoryPreference.load(),
     ]);
     if (!mounted) return;
 
     final layout = values[0] as LayoutType? ?? LayoutType.bigGrid;
     final loadedSource =
         values[1] as HomeSourceFilter? ?? HomeSourceFilter.all;
+    final loadedAsmr18Category = values[2] as Asmr18CatalogCategory? ??
+        Asmr18CatalogCategory.all;
     final enabledExtensionIds = _ref
         .read(audioExtensionRegistryProvider)
         .extensions
@@ -317,6 +335,7 @@ class WorksNotifier extends StateNotifier<WorksState> {
     state = state.copyWith(
       layoutType: layout,
       sourceFilter: source,
+      asmr18Category: loadedAsmr18Category,
       displayMode: source.supportsCuratedModes
           ? state.displayMode
           : DisplayMode.all,
@@ -420,6 +439,7 @@ class WorksNotifier extends StateNotifier<WorksState> {
               page: page,
               pageSize: pageSize,
               enabledSources: _enabledUnifiedSources(source),
+              asmr18Category: state.asmr18Category,
             );
         incomingWorks = result.works;
         totalCount = result.totalCount;
@@ -638,6 +658,13 @@ class WorksNotifier extends StateNotifier<WorksState> {
         : DisplayMode.all;
     state = state.copyWith(sourceFilter: source, displayMode: displayMode);
     unawaited(_sourcePreference.save(source));
+    _loadCurrentFeedIfNeeded();
+  }
+
+  void setAsmr18Category(Asmr18CatalogCategory category) {
+    if (state.asmr18Category == category) return;
+    state = state.copyWith(asmr18Category: category);
+    unawaited(_asmr18CategoryPreference.save(category));
     _loadCurrentFeedIfNeeded();
   }
 
