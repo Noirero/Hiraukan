@@ -314,6 +314,19 @@ class Asmr18PageParser {
   }
 }
 
+enum Asmr18CatalogCategory {
+  all('all', 'Semua', null),
+  boys('boys', 'Boys', 'boys'),
+  girls('girls', 'Girls', 'girls'),
+  allAges('allages', 'All Ages', 'allages');
+
+  const Asmr18CatalogCategory(this.id, this.label, this.path);
+
+  final String id;
+  final String label;
+  final String? path;
+}
+
 class Asmr18SourceAdapter extends HtmlAudioSiteSourceAdapter {
   static const String baseUrl = 'https://asmr18.fans';
   static const String _userAgent = 'Hiraukan/3.8 UnifiedSources';
@@ -336,30 +349,48 @@ class Asmr18SourceAdapter extends HtmlAudioSiteSourceAdapter {
           dio: client,
         );
 
-  static const List<String> _catalogCategories = <String>[
-    'boys',
-    'girls',
-    'allages',
-  ];
+  static const int _providerPageSize = 24;
 
   @override
   Future<SourceSearchPage> search({
     required String keyword,
     required int page,
     required int pageSize,
+  }) {
+    return searchWithCategory(
+      keyword: keyword,
+      page: page,
+      pageSize: pageSize,
+      category: Asmr18CatalogCategory.all,
+    );
+  }
+
+  Future<SourceSearchPage> searchWithCategory({
+    required String keyword,
+    required int page,
+    required int pageSize,
+    required Asmr18CatalogCategory category,
   }) async {
     final logicalPage = page < 1 ? 1 : page;
     final logicalPageSize = pageSize < 1 ? 1 : pageSize;
-    final requests = <Future<SourceSearchPage?>>[];
+    final categories = category.path == null
+        ? const <String>['boys', 'girls', 'allages']
+        : <String>[category.path!];
 
-    // ASMR+18 splits its catalog into independent categories. Build a logical
-    // combined feed from every provider page up to the requested page so
-    // items left over after a 40-item Hiraukan page are not skipped.
-    for (var providerPage = 1; providerPage <= logicalPage; providerPage++) {
-      for (final category in _catalogCategories) {
+    final requiredItems = logicalPage * logicalPageSize + 1;
+    final estimatedPerProviderPage =
+        _providerPageSize * categories.length;
+    final providerPagesNeeded =
+        (requiredItems / estimatedPerProviderPage).ceil().clamp(1, 200);
+
+    final requests = <Future<SourceSearchPage?>>[];
+    for (var providerPage = 1;
+        providerPage <= providerPagesNeeded;
+        providerPage++) {
+      for (final categoryPath in categories) {
         requests.add(
           _searchCategoryPage(
-            category: category,
+            category: categoryPath,
             keyword: keyword,
             page: providerPage,
           ),
@@ -390,8 +421,14 @@ class Asmr18SourceAdapter extends HtmlAudioSiteSourceAdapter {
     final providerHasMore = available.any((sourcePage) => sourcePage.hasMore);
     final bufferedHasMore = start + selected.length < merged.length;
     final hasMore = bufferedHasMore || providerHasMore;
-    final totalCount =
-        merged.length + (providerHasMore ? logicalPageSize : 0);
+
+    // The site does not expose a stable API total. Keep pagination open while
+    // any category advertises a next page, but never claim fewer items than
+    // we have already discovered.
+    final minimumKnown = merged.length;
+    final totalCount = hasMore
+        ? math.max(minimumKnown, (logicalPage + 1) * logicalPageSize)
+        : minimumKnown;
 
     return SourceSearchPage(
       items: selected,
@@ -415,16 +452,12 @@ class Asmr18SourceAdapter extends HtmlAudioSiteSourceAdapter {
         detailUrlMatcher: _isDetailUrl,
         dio: _client,
       );
-      // Provider category pages currently contain about 24 works. A large
-      // local limit ensures the parser never truncates a provider page before
-      // the combined Hiraukan pagination is applied.
       return await adapter.search(
         keyword: keyword,
         page: page,
         pageSize: 200,
       );
     } catch (_) {
-      // A single category outage must not empty the other ASMR+18 categories.
       return null;
     }
   }
