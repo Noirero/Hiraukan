@@ -14,9 +14,9 @@ void main() {
     expect(UnifiedSourceKind.asmr18.canDownload, isFalse);
   });
 
-  test('ASMR Hentai exposes verified API playback capability', () {
+  test('ASMR Hentai remains metadata-only until media URL is verified', () {
     expect(UnifiedSourceKind.asmrHentaiNet.canLoadMetadata, isTrue);
-    expect(UnifiedSourceKind.asmrHentaiNet.canPlay, isTrue);
+    expect(UnifiedSourceKind.asmrHentaiNet.canPlay, isFalse);
     expect(UnifiedSourceKind.asmrHentaiNet.canDownload, isFalse);
   });
 
