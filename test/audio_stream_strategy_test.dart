@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kikoeru_flutter/src/models/audio_track.dart';
 import 'package:kikoeru_flutter/src/services/audio_stream_strategy.dart';
+import 'package:kikoeru_flutter/src/services/caching_stream_audio_source.dart';
 
 void main() {
   test('new external Unified Sources bypass byte-stream cache', () {
@@ -52,6 +53,20 @@ void main() {
 
     expect(AudioStreamStrategy.shouldTryHeaderAwareFallback(hentai), isTrue);
     expect(AudioStreamStrategy.shouldTryHeaderAwareFallback(asmr18), isFalse);
+  });
+
+  test('protected Opus fallback can force audio/ogg MIME', () {
+    final source = CachingStreamAudioSource(
+      uri: Uri.parse(
+        'https://newapi.asmrhentai.net/storage/RJ244551/a_cpz.opus',
+      ),
+      hash: 'asmr-hentai-test',
+      headers: const <String, String>{
+        'Referer': 'https://asmrhentai.net',
+      },
+      contentTypeOverride: 'audio/ogg',
+    );
+    expect(source.contentTypeOverride, 'audio/ogg');
   });
 
   test('HLS always bypasses byte-stream cache', () {
