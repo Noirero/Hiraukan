@@ -1,11 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kikoeru_flutter/src/models/audio_track.dart';
 import 'package:kikoeru_flutter/src/models/work.dart';
 import 'package:kikoeru_flutter/src/sources/unified_source_models.dart';
 import 'package:kikoeru_flutter/src/sources/unified_source_registry.dart';
 import 'package:kikoeru_flutter/src/sources/unified_source_service.dart';
+import 'package:kikoeru_flutter/src/services/track_playback_progress_store.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('Chapter Audio Engine', () {
     test('virtual track converts absolute and relative positions safely', () {
       const track = AudioTrack(
@@ -127,6 +131,59 @@ void main() {
         tracks[1].playbackHeaders['Referer'],
         'https://japaneseasmr.com/',
       );
+    });
+
+    test('progress is isolated per virtual track even with one shared media hash',
+        () async {
+      SharedPreferences.setMockInitialValues(const <String, Object>{});
+      const first = AudioTrack(
+        id: 'japanese_asmr:123:chapter-1',
+        title: 'Track 1',
+        url: 'https://cdn.example/work.m4a',
+        hash: 'shared-media',
+        sourceKey: 'japanese_asmr',
+        sourceWorkId: '123',
+        sourceTrackId: 'chapter-1',
+        startOffset: Duration.zero,
+        endOffset: Duration(minutes: 4, seconds: 18),
+        duration: Duration(minutes: 4, seconds: 18),
+      );
+      const second = AudioTrack(
+        id: 'japanese_asmr:123:chapter-2',
+        title: 'Track 2',
+        url: 'https://cdn.example/work.m4a',
+        hash: 'shared-media',
+        sourceKey: 'japanese_asmr',
+        sourceWorkId: '123',
+        sourceTrackId: 'chapter-2',
+        startOffset: Duration(minutes: 4, seconds: 18),
+        endOffset: Duration(minutes: 11, seconds: 23),
+        duration: Duration(minutes: 7, seconds: 5),
+      );
+
+      final store = TrackPlaybackProgressStore.instance;
+      expect(store.identityFor(first), isNot(store.identityFor(second)));
+
+      await store.save(
+        first,
+        const Duration(minutes: 1),
+        duration: first.segmentDuration,
+      );
+      await store.save(
+        second,
+        const Duration(minutes: 7, seconds: 5),
+        duration: second.segmentDuration,
+        completed: true,
+      );
+
+      final values = await store.loadForTracks(const [first, second]);
+      final firstValue = values[store.identityFor(first)];
+      final secondValue = values[store.identityFor(second)];
+
+      expect(firstValue?.position, const Duration(minutes: 1));
+      expect(firstValue?.completed, isFalse);
+      expect(secondValue?.position, const Duration(minutes: 7, seconds: 5));
+      expect(secondValue?.completed, isTrue);
     });
   });
 }
