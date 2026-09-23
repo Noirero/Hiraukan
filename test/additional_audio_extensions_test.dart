@@ -3,6 +3,8 @@ import 'package:kikoeru_flutter/src/extensions/asmr18_audio_extension.dart';
 import 'package:kikoeru_flutter/src/extensions/asmr_hentai_net_audio_extension.dart';
 import 'package:kikoeru_flutter/src/extensions/audio_extension_manifest.dart';
 import 'package:kikoeru_flutter/src/extensions/japanese_asmr_audio_extension.dart';
+import 'package:kikoeru_flutter/src/models/audio_track.dart';
+import 'package:kikoeru_flutter/src/services/source_subtitle_service.dart';
 import 'package:kikoeru_flutter/src/sources/asmr18_source_adapter.dart';
 import 'package:kikoeru_flutter/src/sources/asmr_hentai_net_source_adapter.dart';
 import 'package:kikoeru_flutter/src/sources/japanese_asmr_source_adapter.dart';
@@ -24,10 +26,8 @@ void main() {
 
     expect(hentaiNet.id, 'miyorare.audio.asmr_hentai_net');
     expect(hentaiNet.capabilities, contains(AudioExtensionCapability.detail));
-    expect(
-      hentaiNet.capabilities,
-      isNot(contains(AudioExtensionCapability.playback)),
-    );
+    expect(hentaiNet.capabilities, contains(AudioExtensionCapability.playback));
+    expect(hentaiNet.capabilities, contains(AudioExtensionCapability.subtitles));
     expect(
       hentaiNet.capabilities,
       isNot(contains(AudioExtensionCapability.download)),
@@ -297,6 +297,48 @@ void main() {
     expect(folder['type'], 'folder');
     expect(child['duration'], 178);
     expect(child['title'], 'A Request from the Students');
-    expect(child.containsKey('mediaStreamUrl'), isFalse);
+    expect(child['sourceTrackId'], 'a_x3n');
+    expect(
+      child['mediaStreamUrl'],
+      'https://newapi.asmrhentai.net/storage/RJ245055/a_x3n.opus',
+    );
+    expect(child['startOffset'], 0);
+    expect(child['endOffset'], 178);
+  });
+
+  test('ASMR Hentai source transcript maps timestamps to active track', () {
+    const track = AudioTrack(
+      id: 'asmr_hentai_net:RJ245055:a_x3n',
+      title: 'A Request from the Students',
+      url: 'https://newapi.asmrhentai.net/storage/RJ245055/a_x3n.opus',
+      duration: Duration(seconds: 178),
+      sourceKey: 'asmr_hentai_net',
+      sourceWorkId: 'RJ245055',
+      sourceTrackId: 'a_x3n',
+      startOffset: Duration.zero,
+      endOffset: Duration(seconds: 178),
+    );
+
+    final result = SourceSubtitleService.parseAsmrHentaiTranscript(
+      const <String, dynamic>{
+        'a': false,
+        'b': <dynamic>[
+          <String, dynamic>{'a': 0.5, 'b': 'First line'},
+          <String, dynamic>{'a': 4, 'b': 'Second line'},
+        ],
+      },
+      track: track,
+    );
+
+    expect(result, isNotNull);
+    expect(result!.lyrics, hasLength(2));
+    expect(result.lyrics.first.startTime, const Duration(milliseconds: 500));
+    expect(result.lyrics.first.endTime, const Duration(seconds: 4));
+    expect(result.lyrics.last.endTime, const Duration(seconds: 178));
+    expect(
+      result.sourceUri,
+      'source://asmr_hentai_net/RJ245055/a_x3n',
+    );
+    expect(result.aiGenerated, isFalse);
   });
 }
