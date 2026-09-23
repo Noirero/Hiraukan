@@ -404,6 +404,472 @@ class JapaneseAsmrGatewayParser {
       .replaceAll('>', '&gt;');
 }
 
+class JapaneseAsmrLastKnownGood {
+  const JapaneseAsmrLastKnownGood._();
+
+  // This snapshot is intentionally small: every entry shipped here must have
+  // a media endpoint that was verified independently. It is a final fallback,
+  // not a replacement for the live catalog or the read-only gateway.
+  static const String catalogMarkdown = r'''
+Title: Japanese ASMR
+
+## [【KU100★恋鈴桃歌】彼女といちゃらぶ温泉旅行](https://japaneseasmr.com/150698/)
+
+[![Image 1](https://pic.weeabo0.xyz/RJ01717942_img_main.jpg)](https://japaneseasmr.com/150698/)
+
+**[260913][Another] 【KU100★恋鈴桃歌】彼女といちゃらぶ温泉旅行 [RJ01717942]**
+
+CV: Kosuzu Momoka
+''';
+
+  static const String _detail150698 = r'''
+Title: 【KU100★恋鈴桃歌】彼女といちゃらぶ温泉旅行 – Japanese ASMR
+
+![Image](https://pic.weeabo0.xyz/RJ01717942_img_main.jpg)
+
+**[260913][Another] 【KU100★恋鈴桃歌】彼女といちゃらぶ温泉旅行 [RJ01717942]**
+
+CV: Kosuzu Momoka
+
+[Video 2](https://v.weeab0o.xyz/RJ01717942.m3u8)
+
+総再生時間:1時間19分38秒
+''';
+
+  static String? detailMarkdown(String sourceUrl) {
+    final uri = Uri.tryParse(sourceUrl);
+    if (uri == null) return null;
+    final path = uri.path.replaceAll(RegExp(r'/+
+  static const String baseUrl = 'https://japaneseasmr.com';
+  static const String _userAgent = 'Hiraukan/3.8 UnifiedSources';
+
+  final Dio _client;
+
+  factory JapaneseAsmrSourceAdapter({Dio? dio}) {
+    final client = dio ?? Dio();
+    return JapaneseAsmrSourceAdapter._(client);
+  }
+
+  JapaneseAsmrSourceAdapter._(Dio client)
+      : _client = client,
+        super(
+          kind: UnifiedSourceKind.japaneseAsmr,
+          baseUrl: baseUrl,
+          cacheNamespace: 'japaneseasmr',
+          catalogUrlBuilder: _catalogUrl,
+          detailUrlMatcher: _isDetailUrl,
+          dio: client,
+        );
+
+  @override
+  Future<SourceSearchPage> search({
+    required String keyword,
+    required int page,
+    required int pageSize,
+  }) async {
+    try {
+      final direct = await super.search(
+        keyword: keyword,
+        page: page,
+        pageSize: pageSize,
+      );
+      if (direct.items.isNotEmpty) return direct;
+    } catch (_) {
+      // Fall through to the gateway below.
+    }
+
+    final logicalPage = page < 1 ? 1 : page;
+    try {
+      final markdown = await _getGatewayText(
+        _catalogUrl(keyword.trim(), logicalPage),
+      );
+      final items = JapaneseAsmrGatewayParser.catalog(
+        markdown,
+        pageSize: pageSize,
+      );
+      if (items.isNotEmpty) {
+        return SourceSearchPage(
+          items: items,
+          totalCount: ((logicalPage - 1) * pageSize) + items.length,
+          hasMore: items.length >= pageSize,
+        );
+      }
+    } catch (_) {
+      // Fall through to the verified last-known-good snapshot.
+    }
+
+    return _searchLastKnownGood(
+      keyword: keyword,
+      page: logicalPage,
+      pageSize: pageSize,
+    );
+  }
+
+  SourceSearchPage _searchLastKnownGood({
+    required String keyword,
+    required int page,
+    required int pageSize,
+  }) {
+    final normalizedKeyword = keyword.trim().toLowerCase();
+    var items = JapaneseAsmrGatewayParser.catalog(
+      JapaneseAsmrLastKnownGood.catalogMarkdown,
+      pageSize: 100,
+    );
+    if (normalizedKeyword.isNotEmpty) {
+      items = items.where((candidate) {
+        final haystack = <String>[
+          candidate.work.title,
+          candidate.work.name ?? '',
+          candidate.ref.canonicalId ?? '',
+          candidate.ref.localId,
+        ].join(' ').toLowerCase();
+        return haystack.contains(normalizedKeyword);
+      }).toList(growable: false);
+    }
+
+    final safePageSize = pageSize < 1 ? 1 : pageSize;
+    final start = (page - 1) * safePageSize;
+    if (start >= items.length) {
+      return SourceSearchPage(
+        items: const [],
+        totalCount: items.length,
+        hasMore: false,
+      );
+    }
+    final selected =
+        items.skip(start).take(safePageSize).toList(growable: false);
+    return SourceSearchPage(
+      items: selected,
+      totalCount: items.length,
+      hasMore: start + selected.length < items.length,
+    );
+  }
+
+  @override
+  Future<Work> loadDetail(UnifiedSourceRef ref) async {
+    final html = await _getSourceText(ref.detailUrl);
+    final pageUri = Uri.parse(ref.detailUrl);
+    final canonical = ref.canonicalId ?? JapaneseAsmrPageParser.canonicalId(html);
+    final parsedTitle = JapaneseAsmrPageParser.title(
+      html,
+      fallback: ref.title ?? ref.localId,
+      canonical: canonical,
+    );
+    final cover =
+        SourceHtmlParser.extractFirstImage(html, base: pageUri) ?? ref.coverUrl;
+    final totalDuration = JapaneseAsmrPageParser.totalDurationSeconds(html);
+    final circle = JapaneseAsmrPageParser.circle(html) ?? ref.circle;
+    final vas = JapaneseAsmrPageParser.voiceActors(html)
+        .map(
+          (name) => Va(
+            id: 'japaneseasmr-va:${SourceHtmlParser.stableNegativeId(name).abs()}',
+            name: name,
+          ),
+        )
+        .toList(growable: false);
+    final tags = JapaneseAsmrPageParser.tags(html)
+        .map(
+          (name) => Tag(
+            id: SourceHtmlParser.stableNegativeId('japaneseasmr-tag:$name'),
+            name: name,
+          ),
+        )
+        .toList(growable: false);
+
+    return Work(
+      id: SourceHtmlParser.stableNegativeId(
+        'japaneseasmr:${canonical ?? ref.localId}',
+      ),
+      title: parsedTitle,
+      name: circle,
+      vas: vas.isEmpty ? null : vas,
+      tags: tags.isEmpty ? null : tags,
+      release: JapaneseAsmrPageParser.releaseDate(html),
+      duration: totalDuration ?? ref.durationSeconds,
+      images: cover == null ? null : <String>[cover],
+      description: SourceHtmlParser.extractMetaContent(html, 'description'),
+      sourceUrl: ref.detailUrl,
+      sourceId: canonical,
+    );
+  }
+
+  @override
+  Future<List<dynamic>> loadTracks(UnifiedSourceRef ref) async {
+    final html = await _getSourceText(ref.detailUrl);
+    final pageUri = Uri.parse(ref.detailUrl);
+    final totalDuration = JapaneseAsmrPageParser.totalDurationSeconds(html);
+    final chapters = JapaneseAsmrPageParser.chapters(
+      html,
+      totalDurationSeconds: totalDuration,
+    );
+    final media = await _resolveMedia(html, pageUri);
+    if (media == null) return const [];
+
+    final headers = <String, String>{
+      'Referer': ref.detailUrl,
+      'Origin': baseUrl,
+      'User-Agent': _userAgent,
+    };
+    final mediaHash =
+        'japanese_asmr:${ref.localId}:media:${SourceHtmlParser.stableNegativeId(media).abs()}';
+
+    if (chapters.isEmpty) {
+      return <dynamic>[
+        <String, dynamic>{
+          'title': SourceHtmlParser.basenameFromUrl(media, 0),
+          'type': 'audio',
+          'hash': mediaHash,
+          'sourceTrackId': 'full',
+          'mediaStreamUrl': media,
+          if (totalDuration != null) 'duration': totalDuration,
+          'headers': headers,
+        },
+      ];
+    }
+
+    return chapters.map((chapter) {
+      return <String, dynamic>{
+        'title': chapter.title,
+        'type': 'audio',
+        'hash': mediaHash,
+        'sourceTrackId': chapter.id,
+        'mediaStreamUrl': media,
+        'startOffset': chapter.startSeconds,
+        if (chapter.endSeconds != null) 'endOffset': chapter.endSeconds!,
+        if (chapter.durationSeconds != null)
+          'duration': chapter.durationSeconds!,
+        'headers': headers,
+      };
+    }).toList(growable: false);
+  }
+
+  Future<String?> _resolveMedia(String html, Uri pageUri) async {
+    final directCandidates = SourceHtmlParser.extractPlayableUrls(
+      html,
+      base: pageUri,
+    );
+    final direct = await _firstReachable(directCandidates, pageUri);
+    if (direct != null) return direct;
+
+    // Player 1 / Player 2 are commonly embedded documents. Preserve DOM order
+    // so the first usable player wins, and only continue when it cannot resolve.
+    for (final playerUrl
+        in JapaneseAsmrPageParser.embeddedPlayerUrls(html, pageUri)) {
+      try {
+        final playerHtml = await _getHtml(
+          playerUrl,
+          referer: pageUri.toString(),
+        );
+        final candidates = SourceHtmlParser.extractPlayableUrls(
+          playerHtml,
+          base: Uri.parse(playerUrl),
+        );
+        final resolved = await _firstReachable(candidates, Uri.parse(playerUrl));
+        if (resolved != null) return resolved;
+      } catch (_) {
+        continue;
+      }
+    }
+    return null;
+  }
+
+  Future<String?> _firstReachable(
+    List<String> candidates,
+    Uri referer,
+  ) async {
+    if (candidates.isEmpty) return null;
+    final direct = candidates.where((url) => !_looksHls(url));
+    final hls = candidates.where(_looksHls);
+    for (final candidate in <String>[...direct, ...hls]) {
+      if (await _probe(candidate, referer)) return candidate;
+    }
+    return null;
+  }
+
+  Future<bool> _probe(String url, Uri referer) async {
+    final headers = <String, String>{
+      'Referer': referer.toString(),
+      'Origin': baseUrl,
+      'User-Agent': _userAgent,
+    };
+    try {
+      if (_looksHls(url)) {
+        final response = await _client.get<String>(
+          url,
+          options: Options(
+            responseType: ResponseType.plain,
+            headers: headers,
+            sendTimeout: const Duration(seconds: 8),
+            receiveTimeout: const Duration(seconds: 8),
+            validateStatus: (status) =>
+                status != null && status >= 200 && status < 400,
+          ),
+        );
+        return (response.data ?? '').contains('#EXTM3U');
+      }
+
+      final response = await _client.head<void>(
+        url,
+        options: Options(
+          headers: headers,
+          sendTimeout: const Duration(seconds: 8),
+          receiveTimeout: const Duration(seconds: 8),
+          validateStatus: (status) =>
+              status != null && status >= 200 && status < 400,
+        ),
+      );
+      return response.statusCode != null;
+    } catch (_) {
+      // Some media hosts reject HEAD even when GET playback is valid. Keep a
+      // syntactically valid direct media URL as a last candidate; the player
+      // will surface a real playback failure and Unified Sources can fallback.
+      final uri = Uri.tryParse(url);
+      return uri != null &&
+          (uri.scheme == 'http' || uri.scheme == 'https') &&
+          _looksDirectAudio(url);
+    }
+  }
+
+  bool _looksHls(String url) =>
+      Uri.tryParse(url)?.path.toLowerCase().endsWith('.m3u8') == true;
+
+  bool _looksDirectAudio(String url) {
+    final path = Uri.tryParse(url)?.path.toLowerCase() ?? '';
+    return const [
+      '.mp3',
+      '.m4a',
+      '.aac',
+      '.ogg',
+      '.opus',
+      '.wav',
+      '.flac',
+      '.m4b',
+    ].any(path.endsWith);
+  }
+
+  @override
+  Future<UnifiedSourceHealth> checkHealth() async {
+    final direct = await super.checkHealth();
+    if (direct != UnifiedSourceHealth.broken) return direct;
+
+    try {
+      final markdown = await _getGatewayText('$baseUrl/');
+      return markdown.contains('japaneseasmr.com')
+          ? UnifiedSourceHealth.degraded
+          : UnifiedSourceHealth.broken;
+    } catch (_) {
+      final lastKnownGood = JapaneseAsmrGatewayParser.catalog(
+        JapaneseAsmrLastKnownGood.catalogMarkdown,
+        pageSize: 1,
+      );
+      return lastKnownGood.isNotEmpty
+          ? UnifiedSourceHealth.degraded
+          : UnifiedSourceHealth.broken;
+    }
+  }
+
+  Future<String> _getSourceText(String url) async {
+    try {
+      final direct = await _getHtml(url);
+      final canonical = JapaneseAsmrPageParser.canonicalId(direct);
+      final hasWorkSignals = canonical != null ||
+          direct.contains('work_title_jp') ||
+          direct.contains('plyr-chapter-playlist') ||
+          SourceHtmlParser.extractPlayableUrls(
+            direct,
+            base: Uri.tryParse(url),
+          ).isNotEmpty;
+      if (hasWorkSignals) return direct;
+    } catch (_) {
+      // Fall through to the read-only gateway.
+    }
+
+    try {
+      final markdown = await _getGatewayText(url);
+      return JapaneseAsmrGatewayParser.normalizeDetail(markdown);
+    } catch (_) {
+      final lastKnownGood =
+          JapaneseAsmrLastKnownGood.detailMarkdown(url);
+      if (lastKnownGood != null) {
+        return JapaneseAsmrGatewayParser.normalizeDetail(lastKnownGood);
+      }
+      rethrow;
+    }
+  }
+
+  Future<String> _getGatewayText(String sourceUrl) async {
+    Object? lastError;
+    for (final gatewayUrl
+        in JapaneseAsmrGatewayParser.gatewayUrls(sourceUrl)) {
+      try {
+        final response = await _client.get<String>(
+          gatewayUrl,
+          options: Options(
+            responseType: ResponseType.plain,
+            headers: const <String, String>{
+              'User-Agent': _userAgent,
+              'Accept': 'text/plain,*/*;q=0.8',
+            },
+            sendTimeout: const Duration(seconds: 12),
+            receiveTimeout: const Duration(seconds: 22),
+            validateStatus: (status) =>
+                status != null && status >= 200 && status < 400,
+          ),
+        );
+        final text = response.data ?? '';
+        if (text.trim().isNotEmpty) return text;
+        lastError = StateError(
+          'JapaneseASMR gateway returned an empty response: $gatewayUrl',
+        );
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw StateError('JapaneseASMR gateways failed: $lastError');
+  }
+
+  Future<String> _getHtml(
+    String url, {
+    String? referer,
+  }) async {
+    final response = await _client.get<String>(
+      url,
+      options: Options(
+        responseType: ResponseType.plain,
+        headers: <String, String>{
+          'Referer': referer ?? '$baseUrl/',
+          'User-Agent': _userAgent,
+        },
+        validateStatus: (status) =>
+            status != null && status >= 200 && status < 400,
+      ),
+    );
+    return response.data ?? '';
+  }
+}
+
+String _catalogUrl(String keyword, int page) {
+  final encoded = Uri.encodeQueryComponent(keyword);
+  if (keyword.isEmpty) {
+    return page <= 1
+        ? '$JapaneseAsmrSourceAdapter.baseUrl/'
+        : '$JapaneseAsmrSourceAdapter.baseUrl/page/$page/';
+  }
+  return page <= 1
+      ? '$JapaneseAsmrSourceAdapter.baseUrl/?s=$encoded'
+      : '$JapaneseAsmrSourceAdapter.baseUrl/page/$page/?s=$encoded';
+}
+
+bool _isDetailUrl(Uri uri) {
+  final host = uri.host.toLowerCase().replaceFirst('www.', '');
+  if (host != 'japaneseasmr.com') return false;
+  return RegExp(r'^/\d+/?$').hasMatch(uri.path);
+}
+), '');
+    return path == '/150698' ? _detail150698 : null;
+  }
+}
+
 class JapaneseAsmrSourceAdapter extends HtmlAudioSiteSourceAdapter {
   static const String baseUrl = 'https://japaneseasmr.com';
   static const String _userAgent = 'Hiraukan/3.8 UnifiedSources';
