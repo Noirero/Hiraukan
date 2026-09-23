@@ -5,6 +5,7 @@ import '../models/work.dart';
 import 'audio_player_service.dart';
 import 'log_service.dart';
 import 'playback_history_store.dart';
+import 'track_playback_progress_store.dart';
 
 /// 历史写入触发原因
 enum FlushReason {
@@ -111,8 +112,18 @@ class PlaybackHistoryService {
   /// 周期性 checkpoint: 只在 playing 且 position 真正推进时触发
   void _onCheckpointTick(AudioPlayerService playerService) {
     if (!playerService.playing) return;
-    final positionMs = playerService.position.inMilliseconds;
+    final position = playerService.position;
+    final positionMs = position.inMilliseconds;
+    final track = playerService.currentTrack;
+    final duration = playerService.duration;
     unawaited(_enqueueOperation(() async {
+      if (track != null) {
+        await TrackPlaybackProgressStore.instance.save(
+          track,
+          position,
+          duration: duration,
+        );
+      }
       if (_currentWorkId == null || _currentWork == null) return;
 
       // 与上次持久化位置差值不足 3 秒则不写
@@ -184,6 +195,15 @@ class PlaybackHistoryService {
   /// seek 提交后调用，立即落盘
   Future<void> onSeekCommitted(Duration position) =>
       _enqueueOperation(() async {
+        final player = AudioPlayerService.instance;
+        final track = player.currentTrack;
+        if (track != null) {
+          await TrackPlaybackProgressStore.instance.save(
+            track,
+            position,
+            duration: player.duration,
+          );
+        }
         _lastKnownPositionMs = position.inMilliseconds;
         _dirty = true;
         await _persistNow(FlushReason.seekCommitted);
@@ -191,8 +211,18 @@ class PlaybackHistoryService {
 
   /// 暂停时调用
   Future<void> onPaused() {
-    final positionMs = AudioPlayerService.instance.position.inMilliseconds;
+    final player = AudioPlayerService.instance;
+    final position = player.position;
+    final positionMs = position.inMilliseconds;
     return _enqueueOperation(() async {
+      final track = player.currentTrack;
+      if (track != null) {
+        await TrackPlaybackProgressStore.instance.save(
+          track,
+          position,
+          duration: player.duration,
+        );
+      }
       _lastKnownPositionMs = positionMs;
       _dirty = true;
       await _persistNow(FlushReason.paused);
@@ -201,8 +231,18 @@ class PlaybackHistoryService {
 
   /// 停止时调用
   Future<void> onStopped() {
-    final positionMs = AudioPlayerService.instance.position.inMilliseconds;
+    final player = AudioPlayerService.instance;
+    final position = player.position;
+    final positionMs = position.inMilliseconds;
     return _enqueueOperation(() async {
+      final track = player.currentTrack;
+      if (track != null) {
+        await TrackPlaybackProgressStore.instance.save(
+          track,
+          position,
+          duration: player.duration,
+        );
+      }
       _lastKnownPositionMs = positionMs;
       _dirty = true;
       await _persistNow(FlushReason.stopped);
