@@ -333,14 +333,33 @@ class UnifiedSourceService {
       );
       if (url == null) continue;
 
+      final startOffset = _trackOffset(
+        file['startOffset'] ?? file['segmentStart'],
+      );
+      final endOffset = _trackOffset(
+        file['endOffset'] ?? file['segmentEnd'],
+      );
       final durationValue = file['duration'];
-      final durationSeconds =
-          durationValue is num ? durationValue.toDouble() : null;
+      var duration = durationValue is num
+          ? Duration(milliseconds: (durationValue.toDouble() * 1000).round())
+          : null;
+      if (duration == null &&
+          startOffset != null &&
+          endOffset != null &&
+          endOffset >= startOffset) {
+        duration = endOffset - startOffset;
+      }
       final title = file['title']?.toString() ??
           file['name']?.toString() ??
           SourceHtmlParser.basenameFromUrl(url, entry.key);
-      final identity = hash ??
-          '${resolved.source.source.id}:${resolved.source.localId}:${entry.key}';
+      final rawSourceTrackId = file['sourceTrackId'] ??
+          file['trackId'] ??
+          file['id'];
+      final sourceTrackId = rawSourceTrackId?.toString().trim();
+      final identity = sourceTrackId != null && sourceTrackId.isNotEmpty
+          ? '${resolved.source.source.id}:${resolved.source.localId}:$sourceTrackId'
+          : hash ??
+              '${resolved.source.source.id}:${resolved.source.localId}:${entry.key}';
       tracks.add(
         AudioTrack(
           id: identity,
@@ -349,20 +368,47 @@ class UnifiedSourceService {
           artist: work.name,
           album: work.title,
           artworkUrl: artwork,
-          duration: durationSeconds == null
-              ? null
-              : Duration(
-                  milliseconds: (durationSeconds * 1000).round(),
-                ),
+          duration: duration,
           workId: work.id,
           hash: hash ?? identity,
           sourcePath: resolved.source.detailUrl,
           sourceKey: resolved.source.source.id,
           sourceWorkId: resolved.source.localId,
+          sourceTrackId:
+              sourceTrackId == null || sourceTrackId.isEmpty
+                  ? (hash ?? identity)
+                  : sourceTrackId,
+          startOffset: startOffset,
+          endOffset: endOffset,
         ),
       );
     }
     return tracks;
+  }
+
+  Duration? _trackOffset(Object? raw) {
+    if (raw == null) return null;
+    if (raw is Duration) return raw;
+    if (raw is num) {
+      return Duration(milliseconds: (raw.toDouble() * 1000).round());
+    }
+
+    final value = raw.toString().trim();
+    if (value.isEmpty) return null;
+    final numeric = double.tryParse(value);
+    if (numeric != null) {
+      return Duration(milliseconds: (numeric * 1000).round());
+    }
+
+    final parts = value.split(':');
+    if (parts.length < 2 || parts.length > 3) return null;
+    final seconds = double.tryParse(parts.last);
+    final minutes = int.tryParse(parts[parts.length - 2]);
+    final hours = parts.length == 3 ? int.tryParse(parts.first) : 0;
+    if (seconds == null || minutes == null || hours == null) return null;
+    final totalMilliseconds =
+        (((hours * 60 + minutes) * 60 + seconds) * 1000).round();
+    return Duration(milliseconds: totalMilliseconds);
   }
 
   String? _resolveTrackUrl(
