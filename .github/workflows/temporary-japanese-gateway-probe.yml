@@ -1,4 +1,4 @@
-name: Temporary JapaneseASMR Gateway Probe
+name: Temporary External Audio Runtime Probe
 
 on:
   push:
@@ -12,39 +12,163 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
-      - name: Probe direct and fallback gateways
+      - name: Probe JapaneseASMR catalog and playback endpoints
         shell: bash
         run: |
+          set -euo pipefail
           python3 - <<'PY'
-          import urllib.request, urllib.parse, re
+          import json, re, urllib.request, urllib.error
 
-          UA = "Hiraukan/3.8 Gateway Probe"
-          targets = [
-              ("direct-home", "https://japaneseasmr.com/"),
-              ("jina-home", "https://r.jina.ai/https://japaneseasmr.com/"),
-              ("allorigins-home", "https://api.allorigins.win/raw?url=" + urllib.parse.quote("https://japaneseasmr.com/", safe="")),
-              ("jina-detail", "https://r.jina.ai/https://japaneseasmr.com/150698/"),
-              ("allorigins-detail", "https://api.allorigins.win/raw?url=" + urllib.parse.quote("https://japaneseasmr.com/150698/", safe="")),
-          ]
-          for label, url in targets:
+          UA = "Hiraukan/3.8 UnifiedSources"
+
+          def get(label, url, headers=None, limit=4_000_000):
+              h = {"User-Agent": UA}
+              if headers:
+                  h.update(headers)
               print("\n==", label, url, "==")
               try:
-                  req = urllib.request.Request(url, headers={"User-Agent": UA})
-                  with urllib.request.urlopen(req, timeout=20) as r:
-                      body = r.read()
+                  req = urllib.request.Request(url, headers=h)
+                  with urllib.request.urlopen(req, timeout=24) as r:
+                      body = r.read(limit)
                       text = body.decode("utf-8", "replace")
-                      print("STATUS", r.status, "TYPE", r.headers.get("Content-Type"), "BYTES", len(body))
-                      print("NUMERIC_LINKS", re.findall(r'https?://(?:www\\.)?japaneseasmr\\.com/(\\d+)/?', text, re.I)[:10])
-                      print("RJ", re.findall(r'RJ\\d{5,10}', text, re.I)[:10])
-                      media = re.findall(r'https?://[^\\"\'<>\\s)]+?\\.(?:m3u8|mp3|m4a|opus)(?:\\?[^\\"\'<>\\s)]*)?', text, re.I)
-                      print("MEDIA", media[:10])
-                      print("HEAD", re.sub(r'\\s+', ' ', text[:1200])[:1200])
-                      for needle in ["00:00:00", "総再生時間", "Player 1", "weeab0o", "weeabo0"]:
-                          idx = text.find(needle)
-                          if idx >= 0:
-                              print("CTX", needle, re.sub(r'\\s+', ' ', text[max(0,idx-500):idx+1800])[:2300])
+                      print("STATUS", r.status, "TYPE", r.headers.get("Content-Type"), "LEN", len(body),
+                            "FINAL", r.geturl())
+                      print("NUMERIC", re.findall(r'https?://(?:www\\.)?japaneseasmr\\.com/(\\d+)/?', text, re.I)[:8])
+                      print("RJ", re.findall(r'RJ\\d{5,10}', text, re.I)[:8])
+                      print("MEDIA", re.findall(r'https?://[^\\s\"\'<>\\)]+?\\.(?:m3u8|mp3|m4a|aac|ogg|opus)(?:\\?[^\\s\"\'<>\\)]*)?', text, re.I)[:8])
+                      print("HEAD", re.sub(r"\\s+", " ", text[:900]))
+                      return text
               except Exception as e:
-                  print("ERROR", type(e).__name__, str(e)[:240])
+                  print("ERROR", type(e).__name__, str(e)[:400])
+                  return ""
+
+          for url in [
+              "https://japaneseasmr.com/",
+              "https://r.jina.ai/https://japaneseasmr.com/",
+              "https://r.jina.ai/http://japaneseasmr.com/",
+          ]:
+              get("japanese-home", url)
+          PY
+
+      - name: Probe ASMR+18 work from device video
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re, urllib.request
+
+          UA = "Hiraukan/3.8 UnifiedSources"
+          detail = "https://asmr18.fans/boys/rj01638528/"
+          headers = {"User-Agent": UA, "Referer": "https://asmr18.fans/", "Origin": "https://asmr18.fans"}
+
+          try:
+              req = urllib.request.Request(detail, headers={"User-Agent": UA, "Referer": "https://asmr18.fans/"})
+              with urllib.request.urlopen(req, timeout=24) as r:
+                  html = r.read().decode("utf-8", "replace")
+                  print("DETAIL", r.status, r.headers.get("Content-Type"), len(html), r.geturl())
+          except Exception as e:
+              print("DETAIL ERROR", type(e).__name__, str(e))
+              html = ""
+
+          raw = []
+          for pat in [
+              r'https?://[^\\s\"\'<>]+?\\.m3u8(?:\\?[^\\s\"\'<>]*)?',
+              r'https?:\\/\\/[^\\s\"\'<>]+?\\.m3u8(?:\\?[^\\s\"\'<>]*)?',
+          ]:
+              raw.extend(re.findall(pat, html, re.I))
+          raw = [x.replace("\\/", "/") for x in raw]
+          raw += [
+              "https://cdn3.cloudintech.net/file/RJ01638528/RJ01638528.m3u8",
+              "https://cdn3.cloudintech.net/file/RJ01638528/1.m3u8",
+          ]
+          seen = []
+          for u in raw:
+              if u not in seen:
+                  seen.append(u)
+
+          print("CANDIDATES", seen[:20])
+          for u in seen[:20]:
+              print("\nMEDIA", u)
+              try:
+                  req = urllib.request.Request(u, headers=headers)
+                  with urllib.request.urlopen(req, timeout=18) as r:
+                      body = r.read(160000)
+                      text = body.decode("utf-8", "replace")
+                      print("STATUS", r.status, "TYPE", r.headers.get("Content-Type"), "LEN", len(body),
+                            "FINAL", r.geturl(), "EXTM3U", "#EXTM3U" in text)
+                      print("HEAD", text[:500].replace("\n", " | "))
+              except Exception as e:
+                  print("ERROR", type(e).__name__, str(e)[:400])
+          PY
+
+      - name: Probe ASMR Hentai work from device video
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, urllib.request
+
+          UA = "Hiraukan/3.8 UnifiedSources"
+          API = "https://newapi.asmrhentai.net"
+          WORK = "RJ244551"
+
+          def encode(v):
+              src = json.dumps(v, separators=(",", ":")).encode()
+              return bytes(((~b) & 0xff) for b in src)[::-1]
+
+          def decode(v):
+              raw = bytes(((~b) & 0xff) for b in v)[::-1]
+              return json.loads(raw.decode())
+
+          req = urllib.request.Request(
+              API + "/Core/Info",
+              data=encode({"a":"ja","b":WORK}),
+              headers={"Content-Type":"f/s","Accept-Language":"","User-Agent":UA},
+              method="POST",
+          )
+          with urllib.request.urlopen(req, timeout=24) as r:
+              body = r.read()
+              info = decode(body)
+              print("INFO", r.status, r.headers.get("Content-Type"), len(body), "keys", sorted(info.keys()))
+
+          tracks = []
+          def walk(nodes):
+              if not isinstance(nodes, list):
+                  return
+              for node in nodes:
+                  if not isinstance(node, dict):
+                      continue
+                  direct = node.get("b")
+                  if isinstance(direct, list):
+                      for t in direct:
+                          if isinstance(t, dict) and t.get("a"):
+                              tracks.append((str(t.get("a")), str(t.get("b")), t.get("c")))
+                  walk(node.get("c"))
+
+          walk(info.get("h"))
+          print("TRACKS", tracks)
+          for media_id, title, duration in tracks[:4]:
+              url = f"{API}/storage/{WORK}/{media_id}.opus"
+              print("\nMEDIA", media_id, title, duration, url)
+              for mode in ["exact", "no-origin", "bare"]:
+                  h = {"User-Agent": UA}
+                  if mode == "exact":
+                      h.update({"Referer":"https://asmrhentai.net","Origin":"https://asmrhentai.net","Range":"bytes=0-65535"})
+                  elif mode == "no-origin":
+                      h.update({"Referer":"https://asmrhentai.net","Range":"bytes=0-65535"})
+                  else:
+                      h.update({"Range":"bytes=0-65535"})
+                  try:
+                      req = urllib.request.Request(url, headers=h)
+                      with urllib.request.urlopen(req, timeout=18) as r:
+                          data = r.read(65536)
+                          print(mode, "STATUS", r.status, "TYPE", r.headers.get("Content-Type"),
+                                "RANGE", r.headers.get("Content-Range"), "ACCEPT", r.headers.get("Accept-Ranges"),
+                                "LEN", len(data), "MAGIC", data[:16].hex(), "FINAL", r.geturl())
+                  except urllib.error.HTTPError as e:
+                      print(mode, "HTTP", e.code, e.headers.get("Content-Type"), e.headers.get("Content-Range"))
+                  except Exception as e:
+                      print(mode, "ERROR", type(e).__name__, str(e)[:300])
           PY
