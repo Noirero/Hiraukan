@@ -131,6 +131,16 @@ void main() {
     );
   });
 
+  test('JapaneseASMR gateway retries HTTPS and HTTP upstream variants', () {
+    expect(
+      JapaneseAsmrGatewayParser.gatewayUrls('https://japaneseasmr.com/'),
+      <String>[
+        'https://r.jina.ai/https://japaneseasmr.com/',
+        'https://r.jina.ai/http://japaneseasmr.com/',
+      ],
+    );
+  });
+
   test('JapaneseASMR gateway markdown keeps catalog, chapters and HLS', () {
     const catalogMarkdown = '''
 Title: Japanese ASMR
