@@ -724,13 +724,14 @@ class JapaneseAsmrSourceAdapter extends HtmlAudioSiteSourceAdapter {
       );
       return response.statusCode != null;
     } catch (_) {
-      // Some media hosts reject HEAD even when GET playback is valid. Keep a
-      // syntactically valid direct media URL as a last candidate; the player
-      // will surface a real playback failure and Unified Sources can fallback.
+      // A resolver probe is advisory. The Android native player may still
+      // reach a media host that Dio cannot (different redirect/CDN/network
+      // handling), so a syntactically valid media URL must still be allowed
+      // through. A probe failure is not equivalent to playback failure.
       final uri = Uri.tryParse(url);
       return uri != null &&
           (uri.scheme == 'http' || uri.scheme == 'https') &&
-          _looksDirectAudio(url);
+          (_looksDirectAudio(url) || _looksHls(url));
     }
   }
 
