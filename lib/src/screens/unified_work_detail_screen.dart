@@ -14,6 +14,7 @@ import '../sources/unified_source_models.dart';
 import '../sources/unified_source_preferences.dart';
 import '../sources/unified_source_provider.dart';
 import '../sources/unified_source_registry.dart';
+import '../utils/source_request_headers.dart';
 import '../services/track_playback_progress_store.dart';
 import '../widgets/global_audio_player_wrapper.dart';
 
@@ -791,6 +792,7 @@ class _UnifiedWorkDetailScreenState
                 )
               : CachedNetworkImage(
                   imageUrl: cover,
+                  httpHeaders: sourceImageHeadersFor(cover),
                   fit: BoxFit.cover,
                   errorWidget: (_, __, ___) => ColoredBox(
                     color: scheme.surfaceContainerHighest,
