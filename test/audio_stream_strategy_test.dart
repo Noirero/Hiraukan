@@ -30,6 +30,30 @@ void main() {
     }
   });
 
+  test('ASMR Hentai can retry with header-aware range transport', () {
+    const hentai = AudioTrack(
+      id: 'hn-fallback',
+      title: 'ASMR Hentai Opus',
+      url: 'https://newapi.asmrhentai.net/storage/RJ245055/a_x3n.opus',
+      sourceKey: 'asmr_hentai_net',
+      playbackHeaders: <String, String>{
+        'Referer': 'https://asmrhentai.net',
+      },
+    );
+    const asmr18 = AudioTrack(
+      id: '18-no-fallback',
+      title: 'ASMR+18 HLS',
+      url: 'https://cdn3.cloudintech.net/file/RJ01683528/RJ01683528.m3u8',
+      sourceKey: 'asmr18',
+      playbackHeaders: <String, String>{
+        'Referer': 'https://asmr18.fans/',
+      },
+    );
+
+    expect(AudioStreamStrategy.shouldTryHeaderAwareFallback(hentai), isTrue);
+    expect(AudioStreamStrategy.shouldTryHeaderAwareFallback(asmr18), isFalse);
+  });
+
   test('HLS always bypasses byte-stream cache', () {
     const track = AudioTrack(
       id: 'hls',
