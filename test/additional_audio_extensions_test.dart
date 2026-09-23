@@ -174,20 +174,22 @@ CV: Kosuzu Momoka
 総再生時間: 1時間19分38秒
 ''';
 
+    final normalized =
+        JapaneseAsmrGatewayParser.normalizeDetail(detailMarkdown);
     expect(
       JapaneseAsmrPageParser.title(
-        detailMarkdown,
+        normalized,
         canonical: 'RJ01717942',
       ),
       'Gateway Work',
     );
-    expect(JapaneseAsmrPageParser.circle(detailMarkdown), 'Another');
-    expect(JapaneseAsmrPageParser.releaseDate(detailMarkdown), '2026-09-13');
+    expect(JapaneseAsmrPageParser.circle(normalized), 'Another');
+    expect(JapaneseAsmrPageParser.releaseDate(normalized), '2026-09-13');
 
     final chapters = JapaneseAsmrPageParser.chapters(
-      detailMarkdown,
+      normalized,
       totalDurationSeconds:
-          JapaneseAsmrPageParser.totalDurationSeconds(detailMarkdown),
+          JapaneseAsmrPageParser.totalDurationSeconds(normalized),
     );
     expect(chapters, hasLength(3));
     expect(chapters[0].title, 'track1_First');
