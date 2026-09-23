@@ -80,12 +80,6 @@ class AsmrHentaiApiParser {
           'title': title == null || title.isEmpty ? mediaId : title,
           'type': 'audio',
           'hash': 'asmr_hentai_net:$workId:$mediaId',
-          'mediaStreamUrl': AsmrHentaiNetSourceAdapter.apiBaseUrl +
-              '/storage/' +
-              workId +
-              '/' +
-              mediaId +
-              '.opus',
           if (duration is num) 'duration': duration.toInt(),
         });
       }
@@ -498,14 +492,11 @@ class AsmrHentaiNetSourceAdapter
         );
         continue;
       }
-      final url = value['mediaStreamUrl']?.toString();
-      if (url == null || url.isEmpty) continue;
       result.add(
         AudioFile(
           title: value['title']?.toString() ?? 'Track',
           type: 'audio',
           hash: value['hash']?.toString(),
-          mediaDownloadUrl: url,
           duration: value['duration'],
         ),
       );

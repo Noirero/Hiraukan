@@ -22,8 +22,14 @@ void main() {
 
     expect(hentaiNet.id, 'miyorare.audio.asmr_hentai_net');
     expect(hentaiNet.capabilities, contains(AudioExtensionCapability.detail));
-    expect(hentaiNet.capabilities, contains(AudioExtensionCapability.playback));
-    expect(hentaiNet.capabilities, isNot(contains(AudioExtensionCapability.download)));
+    expect(
+      hentaiNet.capabilities,
+      isNot(contains(AudioExtensionCapability.playback)),
+    );
+    expect(
+      hentaiNet.capabilities,
+      isNot(contains(AudioExtensionCapability.download)),
+    );
   });
 
   test('playable URL parser keeps direct audio and HLS without duplicates', () {
@@ -121,9 +127,7 @@ void main() {
     );
     expect(folder['type'], 'folder');
     expect(child['duration'], 178);
-    expect(
-      child['mediaStreamUrl'],
-      'https://newapi.asmrhentai.net/storage/RJ245055/a_x3n.opus',
-    );
+    expect(child['title'], 'A Request from the Students');
+    expect(child.containsKey('mediaStreamUrl'), isFalse);
   });
 }

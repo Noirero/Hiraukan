@@ -73,7 +73,6 @@ extension UnifiedSourceKindX on UnifiedSourceKind {
           },
         UnifiedSourceKind.asmrHentaiNet => const {
             UnifiedSourceCapability.metadata,
-            UnifiedSourceCapability.playback,
           },
       };
 
