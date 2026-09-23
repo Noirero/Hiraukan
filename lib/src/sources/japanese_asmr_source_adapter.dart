@@ -438,7 +438,7 @@ CV: Kosuzu Momoka
   static String? detailMarkdown(String sourceUrl) {
     final uri = Uri.tryParse(sourceUrl);
     if (uri == null) return null;
-    final path = uri.path.replaceAll(RegExp(r'/+\$'), '');
+    final path = uri.path.replaceAll(RegExp(r'/+$'), '');
     return path == '/150698' ? _detail150698 : null;
   }
 }
