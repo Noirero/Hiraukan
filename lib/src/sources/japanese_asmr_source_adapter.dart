@@ -323,6 +323,7 @@ class JapaneseAsmrGatewayParser {
 
   static List<SourceWorkCandidate> catalog(
     String markdown, {
+    int page = 1,
     required int pageSize,
   }) {
     final headings = RegExp(
