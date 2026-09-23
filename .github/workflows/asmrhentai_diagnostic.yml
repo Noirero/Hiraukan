@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - diagnostic/asmrhentai-api
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,78 +12,59 @@ jobs:
   inspect:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe ASMR Hentai catalog, cover and media
+      - name: Probe ASMR Hentai media requests
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
-          import json, urllib.request
+          import json, urllib.request, urllib.error
 
           BASE='https://newapi.asmrhentai.net'
+          SITE='https://asmrhentai.net/'
 
-          def encode(obj):
+          def enc(obj):
               raw=json.dumps(obj,separators=(',',':'),ensure_ascii=False).encode()
-              return bytes(((~b)&0xff) for b in raw)[::-1]
-
-          def decode(raw):
-              return json.loads(bytes(((~b)&0xff) for b in raw)[::-1].decode())
-
+              return bytes(((~b)&255) for b in raw)[::-1]
+          def dec(raw):
+              return json.loads(bytes(((~b)&255) for b in raw)[::-1].decode())
           def post(path,payload):
-              req=urllib.request.Request(
-                  BASE+path,
-                  data=encode(payload),
-                  method='POST',
-                  headers={
-                      'Content-Type':'f/s',
-                      'Accept-Language':'',
-                      'User-Agent':'Mozilla/5.0 Hiraukan-Diagnostic/1.0',
-                  },
-              )
+              req=urllib.request.Request(BASE+path,data=enc(payload),method='POST',
+                  headers={'Content-Type':'f/s','Accept-Language':'','User-Agent':'Mozilla/5.0'})
               with urllib.request.urlopen(req,timeout=20) as r:
-                  return decode(r.read())
+                  return dec(r.read())
 
-          discover=post('/Core/Discover',{'a':'ja','b':0,'c':0,'d':[]})
-          entry=discover['b'][0]
-          rj=entry['a']
-          info=post('/Core/Info',{'a':'ja','b':rj})
-
-          def first_track(nodes):
+          def tracks(nodes):
+              out=[]
               for node in nodes or []:
                   for tr in node.get('b') or []:
-                      if tr.get('a'):
-                          return tr
-                  found=first_track(node.get('c') or [])
-                  if found: return found
-              return None
+                      if tr.get('a'): out.append(tr)
+                  out += tracks(node.get('c') or [])
+              return out
 
-          track=first_track(info.get('h') or [])
-          print('RJ',rj)
-          print('title',info.get('b'))
-          print('track',track)
-
-          urls=[
-              BASE+'/storage/'+rj+'/cover.avif',
-          ]
-          if track:
-              urls.append(BASE+'/storage/'+rj+'/'+track['a']+'.opus')
-
-          for url in urls:
-              req=urllib.request.Request(
-                  url,
-                  method='GET',
-                  headers={'User-Agent':'Mozilla/5.0 Hiraukan-Diagnostic/1.0','Range':'bytes=0-1023'},
-              )
-              try:
-                  with urllib.request.urlopen(req,timeout=20) as resp:
-                      head=resp.read(1024)
-                      print('URL',url)
-                      print('STATUS',resp.status)
-                      print('CONTENT-TYPE',resp.headers.get('Content-Type'))
-                      print('CONTENT-LENGTH',resp.headers.get('Content-Length'))
-                      print('CONTENT-RANGE',resp.headers.get('Content-Range'))
-                      print('READ',len(head))
-              except Exception as e:
-                  print('URL',url)
-                  print('ERROR',repr(e))
-                  raise
+          discover=post('/Core/Discover',{'a':'ja','b':0,'c':0,'d':[]})
+          checked=0
+          for entry in discover.get('b',[])[:6]:
+              rj=entry['a']
+              info=post('/Core/Info',{'a':'ja','b':rj})
+              ts=tracks(info.get('h') or [])
+              if not ts: continue
+              tr=ts[0]
+              url=f"{BASE}/storage/{rj}/{tr['a']}.opus"
+              print('\nRJ',rj,'track',tr)
+              for label,headers in [
+                  ('plain',{'User-Agent':'Mozilla/5.0'}),
+                  ('referer',{'User-Agent':'Mozilla/5.0','Referer':SITE+rj}),
+                  ('origin',{'User-Agent':'Mozilla/5.0','Referer':SITE+rj,'Origin':'https://asmrhentai.net'}),
+              ]:
+                  req=urllib.request.Request(url,method='GET',headers=headers)
+                  try:
+                      with urllib.request.urlopen(req,timeout=20) as resp:
+                          chunk=resp.read(64)
+                          print(label,'OK',resp.status,resp.headers.get('Content-Type'),resp.headers.get('Content-Length'),'read',len(chunk))
+                  except urllib.error.HTTPError as e:
+                      print(label,'HTTP',e.code,'content-type',e.headers.get('Content-Type'))
+                  except Exception as e:
+                      print(label,'ERR',repr(e))
+              checked += 1
+              if checked >= 3: break
           PY
