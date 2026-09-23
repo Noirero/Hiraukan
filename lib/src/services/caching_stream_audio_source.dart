@@ -12,11 +12,13 @@ class CachingStreamAudioSource extends StreamAudioSource {
     required this.uri,
     required this.hash,
     this.headers = const {},
+    this.contentTypeOverride,
   });
 
   final Uri uri;
   final String hash;
   final Map<String, String> headers;
+  final String? contentTypeOverride;
 
   @override
   Future<StreamAudioResponse> request([int? start, int? end]) async {
@@ -89,7 +91,8 @@ class CachingStreamAudioSource extends StreamAudioSource {
         contentLength: responseLength,
         offset: resolvedStart,
         stream: controller.stream,
-        contentType: contentType ?? 'application/octet-stream',
+        contentType:
+            contentTypeOverride ?? contentType ?? 'application/octet-stream',
       );
     }
 
@@ -129,7 +132,8 @@ class CachingStreamAudioSource extends StreamAudioSource {
       contentLength: responseLength,
       offset: resolvedStart,
       stream: controller.stream,
-      contentType: contentType ?? 'application/octet-stream',
+      contentType:
+            contentTypeOverride ?? contentType ?? 'application/octet-stream',
     );
   }
 
