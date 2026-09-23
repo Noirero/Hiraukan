@@ -217,7 +217,7 @@ class Asmr18PageParser {
     var start = 0;
     if (canonical != null && canonical.isNotEmpty) {
       final found = html.indexOf(canonical);
-      if (found >= 0) start = found;
+      if (found >= 0) start = math.max(0, found - 3000);
     } else {
       final heading = RegExp(r'<h1\b', caseSensitive: false).firstMatch(html);
       if (heading != null) start = heading.start;
