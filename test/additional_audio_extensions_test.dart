@@ -146,7 +146,6 @@ CV: Kosuzu Momoka
 
     final candidates = JapaneseAsmrGatewayParser.catalog(
       catalogMarkdown,
-      page: 1,
       pageSize: 20,
     );
     expect(candidates, hasLength(1));
