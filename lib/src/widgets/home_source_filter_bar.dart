@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../extensions/audio_extension_provider.dart';
 import '../providers/works_provider.dart';
 import '../sources/unified_source_models.dart';
+import '../sources/asmr18_source_adapter.dart';
 
 // Temporary compile-compatibility shim for a stale empty-state reference in
 // works_screen.dart. The SFW/NSFW Home feature itself is removed: this value is
@@ -206,6 +207,40 @@ class HomeSourceFilterBar extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 14),
+                  if (state.sourceFilter == HomeSourceFilter.asmr18) ...[
+                    Text(
+                      'Kategori ASMR+18',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: scheme.onSurface,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: Asmr18CatalogCategory.values.map((category) {
+                        final selected = state.asmr18Category == category;
+                        return ChoiceChip(
+                          label: Text(category.label),
+                          selected: selected,
+                          avatar: Icon(
+                            category == Asmr18CatalogCategory.boys
+                                ? Icons.male_rounded
+                                : category == Asmr18CatalogCategory.girls
+                                    ? Icons.female_rounded
+                                    : category == Asmr18CatalogCategory.allAges
+                                        ? Icons.family_restroom_rounded
+                                        : Icons.apps_rounded,
+                            size: 16,
+                          ),
+                          onSelected: (_) =>
+                              notifier.setAsmr18Category(category),
+                        );
+                      }).toList(growable: false),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -305,6 +340,8 @@ class HomeSourceFilterBar extends ConsumerWidget {
         'Semua sumber digabung, lalu karya dengan ID kanonis yang sama dideduplikasi otomatis.',
       HomeSourceFilter.asmrOne =>
         'Menampilkan katalog ASMR.one dengan dukungan pengurutan penuh.',
+      HomeSourceFilter.asmr18 =>
+        'Menampilkan kategori ${state.asmr18Category.label} dari ASMR+18.',
       _ => 'Menampilkan karya dari ${state.sourceFilter.label}.',
     };
   }
