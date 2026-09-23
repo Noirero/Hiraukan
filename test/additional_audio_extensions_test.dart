@@ -9,6 +9,7 @@ import 'package:kikoeru_flutter/src/sources/asmr18_source_adapter.dart';
 import 'package:kikoeru_flutter/src/sources/asmr_hentai_net_source_adapter.dart';
 import 'package:kikoeru_flutter/src/sources/japanese_asmr_source_adapter.dart';
 import 'package:kikoeru_flutter/src/sources/source_html_parser.dart';
+import 'package:kikoeru_flutter/src/utils/source_request_headers.dart';
 
 void main() {
   test('additional audio extensions expose conservative capabilities', () {
@@ -146,9 +147,10 @@ void main() {
       JapaneseAsmrLastKnownGood.catalogMarkdown,
       pageSize: 20,
     );
-    expect(items, hasLength(1));
-    expect(items.single.ref.localId, 'RJ01717942');
-    expect(items.single.ref.detailUrl, 'https://japaneseasmr.com/150698/');
+    expect(items, hasLength(14));
+    expect(items.first.ref.localId, 'RJ01717942');
+    expect(items.first.ref.detailUrl, 'https://japaneseasmr.com/150698/');
+    expect(items.last.ref.localId, 'RJ01709862');
 
     final detail = JapaneseAsmrLastKnownGood.detailMarkdown(
       'https://japaneseasmr.com/150698/',
@@ -162,6 +164,19 @@ void main() {
     expect(
       JapaneseAsmrPageParser.totalDurationSeconds(normalized),
       4778,
+    );
+  });
+
+  test('JapaneseASMR cover host receives required source headers', () {
+    final headers = sourceImageHeadersFor(
+      'https://pic.weeabo0.xyz/RJ01717942_img_main.jpg',
+    );
+    expect(headers, isNotNull);
+    expect(headers!['Referer'], 'https://japaneseasmr.com/');
+    expect(headers['Origin'], 'https://japaneseasmr.com');
+    expect(
+      sourceImageHeadersFor('https://example.test/cover.jpg'),
+      isNull,
     );
   });
 
