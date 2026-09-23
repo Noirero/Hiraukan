@@ -509,7 +509,7 @@ class Asmr18SourceAdapter extends HtmlAudioSiteSourceAdapter {
 
 String _catalogUrl(String keyword, int page) {
   final encoded = Uri.encodeQueryComponent(keyword);
-  const prefix = '$Asmr18SourceAdapter.baseUrl/boys/';
+  const prefix = '${Asmr18SourceAdapter.baseUrl}/boys/';
   if (keyword.isEmpty) {
     return page <= 1 ? prefix : '${prefix}page/$page/';
   }
