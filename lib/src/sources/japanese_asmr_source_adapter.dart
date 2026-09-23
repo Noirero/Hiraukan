@@ -547,10 +547,29 @@ class JapaneseAsmrSourceAdapter extends HtmlAudioSiteSourceAdapter {
     required int page,
     required int pageSize,
   }) async {
+    final logicalPage = page < 1 ? 1 : page;
+    final trimmedKeyword = keyword.trim();
+
+    // Browsing is cache-first. The bundled snapshot contains media + cover
+    // endpoints that were independently verified, while the provider's live
+    // page currently exposes only about 14 works per page. Returning that
+    // short live page directly would incorrectly make Hiraukan believe the
+    // catalog ends after 14 items. Use the verified snapshot as the stable
+    // pagination baseline; detail and playback still resolve through live /
+    // gateway data when a work is opened.
+    if (trimmedKeyword.isEmpty &&
+        JapaneseAsmrLastKnownGood.entries.isNotEmpty) {
+      return _searchLastKnownGood(
+        keyword: '',
+        page: logicalPage,
+        pageSize: pageSize,
+      );
+    }
+
     try {
       final direct = await super.search(
-        keyword: keyword,
-        page: page,
+        keyword: trimmedKeyword,
+        page: logicalPage,
         pageSize: pageSize,
       );
       if (direct.items.isNotEmpty) return direct;
@@ -558,10 +577,9 @@ class JapaneseAsmrSourceAdapter extends HtmlAudioSiteSourceAdapter {
       // Fall through to the gateway below.
     }
 
-    final logicalPage = page < 1 ? 1 : page;
     try {
       final markdown = await _getGatewayText(
-        _catalogUrl(keyword.trim(), logicalPage),
+        _catalogUrl(trimmedKeyword, logicalPage),
       );
       final items = JapaneseAsmrGatewayParser.catalog(
         markdown,
@@ -579,7 +597,7 @@ class JapaneseAsmrSourceAdapter extends HtmlAudioSiteSourceAdapter {
     }
 
     return _searchLastKnownGood(
-      keyword: keyword,
+      keyword: trimmedKeyword,
       page: logicalPage,
       pageSize: pageSize,
     );
