@@ -13,67 +13,83 @@ jobs:
   inspect:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect ASMR Hentai web client
+      - name: Probe ASMR Hentai live API
         shell: bash
         run: |
           set -euo pipefail
-          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/140 Safari/537.36'
-          curl -fsSL --compressed -A "$UA" https://asmrhentai.net/ -o /tmp/home.html
-          echo '=== homepage scripts ==='
           python - <<'PY'
-          import re
-          h=open('/tmp/home.html','r',encoding='utf-8',errors='ignore').read()
-          scripts=re.findall(r'''<script[^>]+src=["']([^"']+)["']''',h,re.I)
-          for s in scripts: print(s)
-          open('/tmp/scripts.txt','w').write('\n'.join(scripts))
-          PY
+          import json, urllib.request, urllib.error
 
-          echo '=== fetch site scripts ==='
-          : > /tmp/all.js
-          while IFS= read -r src; do
-            case "$src" in
-              http://*|https://*) url="$src" ;;
-              /*) url="https://asmrhentai.net$src" ;;
-              *) url="https://asmrhentai.net/$src" ;;
-            esac
-            if [[ "$url" == *asmrhentai.net* ]]; then
-              echo "--- $url"
-              curl -fsSL --compressed -A "$UA" "$url" -o /tmp/one.js || continue
-              wc -c /tmp/one.js
-              cat /tmp/one.js >> /tmp/all.js
-              printf '\n' >> /tmp/all.js
-            fi
-          done < /tmp/scripts.txt
+          BASE='https://newapi.asmrhentai.net'
 
-          echo '=== API endpoints / URL strings ==='
-          python - <<'PY'
-          import re
-          text=open('/tmp/all.js','r',encoding='utf-8',errors='ignore').read()
-          patterns=[
-              r'https?://[^"\'\s)]+',
-              r'/Asmr/[A-Za-z0-9_]+',
-              r'Asmr/[A-Za-z0-9_]+',
-              r'/[A-Za-z]+/[A-Za-z]+Get',
-          ]
-          seen=[]
-          for pat in patterns:
-              for m in re.findall(pat,text):
-                  if m not in seen:
-                      seen.append(m)
-          for x in seen:
-              if 'asmr' in x.lower() or x.startswith('/Core/') or 'Get' in x:
-                  print(x)
-          print('=== contexts ===')
-          tokens=['function ia','function ma','/Core/','Search','Discover','Newest','Latest','Popular','fetch(']
-          for token in tokens:
-              start=0
-              count=0
-              while True:
-                  i=text.find(token,start)
-                  if i<0: break
-                  print('\n---',token,'@',i,'---')
-                  print(text[max(0,i-900):i+1600])
-                  start=i+len(token)
-                  count += 1
-                  if count >= 8: break
+          def encode(obj):
+              raw=json.dumps(obj,separators=(',',':'),ensure_ascii=False).encode('utf-8')
+              return bytes(((~b)&0xff) for b in raw)[::-1]
+
+          def decode(raw):
+              data=bytes(((~b)&0xff) for b in raw)[::-1]
+              return json.loads(data.decode('utf-8'))
+
+          def post(path,payload):
+              req=urllib.request.Request(
+                  BASE+path,
+                  data=encode(payload),
+                  method='POST',
+                  headers={
+                      'Content-Type':'f/s',
+                      'Accept-Language':'',
+                      'User-Agent':'Mozilla/5.0 Hiraukan-Diagnostic/1.0',
+                  },
+              )
+              with urllib.request.urlopen(req,timeout=20) as r:
+                  raw=r.read()
+                  print(path,'HTTP',r.status,'bytes',len(raw))
+              return decode(raw)
+
+          def summarize(label,obj):
+              print('\n===',label,'===')
+              print('type:',type(obj).__name__)
+              if isinstance(obj,dict):
+                  print('keys:',list(obj.keys()))
+                  for k,v in obj.items():
+                      if isinstance(v,list):
+                          print(' field',k,'list len',len(v))
+                          if v:
+                              print('  first type',type(v[0]).__name__)
+                              print('  first',json.dumps(v[0],ensure_ascii=False)[:2500])
+                      elif isinstance(v,dict):
+                          print(' field',k,'dict keys',list(v.keys())[:30])
+                      else:
+                          print(' field',k,repr(v)[:800])
+              elif isinstance(obj,list):
+                  print('len:',len(obj))
+                  if obj: print('first:',json.dumps(obj[0],ensure_ascii=False)[:2500])
+              print('json head:',json.dumps(obj,ensure_ascii=False)[:6000])
+
+          discover=post('/Core/Discover',{'a':'en','b':0,'c':0,'d':[]})
+          summarize('DISCOVER',discover)
+
+          # Use an id from discover when possible.
+          def find_rj(x):
+              if isinstance(x,dict):
+                  for k,v in x.items():
+                      if k=='a' and isinstance(v,str) and v.upper().startswith('RJ'):
+                          return v.upper()
+                      got=find_rj(v)
+                      if got: return got
+              elif isinstance(x,list):
+                  for v in x:
+                      got=find_rj(v)
+                      if got: return got
+              return None
+
+          rj=find_rj(discover)
+          print('\nselected RJ:',rj)
+
+          search=post('/Core/Search',{'a':'en','b':rj or 'RJ','c':'','d':[],'e':0})
+          summarize('SEARCH',search)
+
+          if rj:
+              info=post('/Core/Info',{'a':'en','b':rj})
+              summarize('INFO',info)
           PY
