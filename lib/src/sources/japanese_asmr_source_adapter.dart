@@ -665,11 +665,22 @@ class JapaneseAsmrSourceAdapter extends HtmlAudioSiteSourceAdapter {
 
   Future<String> _getSourceText(String url) async {
     try {
-      return await _getHtml(url);
+      final direct = await _getHtml(url);
+      final canonical = JapaneseAsmrPageParser.canonicalId(direct);
+      final hasWorkSignals = canonical != null ||
+          direct.contains('work_title_jp') ||
+          direct.contains('plyr-chapter-playlist') ||
+          SourceHtmlParser.extractPlayableUrls(
+            direct,
+            base: Uri.tryParse(url),
+          ).isNotEmpty;
+      if (hasWorkSignals) return direct;
     } catch (_) {
-      final markdown = await _getGatewayText(url);
-      return JapaneseAsmrGatewayParser.normalizeDetail(markdown);
+      // Fall through to the read-only gateway.
     }
+
+    final markdown = await _getGatewayText(url);
+    return JapaneseAsmrGatewayParser.normalizeDetail(markdown);
   }
 
   Future<String> _getGatewayText(String sourceUrl) async {
