@@ -7,6 +7,7 @@ import '../providers/auth_provider.dart';
 import '../screens/unified_work_detail_screen.dart';
 import '../sources/unified_source_models.dart';
 import '../sources/unified_source_registry.dart';
+import '../utils/source_request_headers.dart';
 
 class UnifiedWorkCard extends ConsumerWidget {
   final Work work;
@@ -288,6 +289,7 @@ class _Cover extends StatelessWidget {
     }
     return CachedNetworkImage(
       imageUrl: value,
+      httpHeaders: sourceImageHeadersFor(value),
       fit: BoxFit.cover,
       placeholder: (_, __) => ColoredBox(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
