@@ -111,10 +111,11 @@ class Asmr18PageParser {
       final time = RegExp(r'(\d{1,2}:\d{2}:\d{2})\s*$').firstMatch(text);
       if (time == null) continue;
       final start = _timestampSeconds(time.group(1)!);
-      if (start == null || !seenStarts.add(start)) continue;
+      if (start == null) continue;
       var chapterTitle = text.substring(0, time.start).trim();
       if (chapterTitle.isEmpty) chapterTitle = 'Track ${raw.length + 1}';
       if (!_looksLikeChapterTitle(chapterTitle)) continue;
+      if (!seenStarts.add(start)) continue;
       raw.add((start: start, title: chapterTitle, order: order++));
     }
 
