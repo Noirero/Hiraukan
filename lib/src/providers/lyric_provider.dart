@@ -27,6 +27,7 @@ import '../services/subtitle_translation_cache.dart';
 import '../services/subtitle_translation_planner.dart';
 import '../services/subtitle_language_settings.dart';
 import '../services/storage_service.dart';
+import '../services/source_subtitle_service.dart';
 import 'auth_provider.dart';
 import 'audio_provider.dart';
 import 'settings_provider.dart';
@@ -260,6 +261,35 @@ class LyricController extends StateNotifier<LyricState> {
           await _loadLyricFromLocalFile(libraryLyricPath, requestId);
           return;
         }
+      }
+
+      // Source-provided subtitles come before generic source-file matching
+      // and ASR, while an explicit "library highest" preference still wins.
+      try {
+        final sourceSubtitle = await SourceSubtitleService.instance.load(track);
+        if (!_isCurrentLoadRequest(requestId)) return;
+        if (sourceSubtitle != null && sourceSubtitle.lyrics.isNotEmpty) {
+          _log.captureOutput(
+            '[Lyric] 从 source 加载字幕: ${sourceSubtitle.sourceUri}',
+          );
+          _setStateForLoadRequest(
+            requestId,
+            LyricState(
+              lyrics: sourceSubtitle.lyrics,
+              isLoading: false,
+              lyricUrl: sourceSubtitle.sourceUri,
+              timelineOffset: Duration.zero,
+              subtitleGeneratedByAsr: false,
+            ),
+          );
+          await _restoreDownloadedTranslationForCurrentTrack(requestId);
+          return;
+        }
+      } catch (error) {
+        _log.captureOutput(
+          '[Lyric] Source subtitle gagal; lanjut fallback: $error',
+        );
+        if (!_isCurrentLoadRequest(requestId)) return;
       }
 
       // 从完整文件树查找字幕文件
