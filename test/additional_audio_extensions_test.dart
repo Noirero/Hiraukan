@@ -335,7 +335,8 @@ CV: Kosuzu Momoka
 
   test('ASMR+18 media candidates prefer URLs exposed by page/player data', () {
     const html = '''
-      <audio src="/media/work.m4a"></audio>
+      <audio src="/media/work-part-1.mp3"></audio>
+      <audio src="/media/work-part-2.mp3"></audio>
       <script>const stream = "https://cdn.example.test/work/master.m3u8";</script>
     ''';
 
@@ -344,10 +345,13 @@ CV: Kosuzu Momoka
       pageUri: Uri.parse('https://asmr18.fans/boys/rj01717942/'),
     );
 
-    expect(candidates.first, 'https://asmr18.fans/media/work.m4a');
     expect(
       candidates,
-      contains('https://cdn.example.test/work/master.m3u8'),
+      containsAll(<String>[
+        'https://asmr18.fans/media/work-part-1.mp3',
+        'https://asmr18.fans/media/work-part-2.mp3',
+        'https://cdn.example.test/work/master.m3u8',
+      ]),
     );
   });
 
