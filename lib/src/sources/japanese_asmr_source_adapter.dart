@@ -266,6 +266,18 @@ class JapaneseAsmrGatewayParser {
 
   static String gatewayUrl(String sourceUrl) => gatewayBaseUrl + sourceUrl;
 
+  static List<String> gatewayUrls(String sourceUrl) {
+    final uri = Uri.tryParse(sourceUrl);
+    if (uri == null) return <String>[gatewayUrl(sourceUrl)];
+
+    final httpsSource = uri.replace(scheme: 'https').toString();
+    final httpSource = uri.replace(scheme: 'http').toString();
+    return <String>{
+      gatewayUrl(httpsSource),
+      gatewayUrl(httpSource),
+    }.toList(growable: false);
+  }
+
   static String? coverUrl(String markdown) {
     return RegExp(
       r'''!\[[^\]]*\]\((https?://(?:pic|img|pic1)\.weeabo0\.xyz/[^)\s]+)\)''',
@@ -684,25 +696,34 @@ class JapaneseAsmrSourceAdapter extends HtmlAudioSiteSourceAdapter {
   }
 
   Future<String> _getGatewayText(String sourceUrl) async {
-    final response = await _client.get<String>(
-      JapaneseAsmrGatewayParser.gatewayUrl(sourceUrl),
-      options: Options(
-        responseType: ResponseType.plain,
-        headers: const <String, String>{
-          'User-Agent': _userAgent,
-          'Accept': 'text/plain,*/*;q=0.8',
-        },
-        sendTimeout: const Duration(seconds: 12),
-        receiveTimeout: const Duration(seconds: 22),
-        validateStatus: (status) =>
-            status != null && status >= 200 && status < 400,
-      ),
-    );
-    final text = response.data ?? '';
-    if (text.trim().isEmpty) {
-      throw StateError('JapaneseASMR gateway returned an empty response');
+    Object? lastError;
+    for (final gatewayUrl
+        in JapaneseAsmrGatewayParser.gatewayUrls(sourceUrl)) {
+      try {
+        final response = await _client.get<String>(
+          gatewayUrl,
+          options: Options(
+            responseType: ResponseType.plain,
+            headers: const <String, String>{
+              'User-Agent': _userAgent,
+              'Accept': 'text/plain,*/*;q=0.8',
+            },
+            sendTimeout: const Duration(seconds: 12),
+            receiveTimeout: const Duration(seconds: 22),
+            validateStatus: (status) =>
+                status != null && status >= 200 && status < 400,
+          ),
+        );
+        final text = response.data ?? '';
+        if (text.trim().isNotEmpty) return text;
+        lastError = StateError(
+          'JapaneseASMR gateway returned an empty response: $gatewayUrl',
+        );
+      } catch (error) {
+        lastError = error;
+      }
     }
-    return text;
+    throw StateError('JapaneseASMR gateways failed: $lastError');
   }
 
   Future<String> _getHtml(
