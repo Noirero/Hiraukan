@@ -43,6 +43,28 @@ jobs:
 
           media_re=re.compile(r'https?[^"\'<>\\\s]+?\.(?:mp3|m4a|aac|ogg|opus|m3u8)(?:\?[^"\'<>\\\s]*)?',re.I)
           rel_re=re.compile(r'["\']([^"\']+\.(?:mp3|m4a|aac|ogg|opus|m3u8)(?:\?[^"\']*)?)["\']',re.I)
+          packed_re=re.compile(r'''eval\(function\(p,a,c,k,e,d\)\{.*?\}\((.*?)\)\)''',re.I|re.S)
+          words_re=re.compile(r'''['"]([^'"]+)['"]\.split\(['"]\|['"]\)''')
+          code_re=re.compile(r'''^\s*['"]([^'"]*)['"]''')
+
+          def unpack(html):
+              out=[]
+              for pm in packed_re.finditer(html.replace(r"\/", "/")):
+                  args=pm.group(1)
+                  wm=words_re.search(args)
+                  cm=code_re.search(args)
+                  if not wm or not cm: continue
+                  words=wm.group(1).split("|")
+                  code=cm.group(1)
+                  def repl(m):
+                      token=m.group(1)
+                      try: idx=int(token,36)
+                      except: return token
+                      if idx<0 or idx>=len(words) or not words[idx]:
+                          return token
+                      return words[idx]
+                  out.append(re.sub(r'\b([0-9a-z]+)\b',repl,code))
+              return out
 
           shown=0
           for url in works[:80]:
@@ -52,13 +74,14 @@ jobs:
                   print("DETAILERR",url,type(e).__name__)
                   continue
               vals=[]
-              for m in media_re.finditer(html):
-                  v=m.group(0)
-                  if v not in vals: vals.append(v)
-              for m in rel_re.finditer(html):
-                  v=m.group(1)
-                  if v.startswith("/"): v=base+v
-                  if v.startswith("http") and v not in vals: vals.append(v)
+              for doc in [html,*unpack(html)]:
+                  for m in media_re.finditer(doc):
+                      v=m.group(0)
+                      if v not in vals: vals.append(v)
+                  for m in rel_re.finditer(doc):
+                      v=m.group(1)
+                      if v.startswith("/"): v=base+v
+                      if v.startswith("http") and v not in vals: vals.append(v)
               rid=(re.search(r'(?:rj|bj)\d+',url,re.I).group(0).upper())
               if len(vals)>1:
                   print("MULTI",rid,url,"COUNT",len(vals))
