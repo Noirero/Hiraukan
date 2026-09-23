@@ -1,0 +1,151 @@
+name: Temporary ASMR Hentai Media Probe
+
+on:
+  push:
+    branches:
+      - beta
+    paths:
+      - .github/workflows/asmr-hentai-media-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe official API and frontend media flow
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, re, urllib.request, urllib.error
+          from urllib.parse import urljoin
+
+          UA = "Hiraukan/3.8 UnifiedSources Probe"
+          API = "https://newapi.asmrhentai.net"
+          SITE = "https://asmrhentai.net"
+          WORK = "RJ245055"
+
+          def encode(value):
+              raw = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()
+              return bytes((~b) & 0xff for b in raw)[::-1]
+
+          def decode(value):
+              raw = bytes((~b) & 0xff for b in value[::-1])
+              return json.loads(raw.decode())
+
+          def request(url, *, data=None, headers=None, method=None, timeout=20):
+              h = {"User-Agent": UA}
+              if headers:
+                  h.update(headers)
+              req = urllib.request.Request(url, data=data, headers=h, method=method)
+              return urllib.request.urlopen(req, timeout=timeout)
+
+          payload = {"a": "ja", "b": WORK}
+          with request(
+              API + "/Core/Info",
+              data=encode(payload),
+              headers={"Content-Type": "f/s", "Accept-Language": ""},
+          ) as r:
+              body = r.read()
+              print("INFO_STATUS", r.status, "BYTES", len(body))
+          info = decode(body)
+          print("INFO_KEYS", sorted(info.keys()))
+          tree = info.get("h")
+          print("TREE_TYPE", type(tree).__name__, "TREE_COUNT", len(tree) if isinstance(tree, list) else -1)
+
+          media_ids = []
+          def walk(value, path="h"):
+              if isinstance(value, list):
+                  for i, item in enumerate(value):
+                      walk(item, f"{path}[{i}]")
+              elif isinstance(value, dict):
+                  keys = sorted(value.keys())
+                  if "a" in value and "b" in value and "c" in value and isinstance(value.get("c"), (int, float)):
+                      media = str(value.get("a", "")).strip()
+                      if media:
+                          media_ids.append(media)
+                          print("TRACK_NODE", path, "KEYS", keys, "MEDIA_ID", media, "DURATION", value.get("c"))
+                  for k, item in value.items():
+                      if isinstance(item, (list, dict)):
+                          walk(item, f"{path}.{k}")
+          walk(tree)
+          media_ids = list(dict.fromkeys(media_ids))
+          print("MEDIA_IDS", media_ids[:8])
+
+          html = ""
+          try:
+              with request(SITE + "/" + WORK) as r:
+                  html = r.read().decode("utf-8", "replace")
+                  print("PAGE_STATUS", r.status, "PAGE_BYTES", len(html))
+          except Exception as e:
+              print("PAGE_FETCH_ERROR", type(e).__name__, str(e)[:180])
+
+          scripts = []
+          if html:
+              for src in re.findall(r'<script[^>]+src=["\']([^"\']+)["\']', html, re.I):
+                  full = urljoin(SITE + "/" + WORK, src)
+                  if full not in scripts:
+                      scripts.append(full)
+              print("SCRIPT_URLS", scripts[:20])
+
+          needles = [
+              "Core/Info", "newapi.asmrhentai.net", "/storage/",
+              ".opus", ".m3u8", "mediaStream", "audio", "subtitle"
+          ]
+          for script in scripts[:12]:
+              try:
+                  with request(script) as r:
+                      js = r.read().decode("utf-8", "replace")
+                  hits = [n for n in needles if n.lower() in js.lower()]
+                  if hits:
+                      print("SCRIPT_HITS", script, hits, "BYTES", len(js))
+                      for needle in hits:
+                          idx = js.lower().find(needle.lower())
+                          start = max(0, idx - 220)
+                          end = min(len(js), idx + 420)
+                          snippet = re.sub(r'\s+', ' ', js[start:end])
+                          print("SNIPPET", needle, snippet[:700])
+              except Exception as e:
+                  print("SCRIPT_ERROR", script, type(e).__name__, str(e)[:120])
+
+          if media_ids:
+              media = media_ids[0]
+              candidates = [
+                  f"{API}/storage/{WORK}/{media}.opus",
+                  f"{API}/storage/{WORK}/{media}",
+                  f"{API}/storage/{WORK}/audio/{media}.opus",
+                  f"{API}/storage/{WORK}/{media}.mp3",
+              ]
+              for url in candidates:
+                  try:
+                      req = urllib.request.Request(
+                          url,
+                          headers={
+                              "User-Agent": UA,
+                              "Referer": SITE + "/" + WORK,
+                              "Origin": SITE,
+                              "Range": "bytes=0-0",
+                          },
+                          method="GET",
+                      )
+                      with urllib.request.urlopen(req, timeout=12) as r:
+                          data = r.read(64)
+                          print(
+                              "CANDIDATE",
+                              url,
+                              "STATUS",
+                              r.status,
+                              "TYPE",
+                              r.headers.get("Content-Type"),
+                              "LENGTH",
+                              r.headers.get("Content-Length"),
+                              "PREFIX",
+                              data[:16].hex(),
+                          )
+                  except urllib.error.HTTPError as e:
+                      print("CANDIDATE", url, "HTTP", e.code, "TYPE", e.headers.get("Content-Type"))
+                  except Exception as e:
+                      print("CANDIDATE", url, "ERROR", type(e).__name__, str(e)[:100])
+          PY
