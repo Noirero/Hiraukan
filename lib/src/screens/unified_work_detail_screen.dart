@@ -362,7 +362,23 @@ class _UnifiedWorkDetailScreenState
 
     final scheme = Theme.of(context).colorScheme;
     final showSourcePreference = bundle.playableSources.length > 1;
-    final showPlaybackStatus = bundle.hasPlaybackFallback || _resolved?.usedFallback == true;
+    final showPlaybackStatus =
+        bundle.hasPlaybackFallback || _resolved?.usedFallback == true;
+    final activeTrack = ref.watch(currentTrackProvider).asData?.value;
+    final activePosition =
+        ref.watch(positionProvider).asData?.value ?? Duration.zero;
+    final activeDuration = ref.watch(durationProvider).asData?.value;
+    final activeSubtitle = ref.watch(currentTimedSubtitleProvider);
+    final primarySource = _resolved?.source.source ??
+        _preferredSource ??
+        (bundle.sources.isEmpty ? null : bundle.sources.first.source);
+    final hasHls = _tracks.any(
+      (track) =>
+          Uri.tryParse(track.url)?.path.toLowerCase().endsWith('.m3u8') == true,
+    );
+    final hasChapter = _tracks.any((track) => track.isSegmented);
+    final hasSubtitleCapability = work.hasSubtitle == true ||
+        bundle.sources.any((source) => source.source.canProvideSubtitles);
 
     return GlobalAudioPlayerWrapper(
       child: Scaffold(
@@ -414,85 +430,115 @@ class _UnifiedWorkDetailScreenState
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
               children: [
                 _buildHero(work, bundle),
-                const SizedBox(height: 16),
-                Row(
+                const SizedBox(height: 18),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: scheme.primaryContainer.withValues(alpha: 0.72),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        work.displayId,
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                              color: scheme.onPrimaryContainer,
-                              fontWeight: FontWeight.w800,
-                            ),
-                      ),
+                    _PillBadge(
+                      icon: Icons.confirmation_number_outlined,
+                      label: work.displayId,
+                      emphasized: true,
                     ),
-                    const SizedBox(width: 8),
-                    Icon(
-                      bundle.canPlay
-                          ? Icons.play_circle_fill_rounded
-                          : Icons.download_for_offline_rounded,
-                      size: 18,
-                      color: scheme.primary,
-                    ),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Text(
-                        bundle.canPlay
-                            ? '${bundle.playableSources.length} sumber pemutaran'
-                            : 'Tersedia untuk unduhan',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w600,
-                            ),
+                    if (primarySource != null)
+                      _PillBadge(
+                        icon: Icons.language_rounded,
+                        label: primarySource.label,
+                        emphasized: true,
                       ),
-                    ),
                   ],
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 Text(
                   _displayTitle(work),
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontSize: 24,
-                        height: 1.18,
+                        fontSize: 25,
+                        height: 1.16,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.35,
                       ),
                 ),
                 if (work.name?.trim().isNotEmpty == true) ...[
-                  const SizedBox(height: 5),
+                  const SizedBox(height: 6),
                   Text(
                     work.name!,
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           color: scheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
                         ),
                   ),
                 ],
+                const SizedBox(height: 14),
+                _buildPrimaryMetadata(work),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (bundle.canPlay)
+                      const _CapabilityBadge(
+                        icon: Icons.play_arrow_rounded,
+                        label: 'Play',
+                      ),
+                    if (bundle.canDownload)
+                      const _CapabilityBadge(
+                        icon: Icons.download_outlined,
+                        label: 'Download',
+                      ),
+                    if (hasSubtitleCapability)
+                      const _CapabilityBadge(
+                        icon: Icons.subtitles_outlined,
+                        label: 'Subtitle',
+                      ),
+                    if (hasHls)
+                      const _CapabilityBadge(
+                        icon: Icons.stream_rounded,
+                        label: 'HLS',
+                      ),
+                    if (hasChapter)
+                      const _CapabilityBadge(
+                        icon: Icons.segment_rounded,
+                        label: 'Chapter',
+                      ),
+                  ],
+                ),
                 if (_detailError != null) ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
                   _ErrorCard(message: _detailError!),
                 ],
-                const SizedBox(height: 18),
-                _buildSources(bundle),
+                if (showSourcePreference) ...[
+                  const SizedBox(height: 20),
+                  _buildSourcePreference(bundle),
+                ],
+                if (showPlaybackStatus) ...[
+                  const SizedBox(height: 12),
+                  _buildPlaybackStatus(bundle),
+                ],
+                const SizedBox(height: 22),
                 if (bundle.canPlay) ...[
-                  if (showSourcePreference) ...[
-                    const SizedBox(height: 18),
-                    _buildSourcePreference(bundle),
-                  ],
-                  if (showPlaybackStatus) ...[
-                    const SizedBox(height: 14),
-                    _buildPlaybackStatus(bundle),
-                  ],
-                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          hasChapter ? 'Track & chapter' : 'Track',
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                        ),
+                      ),
+                      if (_tracks.isNotEmpty)
+                        Text(
+                          '${_tracks.length} item',
+                          style:
+                              Theme.of(context).textTheme.labelLarge?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
                   if (_loadingTracks)
                     const Center(
                       child: Padding(
@@ -518,17 +564,31 @@ class _UnifiedWorkDetailScreenState
                         label: Text('Putar semua (${_tracks.length})'),
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    ..._tracks.asMap().entries.map(
-                          (entry) => _TrackTile(
-                            index: entry.key,
-                            track: entry.value,
-                            onTap: () => _playTrack(entry.key),
-                          ),
-                        ),
+                    const SizedBox(height: 12),
+                    ..._tracks.asMap().entries.map((entry) {
+                      final track = entry.value;
+                      final isActive = activeTrack?.id == track.id;
+                      final identity =
+                          TrackPlaybackProgressStore.instance.identityFor(track);
+                      final savedProgress = _trackProgress[identity];
+                      final subtitleAvailable = isActive &&
+                          activeSubtitle != null &&
+                          activeSubtitle.trackId == track.id &&
+                          !activeSubtitle.isEmpty;
+                      return _TrackTile(
+                        index: entry.key,
+                        track: track,
+                        onTap: () => _playTrack(entry.key),
+                        isActive: isActive,
+                        activePosition:
+                            isActive ? activePosition : Duration.zero,
+                        activeDuration: isActive ? activeDuration : null,
+                        savedProgress: savedProgress,
+                        subtitleAvailable: subtitleAvailable,
+                      );
+                    }),
                   ],
                 ] else ...[
-                  const SizedBox(height: 18),
                   _InfoCard(
                     icon: bundle.canDownload
                         ? Icons.download_for_offline_outlined
@@ -542,34 +602,153 @@ class _UnifiedWorkDetailScreenState
                                 .map((source) => source.source.label)
                                 .join(', ') +
                             ' sebagai sumber unduhan.'
-                        : 'Sumber ini menyediakan katalog dan detail, tetapi '
-                            'belum menyediakan pemutaran atau unduhan langsung '
-                            'di Hiraukan.',
+                        : 'Sumber ini menyediakan katalog dan detail. '
+                            'Capability pemutaran belum tersedia.',
                   ),
                 ],
                 if (bundle.downloadOnlySources.isNotEmpty) ...[
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 20),
                   _buildDownloadFiles(bundle),
                 ],
                 if (_loadingDetail) ...[
                   const SizedBox(height: 18),
                   const LinearProgressIndicator(),
                 ],
-                if (work.description?.trim().isNotEmpty == true) ...[
-                  const SizedBox(height: 24),
-                  Text(
-                    'Deskripsi',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(work.description!),
-                ],
+                const SizedBox(height: 24),
+                _buildSecondaryMetadata(work),
+                const SizedBox(height: 20),
+                _buildSources(bundle),
               ],
             ),
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildPrimaryMetadata(Work work) {
+    final items = <({IconData icon, String label, String value})>[];
+    if (work.vas?.isNotEmpty == true) {
+      items.add(
+        (
+          icon: Icons.record_voice_over_outlined,
+          label: 'CV',
+          value: work.vas!.map((va) => va.name).join(', '),
+        ),
+      );
+    }
+    if (work.duration != null && work.duration! > 0) {
+      items.add(
+        (
+          icon: Icons.schedule_outlined,
+          label: 'Durasi',
+          value: _duration(Duration(seconds: work.duration!)),
+        ),
+      );
+    }
+    if (work.release?.trim().isNotEmpty == true) {
+      items.add(
+        (
+          icon: Icons.calendar_today_outlined,
+          label: 'Rilis',
+          value: work.release!.trim(),
+        ),
+      );
+    }
+
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: items
+          .map(
+            (item) => _MetadataFact(
+              icon: item.icon,
+              label: item.label,
+              value: item.value,
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+
+  Widget _buildSecondaryMetadata(Work work) {
+    final theme = Theme.of(context);
+    final tags = work.tags
+            ?.map((tag) => tag.name.trim())
+            .where((name) => name.isNotEmpty)
+            .toList(growable: false) ??
+        const <String>[];
+    final voices = work.vas
+            ?.map((va) => va.name.trim())
+            .where((name) => name.isNotEmpty)
+            .toList(growable: false) ??
+        const <String>[];
+    final hasDescription = work.description?.trim().isNotEmpty == true;
+    final hasMetadata = hasDescription ||
+        tags.isNotEmpty ||
+        voices.isNotEmpty ||
+        work.name?.trim().isNotEmpty == true ||
+        work.release?.trim().isNotEmpty == true ||
+        work.age?.trim().isNotEmpty == true;
+
+    if (!hasMetadata) return const SizedBox.shrink();
+
+    return Card(
+      elevation: 0,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Informasi karya',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            if (hasDescription) ...[
+              const SizedBox(height: 14),
+              Text(work.description!.trim()),
+            ],
+            if (tags.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Tags',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 7,
+                runSpacing: 7,
+                children: tags.map((tag) => Chip(label: Text(tag))).toList(),
+              ),
+            ],
+            if (voices.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              _MetadataLine(label: 'Voice actors', value: voices.join(', ')),
+            ],
+            if (work.name?.trim().isNotEmpty == true)
+              _MetadataLine(label: 'Circle', value: work.name!.trim()),
+            if (work.release?.trim().isNotEmpty == true)
+              _MetadataLine(label: 'Release', value: work.release!.trim()),
+            if (work.age?.trim().isNotEmpty == true)
+              _MetadataLine(label: 'Rating', value: work.age!.trim()),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _duration(Duration duration) {
+    final hours = duration.inHours;
+    final minutes =
+        duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds =
+        duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return hours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
   }
 
   Widget _buildHero(Work work, UnifiedWorkBundle bundle) {
