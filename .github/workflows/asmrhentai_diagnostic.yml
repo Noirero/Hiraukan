@@ -13,22 +13,21 @@ jobs:
   inspect:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe ASMR Hentai live API
+      - name: Probe ASMR Hentai catalog, cover and media
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
-          import json, urllib.request, urllib.error
+          import json, urllib.request
 
           BASE='https://newapi.asmrhentai.net'
 
           def encode(obj):
-              raw=json.dumps(obj,separators=(',',':'),ensure_ascii=False).encode('utf-8')
+              raw=json.dumps(obj,separators=(',',':'),ensure_ascii=False).encode()
               return bytes(((~b)&0xff) for b in raw)[::-1]
 
           def decode(raw):
-              data=bytes(((~b)&0xff) for b in raw)[::-1]
-              return json.loads(data.decode('utf-8'))
+              return json.loads(bytes(((~b)&0xff) for b in raw)[::-1].decode())
 
           def post(path,payload):
               req=urllib.request.Request(
@@ -42,54 +41,50 @@ jobs:
                   },
               )
               with urllib.request.urlopen(req,timeout=20) as r:
-                  raw=r.read()
-                  print(path,'HTTP',r.status,'bytes',len(raw))
-              return decode(raw)
+                  return decode(r.read())
 
-          def summarize(label,obj):
-              print('\n===',label,'===')
-              print('type:',type(obj).__name__)
-              if isinstance(obj,dict):
-                  print('keys:',list(obj.keys()))
-                  for k,v in obj.items():
-                      if isinstance(v,list):
-                          print(' field',k,'list len',len(v))
-                          if v:
-                              print('  first type',type(v[0]).__name__)
-                              print('  first',json.dumps(v[0],ensure_ascii=False)[:2500])
-                      elif isinstance(v,dict):
-                          print(' field',k,'dict keys',list(v.keys())[:30])
-                      else:
-                          print(' field',k,repr(v)[:800])
-              elif isinstance(obj,list):
-                  print('len:',len(obj))
-                  if obj: print('first:',json.dumps(obj[0],ensure_ascii=False)[:2500])
-              print('json head:',json.dumps(obj,ensure_ascii=False)[:6000])
+          discover=post('/Core/Discover',{'a':'ja','b':0,'c':0,'d':[]})
+          entry=discover['b'][0]
+          rj=entry['a']
+          info=post('/Core/Info',{'a':'ja','b':rj})
 
-          discover=post('/Core/Discover',{'a':'en','b':0,'c':0,'d':[]})
-          summarize('DISCOVER',discover)
-
-          # Use an id from discover when possible.
-          def find_rj(x):
-              if isinstance(x,dict):
-                  for k,v in x.items():
-                      if k=='a' and isinstance(v,str) and v.upper().startswith('RJ'):
-                          return v.upper()
-                      got=find_rj(v)
-                      if got: return got
-              elif isinstance(x,list):
-                  for v in x:
-                      got=find_rj(v)
-                      if got: return got
+          def first_track(nodes):
+              for node in nodes or []:
+                  for tr in node.get('b') or []:
+                      if tr.get('a'):
+                          return tr
+                  found=first_track(node.get('c') or [])
+                  if found: return found
               return None
 
-          rj=find_rj(discover)
-          print('\nselected RJ:',rj)
+          track=first_track(info.get('h') or [])
+          print('RJ',rj)
+          print('title',info.get('b'))
+          print('track',track)
 
-          search=post('/Core/Search',{'a':'en','b':rj or 'RJ','c':'','d':[],'e':0})
-          summarize('SEARCH',search)
+          urls=[
+              BASE+'/storage/'+rj+'/cover.avif',
+          ]
+          if track:
+              urls.append(BASE+'/storage/'+rj+'/'+track['a']+'.opus')
 
-          if rj:
-              info=post('/Core/Info',{'a':'en','b':rj})
-              summarize('INFO',info)
+          for url in urls:
+              req=urllib.request.Request(
+                  url,
+                  method='GET',
+                  headers={'User-Agent':'Mozilla/5.0 Hiraukan-Diagnostic/1.0','Range':'bytes=0-1023'},
+              )
+              try:
+                  with urllib.request.urlopen(req,timeout=20) as resp:
+                      head=resp.read(1024)
+                      print('URL',url)
+                      print('STATUS',resp.status)
+                      print('CONTENT-TYPE',resp.headers.get('Content-Type'))
+                      print('CONTENT-LENGTH',resp.headers.get('Content-Length'))
+                      print('CONTENT-RANGE',resp.headers.get('Content-Range'))
+                      print('READ',len(head))
+              except Exception as e:
+                  print('URL',url)
+                  print('ERROR',repr(e))
+                  raise
           PY
