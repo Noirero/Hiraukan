@@ -143,10 +143,7 @@ void main() {
   });
 
   test('JapaneseASMR verified LKG stays browsable and playable', () {
-    final items = JapaneseAsmrGatewayParser.catalog(
-      JapaneseAsmrLastKnownGood.catalogMarkdown,
-      pageSize: 20,
-    );
+    final items = JapaneseAsmrLastKnownGood.candidates();
     expect(items, hasLength(104));
     expect(items.first.ref.localId, 'RJ01717942');
     expect(items.first.ref.detailUrl, 'https://japaneseasmr.com/150698/');
