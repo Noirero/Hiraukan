@@ -1,0 +1,56 @@
+name: ASMR Hentai API Diagnostic
+
+on:
+  push:
+    branches:
+      - diagnostic/asmrhentai-api
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect ASMR Hentai web client
+        shell: bash
+        run: |
+          set -euo pipefail
+          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/140 Safari/537.36'
+          echo '=== homepage ==='
+          curl -fsSL --compressed -A "$UA" -D /tmp/home.headers https://asmrhentai.net/ -o /tmp/home.html
+          sed -n '1,30p' /tmp/home.headers
+          wc -c /tmp/home.html
+          grep -Eo 'src=["'"'"'][^"'"'"']+\.js[^"'"'"']*["'"'"']' /tmp/home.html || true
+
+          echo '=== compiled/my.js ==='
+          curl -fsSL --compressed -A "$UA" https://asmrhentai.net/compiled/my.js -o /tmp/my.js
+          wc -c /tmp/my.js
+          python - <<'PY'
+          import re
+          text=open('/tmp/my.js','r',encoding='utf-8',errors='ignore').read()
+          pats=[
+              r'https?://[^"\'\s]+',
+              r'/Asmr/[A-Za-z0-9_]+',
+              r'Asmr/[A-Za-z0-9_]+',
+              r'api\.asmrhentai\.net[^"\'\s]*',
+          ]
+          seen=[]
+          for pat in pats:
+              for m in re.findall(pat,text):
+                  if m not in seen:
+                      seen.append(m)
+          for x in seen:
+              if 'asmr' in x.lower() or '/Asmr/' in x:
+                  print(x)
+          print('=== request contexts ===')
+          for token in ['InfoGet','TranscriptGet','CommentGet','fetch(','axios','XMLHttpRequest']:
+              start=0
+              while True:
+                  i=text.find(token,start)
+                  if i<0: break
+                  print('\n---',token,'@',i,'---')
+                  print(text[max(0,i-700):i+1200])
+                  start=i+len(token)
+          PY
