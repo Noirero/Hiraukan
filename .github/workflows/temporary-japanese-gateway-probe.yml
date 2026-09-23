@@ -60,7 +60,7 @@ jobs:
           import re, urllib.request
 
           UA = "Hiraukan/3.8 UnifiedSources"
-          detail = "https://asmr18.fans/boys/rj01638528/"
+          detail = "https://asmr18.fans/boys/rj01683528/"
           headers = {"User-Agent": UA, "Referer": "https://asmr18.fans/", "Origin": "https://asmr18.fans"}
 
           try:
@@ -80,8 +80,8 @@ jobs:
               raw.extend(re.findall(pat, html, re.I))
           raw = [x.replace("\\/", "/") for x in raw]
           raw += [
-              "https://cdn3.cloudintech.net/file/RJ01638528/RJ01638528.m3u8",
-              "https://cdn3.cloudintech.net/file/RJ01638528/1.m3u8",
+              "https://cdn3.cloudintech.net/file/RJ01683528/RJ01683528.m3u8",
+              "https://cdn3.cloudintech.net/file/RJ01683528/1.m3u8",
           ]
           seen = []
           for u in raw:
