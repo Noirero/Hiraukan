@@ -1404,7 +1404,7 @@ class _TrackTile extends StatelessWidget {
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                             fontWeight: isActive
                                 ? FontWeight.w800
-                                : FontWeight.w650,
+                                : FontWeight.w600,
                           ),
                     ),
                     const SizedBox(height: 5),
