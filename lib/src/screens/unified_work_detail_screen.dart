@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,10 +9,12 @@ import '../models/audio_track.dart';
 import '../models/work.dart';
 import '../providers/audio_provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/subtitle_controller_provider.dart';
 import '../sources/unified_source_models.dart';
 import '../sources/unified_source_preferences.dart';
 import '../sources/unified_source_provider.dart';
 import '../sources/unified_source_registry.dart';
+import '../services/track_playback_progress_store.dart';
 import '../widgets/global_audio_player_wrapper.dart';
 
 class UnifiedWorkDetailScreen extends ConsumerStatefulWidget {
@@ -39,6 +43,8 @@ class _UnifiedWorkDetailScreenState
   String? _detailError;
   String? _trackError;
   String? _downloadError;
+  Map<String, TrackPlaybackProgress> _trackProgress = const {};
+  StreamSubscription<String>? _trackProgressSubscription;
 
   UnifiedWorkBundle? get _bundle => _hydratedBundle ??
       UnifiedSourceRegistry.instance.bundleFor(widget.work.id) ??
@@ -47,8 +53,22 @@ class _UnifiedWorkDetailScreenState
   @override
   void initState() {
     super.initState();
+    _trackProgressSubscription =
+        TrackPlaybackProgressStore.instance.changes.listen((identity) {
+      final relevant = _tracks.any(
+        (track) =>
+            TrackPlaybackProgressStore.instance.identityFor(track) == identity,
+      );
+      if (relevant) unawaited(_reloadTrackProgress());
+    });
     _restorePreferenceAndLoad();
     _refreshHealth();
+  }
+
+  @override
+  void dispose() {
+    _trackProgressSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _restorePreferenceAndLoad() async {
@@ -120,6 +140,7 @@ class _UnifiedWorkDetailScreenState
       setState(() {
         _resolved = null;
         _tracks = const [];
+        _trackProgress = const {};
         _trackError = null;
         _loadingTracks = false;
       });
@@ -131,6 +152,7 @@ class _UnifiedWorkDetailScreenState
         _loadingTracks = true;
         _trackError = null;
         _tracks = const [];
+        _trackProgress = const {};
       });
     }
     try {
@@ -160,6 +182,7 @@ class _UnifiedWorkDetailScreenState
         _tracks = tracks;
         _loadingTracks = false;
       });
+      await _reloadTrackProgress(tracks);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -167,6 +190,18 @@ class _UnifiedWorkDetailScreenState
         _loadingTracks = false;
       });
     }
+  }
+
+  Future<void> _reloadTrackProgress([Iterable<AudioTrack>? tracks]) async {
+    final targetTracks = (tracks ?? _tracks).toList(growable: false);
+    if (targetTracks.isEmpty) {
+      if (mounted) setState(() => _trackProgress = const {});
+      return;
+    }
+    final progress =
+        await TrackPlaybackProgressStore.instance.loadForTracks(targetTracks);
+    if (!mounted) return;
+    setState(() => _trackProgress = progress);
   }
 
   Future<void> _loadDownloads() async {
