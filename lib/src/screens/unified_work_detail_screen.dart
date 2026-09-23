@@ -1129,50 +1129,334 @@ class _DownloadEntry {
   const _DownloadEntry({required this.title, required this.url});
 }
 
-class _TrackTile extends StatelessWidget {
-  final int index;
-  final AudioTrack track;
-  final VoidCallback onTap;
+class _PillBadge extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool emphasized;
 
-  const _TrackTile({
-    required this.index,
-    required this.track,
-    required this.onTap,
+  const _PillBadge({
+    required this.icon,
+    required this.label,
+    this.emphasized = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: emphasized
+            ? scheme.primaryContainer.withValues(alpha: 0.72)
+            : scheme.surfaceContainerHighest.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 15,
+            color: emphasized
+                ? scheme.onPrimaryContainer
+                : scheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: emphasized
+                      ? scheme.onPrimaryContainer
+                      : scheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CapabilityBadge extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _CapabilityBadge({
+    required this.icon,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.72),
+        ),
+        borderRadius: BorderRadius.circular(999),
+        color: scheme.surfaceContainerLow.withValues(alpha: 0.78),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: scheme.primary),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetadataFact extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _MetadataFact({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      constraints: const BoxConstraints(minWidth: 132),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow.withValues(alpha: 0.70),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.45),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 17, color: scheme.primary),
+          const SizedBox(width: 7),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                ),
+                Text(
+                  value,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetadataLine extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _MetadataLine({
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (value.isEmpty) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 92,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TrackTile extends StatelessWidget {
+  final int index;
+  final AudioTrack track;
+  final VoidCallback onTap;
+  final bool isActive;
+  final Duration activePosition;
+  final Duration? activeDuration;
+  final TrackPlaybackProgress? savedProgress;
+  final bool subtitleAvailable;
+
+  const _TrackTile({
+    required this.index,
+    required this.track,
+    required this.onTap,
+    required this.isActive,
+    required this.activePosition,
+    required this.activeDuration,
+    required this.savedProgress,
+    required this.subtitleAvailable,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final logicalDuration =
+        activeDuration ?? savedProgress?.duration ?? track.segmentDuration;
+    final logicalPosition =
+        isActive ? activePosition : (savedProgress?.position ?? Duration.zero);
+    final totalMs = logicalDuration?.inMilliseconds ?? 0;
+    final progress = totalMs > 0
+        ? (logicalPosition.inMilliseconds / totalMs).clamp(0.0, 1.0)
+        : 0.0;
+    final completed = !isActive &&
+        (savedProgress?.completed == true || progress >= 0.995);
+
+    String status;
+    if (isActive) {
+      status = 'Sedang diputar';
+    } else if (completed) {
+      status = 'Selesai';
+    } else if (progress > 0) {
+      status = 'Terakhir ${(progress * 100).round()}%';
+    } else {
+      status = 'Belum diputar';
+    }
+
+    final subtitle = subtitleAvailable ? ' · Subtitle tersedia' : '';
     return Card(
       elevation: 0,
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 9),
+      color: isActive
+          ? scheme.primaryContainer.withValues(alpha: 0.24)
+          : null,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
         side: BorderSide(
-          color: scheme.outlineVariant.withValues(alpha: 0.48),
-          width: 0.7,
+          color: isActive
+              ? scheme.primary.withValues(alpha: 0.45)
+              : scheme.outlineVariant.withValues(alpha: 0.48),
+          width: isActive ? 1.0 : 0.7,
         ),
       ),
-      child: ListTile(
+      child: InkWell(
         onTap: onTap,
-        leading: CircleAvatar(
-          backgroundColor: scheme.primaryContainer.withValues(alpha: 0.72),
-          foregroundColor: scheme.onPrimaryContainer,
-          child: Text('${index + 1}'),
+        borderRadius: BorderRadius.circular(18),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 10, 11),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                backgroundColor:
+                    scheme.primaryContainer.withValues(alpha: 0.72),
+                foregroundColor: scheme.onPrimaryContainer,
+                child: completed
+                    ? const Icon(Icons.check_rounded, size: 20)
+                    : Text('${index + 1}'),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      track.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            fontWeight: isActive
+                                ? FontWeight.w800
+                                : FontWeight.w650,
+                          ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      '$status$subtitle',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                            color: isActive
+                                ? scheme.primary
+                                : scheme.onSurfaceVariant,
+                            fontWeight:
+                                isActive ? FontWeight.w700 : FontWeight.w500,
+                          ),
+                    ),
+                    if (totalMs > 0 && progress > 0) ...[
+                      const SizedBox(height: 8),
+                      LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 3,
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (logicalDuration != null)
+                    Text(
+                      _formatDuration(logicalDuration),
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                    ),
+                  const SizedBox(height: 6),
+                  Icon(
+                    isActive
+                        ? Icons.equalizer_rounded
+                        : Icons.play_arrow_rounded,
+                    color: scheme.primary,
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-        title: Text(
-          track.title,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle:
-            track.duration == null ? null : Text(_duration(track.duration!)),
-        trailing: const Icon(Icons.play_arrow_rounded),
       ),
     );
   }
 
-  String _duration(Duration duration) {
+  String _formatDuration(Duration duration) {
     final hours = duration.inHours;
     final minutes =
         duration.inMinutes.remainder(60).toString().padLeft(2, '0');
