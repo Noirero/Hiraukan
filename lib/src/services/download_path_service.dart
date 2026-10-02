@@ -222,8 +222,11 @@ class DownloadPathService {
               final newWorkDir = Directory(p.join(newDir.path, folderName));
               await newWorkDir.create(recursive: true);
 
-              // 递归复制该作品文件夹的所有内容
+              // Copy and verify every file before deleting anything from the
+              // source folder. A partial migration must always leave the
+              // original data intact.
               int folderFileCount = 0;
+              int folderErrorCount = 0;
               await for (final fileEntity
                   in entity.list(recursive: true, followLinks: false)) {
                 try {
@@ -235,33 +238,53 @@ class DownloadPathService {
                     final newFile = File(newPath);
                     await newFile.parent.create(recursive: true);
                     await fileEntity.copy(newPath);
+
+                    final sourceLength = await fileEntity.length();
+                    final destinationExists = await newFile.exists();
+                    final destinationLength =
+                        destinationExists ? await newFile.length() : -1;
+                    if (!destinationExists ||
+                        destinationLength != sourceLength) {
+                      throw FileSystemException(
+                        'Copied file verification failed',
+                        newPath,
+                      );
+                    }
                     folderFileCount++;
                   } else if (fileEntity is Directory) {
                     await Directory(newPath).create(recursive: true);
                   }
                 } catch (e) {
-                  _log.error('复制文件失败: ${fileEntity.path}, 错误: $e',
+                  _log.error('复制或验证文件失败: ${fileEntity.path}, 错误: $e',
                       tag: 'DownloadPath');
+                  folderErrorCount++;
                   errorCount++;
                 }
               }
 
               fileCount += folderFileCount;
-              workFolderCount++;
-              if (folderName == 'subtitle_library') {
-                _log.info('已迁移字幕库: $folderFileCount 个文件', tag: 'DownloadPath');
+              if (folderErrorCount == 0) {
+                // Only a fully verified folder is considered migrated.
+                try {
+                  await entity.delete(recursive: true);
+                  workFolderCount++;
+                  if (folderName == 'subtitle_library') {
+                    _log.info('已迁移字幕库: $folderFileCount 个文件',
+                        tag: 'DownloadPath');
+                  } else {
+                    _log.info('已迁移作品文件夹 $folderName: $folderFileCount 个文件',
+                        tag: 'DownloadPath');
+                  }
+                } catch (e) {
+                  _log.error('删除原文件夹失败: $folderName, 错误: $e',
+                      tag: 'DownloadPath');
+                  errorCount++;
+                }
               } else {
-                _log.info('已迁移作品文件夹 $folderName: $folderFileCount 个文件',
-                    tag: 'DownloadPath');
-              }
-
-              // 迁移成功后删除原文件夹
-              try {
-                await entity.delete(recursive: true);
-              } catch (e) {
-                _log.error('删除原文件夹失败: $folderName, 错误: $e',
-                    tag: 'DownloadPath');
-                errorCount++;
+                _log.error(
+                  '文件夹 $folderName 有 $folderErrorCount 个文件复制或验证失败，保留原文件夹',
+                  tag: 'DownloadPath',
+                );
               }
             } catch (e) {
               _log.error('迁移文件夹失败: $folderName, 错误: $e', tag: 'DownloadPath');
@@ -319,7 +342,7 @@ class DownloadPathService {
       }
 
       return MigrationResult(
-        success: true,
+        success: errorCount == 0,
         message: resultMessage,
         fileCount: fileCount,
         errorCount: errorCount,
