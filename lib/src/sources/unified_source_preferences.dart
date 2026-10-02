@@ -11,6 +11,7 @@ class UnifiedSourcePreferences {
   static const _preferredKey = 'unified_source_preferred_v1';
   static const _bundleCacheKey = 'unified_source_bundle_cache_v1';
   static const _maxCachedBundles = 80;
+  static Future<void> _bundleWriteQueue = Future<void>.value();
 
   static Future<Set<UnifiedSourceKind>> loadEnabledSources() async {
     final prefs = await SharedPreferences.getInstance();
@@ -53,18 +54,25 @@ class UnifiedSourcePreferences {
   /// Persists only bundles the user actually opens/plays. This keeps fallback
   /// mirrors available after restart without turning every search result into a
   /// large permanent cache.
-  static Future<void> saveBundle(UnifiedWorkBundle bundle) async {
-    final prefs = await SharedPreferences.getInstance();
-    final records = _decodeBundleRecords(prefs.getString(_bundleCacheKey));
-    records.removeWhere((item) {
-      return item['canonicalKey'] == bundle.canonicalKey ||
-          item['workId'] == bundle.work.id;
+  static Future<void> saveBundle(UnifiedWorkBundle bundle) {
+    final operation = _bundleWriteQueue.then((_) async {
+      final prefs = await SharedPreferences.getInstance();
+      final records = _decodeBundleRecords(prefs.getString(_bundleCacheKey));
+      records.removeWhere((item) {
+        return item['canonicalKey'] == bundle.canonicalKey ||
+            item['workId'] == bundle.work.id;
+      });
+      records.insert(0, _bundleToJson(bundle));
+      if (records.length > _maxCachedBundles) {
+        records.removeRange(_maxCachedBundles, records.length);
+      }
+      await prefs.setString(_bundleCacheKey, jsonEncode(records));
     });
-    records.insert(0, _bundleToJson(bundle));
-    if (records.length > _maxCachedBundles) {
-      records.removeRange(_maxCachedBundles, records.length);
-    }
-    await prefs.setString(_bundleCacheKey, jsonEncode(records));
+
+    // Keep the queue usable after a failed write while still propagating the
+    // failure to the caller that enqueued this operation.
+    _bundleWriteQueue = operation.catchError((_) {});
+    return operation;
   }
 
   static Future<UnifiedWorkBundle?> loadBundle(Work work) async {
