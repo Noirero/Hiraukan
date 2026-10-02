@@ -984,7 +984,11 @@ class DownloadService {
   }
 
   Future<void> deleteTask(String taskId) async {
-    final task = _tasks.firstWhere((t) => t.id == taskId);
+    final task = _tasks.cast<DownloadTask?>().firstWhere(
+      (candidate) => candidate?.id == taskId,
+      orElse: () => null,
+    );
+    if (task == null) return;
     final workId = task.workId;
 
     // 取消下载
