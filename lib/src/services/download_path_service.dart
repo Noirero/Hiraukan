@@ -249,6 +249,14 @@ class DownloadPathService {
                     folderFileCount++;
                   } else if (fileEntity is Directory) {
                     await Directory(newPath).create(recursive: true);
+                  } else {
+                    // With followLinks:false, links are surfaced as Link
+                    // entities. Do not silently drop them and then delete the
+                    // source folder.
+                    throw FileSystemException(
+                      'Unsupported filesystem entity during migration',
+                      fileEntity.path,
+                    );
                   }
                 } catch (e) {
                   _log.error('复制或验证文件失败: ${fileEntity.path}, 错误: $e',
