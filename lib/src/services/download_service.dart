@@ -38,6 +38,7 @@ class DownloadService {
   static const int _maxConcurrentDownloads = 20;
   int _activeDownloadCount = 0;
   bool _isProcessingQueue = false;
+  bool _isDisposing = false;
 
   // 用于延迟保存任务，避免频繁 I/O 操作
   Timer? _saveTimer;
@@ -553,7 +554,7 @@ class DownloadService {
 
         _tasks.add(task);
         await _saveTasks();
-        _tasksController.add(List.from(_tasks));
+        _emitTasks();
 
         // 保存作品元数据到硬盘
         if (workMetadata != null) {
@@ -581,7 +582,7 @@ class DownloadService {
     );
 
     _tasks.add(task);
-    _tasksController.add(List.from(_tasks));
+    _emitTasks();
 
     // 添加任务后立即保存
     await _saveTasks();
@@ -599,7 +600,7 @@ class DownloadService {
 
   /// 处理下载队列：确保活跃下载数不超过上限
   Future<void> _processQueue() async {
-    if (_isProcessingQueue) return;
+    if (_isDisposing || _isProcessingQueue) return;
     _isProcessingQueue = true;
     try {
       // 获取所有等待中的任务
@@ -649,7 +650,9 @@ class DownloadService {
         _runningDownloads.remove(taskId);
       }
       _activeDownloadCount--;
-      unawaited(_processQueue()); // 完成后继续调度
+      if (!_isDisposing) {
+        unawaited(_processQueue()); // 完成后继续调度
+      }
     }
   }
 
@@ -984,7 +987,11 @@ class DownloadService {
   }
 
   Future<void> deleteTask(String taskId) async {
-    final task = _tasks.firstWhere((t) => t.id == taskId);
+    final task = _tasks.cast<DownloadTask?>().firstWhere(
+      (candidate) => candidate?.id == taskId,
+      orElse: () => null,
+    );
+    if (task == null) return;
     final workId = task.workId;
 
     // 取消下载
@@ -1028,7 +1035,7 @@ class DownloadService {
     }
 
     await _saveTasks();
-    _tasksController.add(List.from(_tasks));
+    _emitTasks();
   }
 
   /// 删除单个文件（用于离线详情页）
@@ -1088,7 +1095,7 @@ class DownloadService {
       }
 
       await _saveTasks();
-      _tasksController.add(List.from(_tasks));
+      _emitTasks();
     } catch (e) {
       _log.error('删除文件失败: $e', tag: 'Download');
       rethrow;
@@ -1158,7 +1165,7 @@ class DownloadService {
     final index = _tasks.indexWhere((t) => t.id == updatedTask.id);
     if (index != -1) {
       _tasks[index] = updatedTask;
-      _tasksController.add(List.from(_tasks));
+      _emitTasks();
 
       // 对于下载进度更新，使用延迟保存避免频繁 I/O
       if (immediate) {
@@ -1621,7 +1628,7 @@ class DownloadService {
       if (!await downloadDir.exists()) {
         _log.warning('下载目录不存在，清空所有已完成任务', tag: 'Download');
         _tasks.removeWhere((t) => t.status == DownloadStatus.completed);
-        _tasksController.add(List.from(_tasks));
+        _emitTasks();
         await _saveTasks();
         return;
       }
@@ -1797,7 +1804,7 @@ class DownloadService {
       }
 
       // 通知更新并保存
-      _tasksController.add(List.from(_tasks));
+      _emitTasks();
       await _saveTasks();
 
       _log.info(
@@ -1810,6 +1817,11 @@ class DownloadService {
     }
   }
 
+  void _emitTasks() {
+    if (_isDisposing || _tasksController.isClosed) return;
+    _tasksController.add(List<DownloadTask>.from(_tasks));
+  }
+
   Future<void> _saveTasks() async {
     try {
       final prefs = await StorageService.getPrefs();
@@ -1820,18 +1832,36 @@ class DownloadService {
     }
   }
 
-  void dispose() {
+  Future<void> dispose() async {
+    if (_isDisposing) return;
+    _isDisposing = true;
     _saveTimer?.cancel();
     _saveTimer = null;
-    _tasksController.close();
+
     for (final token in _cancelTokens.values) {
       token.cancel();
     }
     _cancelTokens.clear();
 
-    // 确保最后保存一次
-    if (_needsSave) {
-      _saveTasks();
+    // Let cancelled downloads unwind before closing the stream they may emit
+    // through. New queue work is blocked by _isDisposing.
+    final running = _runningDownloads.values.toList(growable: false);
+    if (running.isNotEmpty) {
+      await Future.wait(
+        running.map((download) async {
+          try {
+            await download;
+          } catch (_) {
+            // Download failures are already recorded by the worker.
+          }
+        }),
+      );
     }
+
+    if (_needsSave) {
+      _needsSave = false;
+      await _saveTasks();
+    }
+    await _tasksController.close();
   }
 }
