@@ -184,12 +184,24 @@ class AudioPlayerService {
               break;
             case PressedButton.next:
               if (hasNext) {
-                unawaited(skipToNext());
+                unawaited(
+                  skipToNext().catchError((error) {
+                    _log.captureOutput(
+                      '[AudioPlayerService] SMTC next failed: $error',
+                    );
+                  }),
+                );
               }
               break;
             case PressedButton.previous:
               if (hasPrevious) {
-                unawaited(skipToPrevious());
+                unawaited(
+                  skipToPrevious().catchError((error) {
+                    _log.captureOutput(
+                      '[AudioPlayerService] SMTC previous failed: $error',
+                    );
+                  }),
+                );
               }
               break;
             case PressedButton.stop:
@@ -1557,12 +1569,20 @@ class _AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
   @override
   Future<void> skipToNext() async {
     if (!_service.hasNext) return;
-    await _service.skipToNext();
+    try {
+      await _service.skipToNext();
+    } catch (error) {
+      _service._log.captureOutput('[AudioHandler] skipToNext failed: $error');
+    }
   }
 
   @override
   Future<void> skipToPrevious() async {
     if (!_service.hasPrevious) return;
-    await _service.skipToPrevious();
+    try {
+      await _service.skipToPrevious();
+    } catch (error) {
+      _service._log.captureOutput('[AudioHandler] skipToPrevious failed: $error');
+    }
   }
 }
