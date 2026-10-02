@@ -183,10 +183,14 @@ class AudioPlayerService {
               pause();
               break;
             case PressedButton.next:
-              skipToNext();
+              if (hasNext) {
+                unawaited(skipToNext());
+              }
               break;
             case PressedButton.previous:
-              skipToPrevious();
+              if (hasPrevious) {
+                unawaited(skipToPrevious());
+              }
               break;
             case PressedButton.stop:
               stop();
@@ -1551,8 +1555,14 @@ class _AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
   }
 
   @override
-  Future<void> skipToNext() => _service.skipToNext();
+  Future<void> skipToNext() async {
+    if (!_service.hasNext) return;
+    await _service.skipToNext();
+  }
 
   @override
-  Future<void> skipToPrevious() => _service.skipToPrevious();
+  Future<void> skipToPrevious() async {
+    if (!_service.hasPrevious) return;
+    await _service.skipToPrevious();
+  }
 }
