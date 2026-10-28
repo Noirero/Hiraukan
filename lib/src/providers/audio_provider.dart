@@ -17,37 +17,31 @@ import 'auth_provider.dart' show kikoeruApiServiceProvider;
 
 final _log = LogService.instance;
 
-// Audio Player Service Provider
 final audioPlayerServiceProvider = Provider<AudioPlayerService>((ref) {
   final service = AudioPlayerService.instance;
   return service;
 });
 
-// Current Track Provider
 final currentTrackProvider = StreamProvider<AudioTrack?>((ref) {
   final service = ref.watch(audioPlayerServiceProvider);
   return _withInitialValue(service.currentTrack, service.currentTrackStream);
 });
 
-// Player State Provider
 final playerStateProvider = StreamProvider<PlayerState>((ref) {
   final service = ref.watch(audioPlayerServiceProvider);
   return _withInitialValue(service.playerState, service.playerStateStream);
 });
 
-// Position Provider
 final positionProvider = StreamProvider<Duration>((ref) {
   final service = ref.watch(audioPlayerServiceProvider);
   return _withInitialValue(service.position, service.positionStream);
 });
 
-// Duration Provider
 final durationProvider = StreamProvider<Duration?>((ref) {
   final service = ref.watch(audioPlayerServiceProvider);
   return _withInitialValue(service.duration, service.durationStream);
 });
 
-// Queue Provider
 final queueProvider = StreamProvider<List<AudioTrack>>((ref) {
   final service = ref.watch(audioPlayerServiceProvider);
   return _withInitialValue(service.queue, service.queueStream);
@@ -58,7 +52,6 @@ Stream<T> _withInitialValue<T>(T initialValue, Stream<T> updates) async* {
   yield* updates;
 }
 
-// Playing State Provider (convenience)
 final isPlayingProvider = Provider<bool>((ref) {
   final playerState = ref.watch(playerStateProvider);
   return playerState.when(
@@ -68,13 +61,11 @@ final isPlayingProvider = Provider<bool>((ref) {
   );
 });
 
-// Track Loading Provider (true while audio source is being loaded)
 final isTrackLoadingProvider = StreamProvider<bool>((ref) {
   final service = ref.watch(audioPlayerServiceProvider);
   return service.trackLoadingStream;
 });
 
-// Progress Provider (convenience)
 final progressProvider = Provider<double>((ref) {
   final position = ref.watch(positionProvider);
   final duration = ref.watch(durationProvider);
@@ -92,25 +83,19 @@ final progressProvider = Provider<double>((ref) {
   );
 });
 
-/// 是否可以播放下一首（列表未结束或开启了循环模式）
 final canSkipNextProvider = Provider<bool>((ref) {
   final service = ref.watch(audioPlayerServiceProvider);
   final audioState = ref.watch(audioPlayerControllerProvider);
-  // 监听队列和当前曲目变化
   ref.watch(queueProvider);
   ref.watch(currentTrackProvider);
 
-  // 如果开启了列表循环或单曲循环，始终可以跳转
   if (audioState.repeatMode == LoopMode.all ||
       audioState.repeatMode == LoopMode.one) {
     return true;
   }
-
-  // 否则检查是否还有下一首
   return service.hasNext;
 });
 
-// Audio Player Controller
 class AudioPlayerController extends StateNotifier<AudioPlayerState> {
   final AudioPlayerService _service;
   final Ref _ref;
@@ -118,11 +103,9 @@ class AudioPlayerController extends StateNotifier<AudioPlayerState> {
 
   AudioPlayerController(this._service, this._ref)
       : super(const AudioPlayerState()) {
-    // 监听防社死设置变化
     _ref.listen<PrivacyModeSettings>(
       privacyModeSettingsProvider,
       (previous, next) {
-        // 设置变化时更新音频服务
         _service.updatePrivacySettings(
           enabled: next.enabled,
           blurCover: next.blurCover,
@@ -132,7 +115,6 @@ class AudioPlayerController extends StateNotifier<AudioPlayerState> {
       },
     );
 
-    // 监听音频直通设置变化
     _ref.listen<bool>(
       audioPassthroughProvider,
       (previous, next) {
@@ -163,7 +145,6 @@ class AudioPlayerController extends StateNotifier<AudioPlayerState> {
       },
     );
 
-    // 监听下一首预加载设置变化
     _ref.listen<PreloadNextSettings>(
       preloadNextSettingsProvider,
       (previous, next) {
@@ -179,16 +160,12 @@ class AudioPlayerController extends StateNotifier<AudioPlayerState> {
   }
 
   Future<void> initialize() async {
-    // Notification permission is an Android-only requirement here. The
-    // permission_handler Apple implementation is iOS-only, so requesting it
-    // on macOS aborts audio initialization before session restoration.
     if (Platform.isAndroid) {
       await Permission.notification.request();
     }
 
     await _service.initialize();
 
-    // 初始化时应用当前的防社死设置
     final privacySettings = _ref.read(privacyModeSettingsProvider);
     await _service.updatePrivacySettings(
       enabled: privacySettings.enabled,
@@ -210,20 +187,15 @@ class AudioPlayerController extends StateNotifier<AudioPlayerState> {
       _ref.read(audioGainSettingsProvider).decibels,
     );
 
-    // 初始化时应用当前的下一首预加载阈值
     final preloadSettings = _ref.read(preloadNextSettingsProvider);
     final preloadSeconds = preloadSettings.effectiveSeconds;
     _service.updatePreloadThreshold(
       preloadSeconds == null ? null : Duration(seconds: preloadSeconds),
     );
 
-    // Restore only after privacy and output settings are active. Restored
-    // sessions stay paused until the user explicitly resumes playback.
     await _service.restorePlaybackSession();
 
-    // Listen to player state changes
     _service.playerStateStream.listen((playerState) {
-      // Force a state update to trigger UI rebuild
       state = state.copyWith();
     });
   }
@@ -248,26 +220,30 @@ class AudioPlayerController extends StateNotifier<AudioPlayerState> {
     }
     _ref.read(miniPlayerVisibilityProvider.notifier).show();
 
-    // Ensure single-track plays are recorded to history.
     if (track.workId != null) {
       try {
         final api = _ref.read(kikoeruApiServiceProvider);
         final json = await api.getWork(track.workId!);
         final work = Work.fromJson(json);
-        // Fire-and-forget: record history (don't block the UI)
-        _ref.read(historyProvider.notifier).addOrUpdate(work,
-            track: track, positionMs: _service.position.inMilliseconds);
+        _ref.read(historyProvider.notifier).addOrUpdate(
+              work,
+              track: track,
+              positionMs: _service.position.inMilliseconds,
+            );
       } catch (e) {
         _log.captureOutput(
-            'Failed to record history for playTrack (id=${track.workId}): $e');
+          'Failed to record history for playTrack (id=${track.workId}): $e',
+        );
       }
     }
   }
 
-  Future<void> playTracks(List<AudioTrack> tracks,
-      {int startIndex = 0,
-      Work? work,
-      AudioTapPlaylistMode? playlistMode}) async {
+  Future<void> playTracks(
+    List<AudioTrack> tracks, {
+    int startIndex = 0,
+    Work? work,
+    AudioTapPlaylistMode? playlistMode,
+  }) async {
     await _pendingDismissal;
     if (tracks.isEmpty) return;
 
@@ -282,11 +258,13 @@ class AudioPlayerController extends StateNotifier<AudioPlayerState> {
         effectiveMode == AudioTapPlaylistMode.appendSingle ? 0 : selectedIndex;
 
     _log.captureOutput(
-        '[AudioController] playTracks调用: ${queueTracks.length}个轨道, '
-        'startIndex=$queueStartIndex, mode=${effectiveMode.name}');
+      '[AudioController] playTracks调用: ${queueTracks.length}个轨道, '
+      'startIndex=$queueStartIndex, mode=${effectiveMode.name}',
+    );
     _log.captureOutput(
-        '[AudioController] 第一个轨道: title="${queueTracks.first.title}", '
-        'url="${queueTracks.first.url}"');
+      '[AudioController] 第一个轨道: title="${queueTracks.first.title}", '
+      'url="${queueTracks.first.url}"',
+    );
 
     final shouldAppend = effectiveMode != AudioTapPlaylistMode.replaceQueue &&
         queue.isNotEmpty;
@@ -319,13 +297,11 @@ class AudioPlayerController extends StateNotifier<AudioPlayerState> {
 
   Future<void> pause() async {
     await _service.pause();
-    // 暂停时立即落盘历史
     PlaybackHistoryService.instance.onPaused();
   }
 
   Future<void> stop() async {
     await _service.stop();
-    // 停止时立即落盘历史
     PlaybackHistoryService.instance.onStopped();
   }
 
@@ -344,7 +320,6 @@ class AudioPlayerController extends StateNotifier<AudioPlayerState> {
     await _service.seek(position);
   }
 
-  /// seek 并立即持久化历史（用于用户显式拖动进度条）
   Future<void> seekAndPersist(Duration position) async {
     await _service.seek(position);
     await PlaybackHistoryService.instance.onSeekCommitted(position);
@@ -398,7 +373,6 @@ class AudioPlayerController extends StateNotifier<AudioPlayerState> {
     state = state.copyWith(speed: speed);
   }
 
-  // Getters to expose service state
   bool get isPlaying => _service.playing;
   PlayerState get playerState => _service.playerState;
   AudioTrack? get currentTrack => _service.currentTrack;
@@ -407,7 +381,6 @@ class AudioPlayerController extends StateNotifier<AudioPlayerState> {
   Stream<AudioTrack?> get currentTrackStream => _service.currentTrackStream;
 }
 
-// Audio Player State
 class AudioPlayerState {
   final LoopMode repeatMode;
   final bool shuffleMode;
@@ -436,14 +409,12 @@ class AudioPlayerState {
   }
 }
 
-// Audio Player Controller Provider
 final audioPlayerControllerProvider =
     StateNotifierProvider<AudioPlayerController, AudioPlayerState>((ref) {
   final service = ref.watch(audioPlayerServiceProvider);
   return AudioPlayerController(service, ref);
 });
 
-// MiniPlayer Visibility Controller
 class MiniPlayerVisibilityController extends StateNotifier<bool> {
   MiniPlayerVisibilityController() : super(true);
 
@@ -451,53 +422,75 @@ class MiniPlayerVisibilityController extends StateNotifier<bool> {
   void hide() => state = false;
 }
 
-// MiniPlayer Visibility Provider
 final miniPlayerVisibilityProvider =
     StateNotifierProvider<MiniPlayerVisibilityController, bool>((ref) {
   return MiniPlayerVisibilityController();
 });
 
-// Sleep Timer Controller
 class SleepTimerController extends StateNotifier<SleepTimerState> {
+  static const Duration fadeWindow = Duration(seconds: 30);
+
   final AudioPlayerService _service;
   final Future<void> Function() pause;
   final DateTime Function() _now;
+  final double Function() _readVolume;
+  final Future<void> Function(double) _setVolume;
   Timer? _timer;
   Timer? _countdownTimer;
   StreamSubscription? _trackSubscription;
   StreamSubscription<void>? _trackEndSubscription;
+  double? _fadeOriginalVolume;
+  bool _fadeAdjustedVolume = false;
+  Future<void> _fadeSerial = Future<void>.value();
 
   SleepTimerController(
     this._service, {
     required this.pause,
     DateTime Function()? now,
-  }) : _now = now ?? DateTime.now,
-       super(const SleepTimerState());
+    double Function()? readVolume,
+    Future<void> Function(double)? setVolume,
+  })  : _now = now ?? DateTime.now,
+        _readVolume = readVolume ?? (() => 1.0),
+        _setVolume = setVolume ?? ((_) async {}),
+        super(const SleepTimerState());
 
-  /// 设置定时器（按时长）
-  void setTimer(Duration duration, {bool finishCurrentTrack = false}) {
+  void setTimer(
+    Duration duration, {
+    bool finishCurrentTrack = false,
+    bool fadeOut = false,
+  }) {
     final endTime = _now().add(duration);
-    _setTimerInternal(endTime, finishCurrentTrack: finishCurrentTrack);
+    _setTimerInternal(
+      endTime,
+      finishCurrentTrack: finishCurrentTrack,
+      fadeOut: fadeOut,
+    );
   }
 
-  /// 设置定时器（按指定时间）
-  void setTimerUntil(DateTime targetTime, {bool finishCurrentTrack = false}) {
-    _setTimerInternal(targetTime, finishCurrentTrack: finishCurrentTrack);
+  void setTimerUntil(
+    DateTime targetTime, {
+    bool finishCurrentTrack = false,
+    bool fadeOut = false,
+  }) {
+    _setTimerInternal(
+      targetTime,
+      finishCurrentTrack: finishCurrentTrack,
+      fadeOut: fadeOut,
+    );
   }
 
-  /// 内部方法：设置定时器到指定时间
-  void _setTimerInternal(DateTime endTime, {bool finishCurrentTrack = false}) {
-    // 取消现有定时器
+  void _setTimerInternal(
+    DateTime endTime, {
+    bool finishCurrentTrack = false,
+    bool fadeOut = false,
+  }) {
     cancelTimer();
 
     final duration = endTime.difference(_now());
+    if (duration.isNegative || duration.inSeconds < 1) return;
 
-    // 如果时间已经过了，则不设置
-    if (duration.isNegative || duration.inSeconds < 1) {
-      return;
-    }
+    final effectiveFadeOut = fadeOut && !finishCurrentTrack;
 
-    // 设置主定时器 - 到时间后暂停播放
     _timer = Timer(duration, () {
       if (state.finishCurrentTrack) {
         _waitForTrackEndAndPause();
@@ -506,7 +499,6 @@ class SleepTimerController extends StateNotifier<SleepTimerState> {
       }
     });
 
-    // 设置倒计时更新定时器 - 每秒更新一次剩余时间
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       final remaining = endTime.difference(_now());
       if (remaining.isNegative) {
@@ -518,7 +510,11 @@ class SleepTimerController extends StateNotifier<SleepTimerState> {
         endTime: endTime,
         remainingTime: remaining,
         finishCurrentTrack: finishCurrentTrack,
+        fadeOut: effectiveFadeOut,
       );
+      if (effectiveFadeOut) {
+        _queueFadeUpdate(remaining);
+      }
     });
 
     state = SleepTimerState(
@@ -526,10 +522,13 @@ class SleepTimerController extends StateNotifier<SleepTimerState> {
       endTime: endTime,
       remainingTime: duration,
       finishCurrentTrack: finishCurrentTrack,
+      fadeOut: effectiveFadeOut,
     );
+    if (effectiveFadeOut) {
+      _queueFadeUpdate(duration);
+    }
 
     if (finishCurrentTrack) {
-      // Check the wall-clock deadline even if a background Timer callback is late.
       _trackEndSubscription = _service.trackEndStream.listen((_) {
         if (!_now().isBefore(endTime)) {
           unawaited(_pauseAndCancel());
@@ -538,7 +537,35 @@ class SleepTimerController extends StateNotifier<SleepTimerState> {
     }
   }
 
-  /// 等待当前音轨播放结束并暂停
+  void _queueFadeUpdate(Duration remaining) {
+    _fadeSerial = _fadeSerial.then((_) => _applyFade(remaining)).catchError(
+      (Object error) {
+        _log.captureOutput('[SleepTimer] Fade update failed: $error');
+      },
+    );
+  }
+
+  Future<void> _applyFade(Duration remaining) async {
+    if (!state.isActive || !state.fadeOut || state.finishCurrentTrack) return;
+    if (remaining > fadeWindow) return;
+
+    _fadeOriginalVolume ??= _readVolume().clamp(0.0, 1.0);
+    final original = _fadeOriginalVolume!;
+    final ratio = (remaining.inMilliseconds / fadeWindow.inMilliseconds)
+        .clamp(0.0, 1.0);
+    final target = (original * ratio).clamp(0.0, 1.0);
+    _fadeAdjustedVolume = true;
+    await _setVolume(target);
+  }
+
+  Future<void> _restoreFadeVolume(double original) async {
+    try {
+      await _setVolume(original.clamp(0.0, 1.0));
+    } catch (error) {
+      _log.captureOutput('[SleepTimer] Failed to restore volume: $error');
+    }
+  }
+
   void _waitForTrackEndAndPause() {
     _timer?.cancel();
     _timer = null;
@@ -561,7 +588,6 @@ class SleepTimerController extends StateNotifier<SleepTimerState> {
 
     _trackSubscription?.cancel();
     _trackSubscription = _service.currentTrackStream.listen((track) {
-      // 当音轨发生变化（切换到下一首或停止）时暂停
       if (track?.id != initialTrack.id) {
         unawaited(_pauseAndCancel());
       }
@@ -569,7 +595,6 @@ class SleepTimerController extends StateNotifier<SleepTimerState> {
   }
 
   Future<void> _pauseAndCancel() async {
-    // Start pausing synchronously so completion cannot advance the queue.
     final pausing = Future<void>.sync(pause);
     cancelTimer();
     try {
@@ -579,7 +604,6 @@ class SleepTimerController extends StateNotifier<SleepTimerState> {
     }
   }
 
-  /// 取消定时器
   void cancelTimer() {
     _timer?.cancel();
     _timer = null;
@@ -589,18 +613,28 @@ class SleepTimerController extends StateNotifier<SleepTimerState> {
     _trackSubscription = null;
     _trackEndSubscription?.cancel();
     _trackEndSubscription = null;
+
+    final original = _fadeOriginalVolume;
+    final shouldRestore = original != null && _fadeAdjustedVolume;
+    _fadeOriginalVolume = null;
+    _fadeAdjustedVolume = false;
+    if (shouldRestore) {
+      unawaited(_restoreFadeVolume(original));
+    }
+
     state = const SleepTimerState();
   }
 
-  /// 添加时间（延长定时器）
   void addTime(Duration duration) {
     if (state.isActive && state.endTime != null) {
       final now = _now();
       final baseTime = state.endTime!.isAfter(now) ? state.endTime! : now;
       final newEndTime = baseTime.add(duration);
-
-      // 重新设置定时器，并保持当前的"播完暂停"状态
-      setTimerUntil(newEndTime, finishCurrentTrack: state.finishCurrentTrack);
+      setTimerUntil(
+        newEndTime,
+        finishCurrentTrack: state.finishCurrentTrack,
+        fadeOut: state.fadeOut,
+      );
     }
   }
 
@@ -610,17 +644,21 @@ class SleepTimerController extends StateNotifier<SleepTimerState> {
     _countdownTimer?.cancel();
     _trackSubscription?.cancel();
     _trackEndSubscription?.cancel();
+    final original = _fadeOriginalVolume;
+    if (original != null && _fadeAdjustedVolume) {
+      unawaited(_restoreFadeVolume(original));
+    }
     super.dispose();
   }
 }
 
-// Sleep Timer State
 class SleepTimerState {
   final bool isActive;
   final DateTime? endTime;
   final Duration? remainingTime;
   final bool finishCurrentTrack;
   final bool waitingForTrackEnd;
+  final bool fadeOut;
 
   const SleepTimerState({
     this.isActive = false,
@@ -628,6 +666,7 @@ class SleepTimerState {
     this.remainingTime,
     this.finishCurrentTrack = false,
     this.waitingForTrackEnd = false,
+    this.fadeOut = false,
   });
 
   SleepTimerState copyWith({
@@ -636,6 +675,7 @@ class SleepTimerState {
     Duration? remainingTime,
     bool? finishCurrentTrack,
     bool? waitingForTrackEnd,
+    bool? fadeOut,
   }) {
     return SleepTimerState(
       isActive: isActive ?? this.isActive,
@@ -643,6 +683,7 @@ class SleepTimerState {
       remainingTime: remainingTime ?? this.remainingTime,
       finishCurrentTrack: finishCurrentTrack ?? this.finishCurrentTrack,
       waitingForTrackEnd: waitingForTrackEnd ?? this.waitingForTrackEnd,
+      fadeOut: fadeOut ?? this.fadeOut,
     );
   }
 
@@ -655,17 +696,18 @@ class SleepTimerState {
 
     if (hours > 0) {
       return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-    } else {
-      return '$minutes:${seconds.toString().padLeft(2, '0')}';
     }
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 }
 
-// Sleep Timer Provider
 final sleepTimerProvider =
     StateNotifierProvider<SleepTimerController, SleepTimerState>((ref) {
-      return SleepTimerController(
-        ref.read(audioPlayerServiceProvider),
-        pause: () => ref.read(audioPlayerControllerProvider.notifier).pause(),
-      );
-    });
+  return SleepTimerController(
+    ref.read(audioPlayerServiceProvider),
+    pause: () => ref.read(audioPlayerControllerProvider.notifier).pause(),
+    readVolume: () => ref.read(audioPlayerControllerProvider).volume,
+    setVolume: (volume) =>
+        ref.read(audioPlayerControllerProvider.notifier).setVolume(volume),
+  );
+});
