@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'listening_moments_screen.dart';
 import 'local_collections_screen.dart';
+import 'local_saved_works_screen.dart';
 import 'my_screen.dart';
 import 'portable_backup_screen.dart';
 
@@ -25,6 +26,7 @@ class LibraryScreen extends StatelessWidget {
             tooltip: copy.more,
             onSelected: (value) {
               final screen = switch (value) {
+                'favorites' => const LocalSavedWorksScreen(),
                 'moments' => const ListeningMomentsScreen(),
                 'collections' => const LocalCollectionsScreen(),
                 'backup' => const PortableBackupScreen(),
@@ -37,6 +39,14 @@ class LibraryScreen extends StatelessWidget {
               }
             },
             itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'favorites',
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.favorite_outline_rounded),
+                  title: Text(copy.favorites),
+                ),
+              ),
               PopupMenuItem(
                 value: 'moments',
                 child: ListTile(
@@ -78,6 +88,7 @@ class LibraryScreen extends StatelessWidget {
 class _LibraryCopy {
   const _LibraryCopy({
     required this.title,
+    required this.favorites,
     required this.localCollections,
     required this.moments,
     required this.backup,
@@ -85,6 +96,7 @@ class _LibraryCopy {
   });
 
   final String title;
+  final String favorites;
   final String localCollections;
   final String moments;
   final String backup;
@@ -95,6 +107,7 @@ class _LibraryCopy {
     return switch (locale.languageCode) {
       'id' => const _LibraryCopy(
           title: 'Koleksi',
+          favorites: 'Favorit Hiraukan',
           localCollections: 'Koleksi lokal',
           moments: 'Moments',
           backup: 'Backup & Restore',
@@ -102,6 +115,7 @@ class _LibraryCopy {
         ),
       'ja' => const _LibraryCopy(
           title: 'ライブラリ',
+          favorites: 'Hiraukan お気に入り',
           localCollections: 'ローカルコレクション',
           moments: 'モーメント',
           backup: 'バックアップと復元',
@@ -109,6 +123,7 @@ class _LibraryCopy {
         ),
       'zh' => _LibraryCopy(
           title: locale.scriptCode == 'Hant' ? '資料庫' : '资料库',
+          favorites: locale.scriptCode == 'Hant' ? 'Hiraukan 最愛' : 'Hiraukan 收藏',
           localCollections: locale.scriptCode == 'Hant' ? '本機收藏' : '本地收藏',
           moments: locale.scriptCode == 'Hant' ? '時間標記' : '时间标记',
           backup: locale.scriptCode == 'Hant' ? '備份與還原' : '备份与恢复',
@@ -116,6 +131,7 @@ class _LibraryCopy {
         ),
       'ru' => const _LibraryCopy(
           title: 'Медиатека',
+          favorites: 'Избранное Hiraukan',
           localCollections: 'Локальные коллекции',
           moments: 'Моменты',
           backup: 'Резервная копия',
@@ -123,6 +139,7 @@ class _LibraryCopy {
         ),
       _ => const _LibraryCopy(
           title: 'Library',
+          favorites: 'Hiraukan Favorites',
           localCollections: 'Local collections',
           moments: 'Moments',
           backup: 'Backup & Restore',
