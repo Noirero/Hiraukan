@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -121,7 +122,7 @@ class _PortableBackupScreenState extends ConsumerState<PortableBackupScreen> {
         result = await FilePicker.platform.saveFile(
           dialogTitle: copy.exportTitle,
           fileName: fileName,
-          bytes: Uint8List.fromList(content.codeUnits),
+          bytes: Uint8List.fromList(utf8.encode(content)),
         );
       } else {
         result = await FilePicker.platform.saveFile(
@@ -171,7 +172,7 @@ class _PortableBackupScreenState extends ConsumerState<PortableBackupScreen> {
 
     try {
       final raw = file.bytes != null
-          ? String.fromCharCodes(file.bytes!)
+          ? utf8.decode(file.bytes!)
           : file.path != null
               ? await File(file.path!).readAsString()
               : throw const FormatException('Selected backup has no readable data');
