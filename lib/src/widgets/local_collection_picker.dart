@@ -17,10 +17,7 @@ class LocalCollectionPicker {
       useSafeArea: true,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => ProviderScope(
-        parent: ProviderScope.containerOf(context),
-        child: _CollectionPickerSheet(work: work),
-      ),
+      builder: (_) => _CollectionPickerSheet(work: work),
     );
   }
 }
@@ -148,7 +145,9 @@ class _CollectionPickerSheetState
             decoration: InputDecoration(hintText: copy.nameHint),
             onSubmitted: (value) {
               final normalized = value.trim();
-              if (normalized.isNotEmpty) Navigator.pop(dialogContext, normalized);
+              if (normalized.isNotEmpty) {
+                Navigator.pop(dialogContext, normalized);
+              }
             },
           ),
           actions: [
@@ -205,7 +204,11 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.create_new_folder_outlined, size: 52, color: scheme.primary),
+            Icon(
+              Icons.create_new_folder_outlined,
+              size: 52,
+              color: scheme.primary,
+            ),
             const SizedBox(height: 12),
             Text(
               copy.emptyTitle,
