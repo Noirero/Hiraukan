@@ -50,7 +50,14 @@ class LocalCollectionsNotifier extends StateNotifier<LocalCollectionsState> {
     }
   }
 
+  void _ensureReady() {
+    if (state.isLoading) {
+      throw StateError('Local collections are still loading');
+    }
+  }
+
   Future<LocalCollection> create(String name) async {
+    _ensureReady();
     final collection = await _service.create(state.collections, name);
     state = state.copyWith(
       collections: <LocalCollection>[...state.collections, collection],
@@ -60,16 +67,19 @@ class LocalCollectionsNotifier extends StateNotifier<LocalCollectionsState> {
   }
 
   Future<void> rename(String id, String name) async {
+    _ensureReady();
     final collections = await _service.rename(state.collections, id, name);
     state = state.copyWith(collections: collections, clearError: true);
   }
 
   Future<void> delete(String id) async {
+    _ensureReady();
     final collections = await _service.delete(state.collections, id);
     state = state.copyWith(collections: collections, clearError: true);
   }
 
   Future<void> addWork(String collectionId, Work work) async {
+    _ensureReady();
     final collections = await _service.addWork(
       state.collections,
       collectionId,
@@ -79,6 +89,7 @@ class LocalCollectionsNotifier extends StateNotifier<LocalCollectionsState> {
   }
 
   Future<void> removeWork(String collectionId, Work work) async {
+    _ensureReady();
     final collections = await _service.removeWork(
       state.collections,
       collectionId,
