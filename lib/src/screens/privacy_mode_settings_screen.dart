@@ -3,14 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
 import 'app_lock_settings_screen.dart';
-import 'kikoflu_features_settings_screen.dart';
 import '../providers/settings_provider.dart';
 import '../services/app_lock_service.dart';
 import '../utils/snackbar_util.dart';
-import '../widgets/settings_section.dart';
 import '../widgets/common_input_dialog.dart';
+import '../widgets/settings_section.dart';
 
-/// 防社死设置页面
+/// Privacy presentation and access controls.
+///
+/// Audio/AI experiments intentionally live outside this screen so privacy has
+/// one clear responsibility: mask sensitive presentation and protect app access.
 class PrivacyModeSettingsScreen extends ConsumerStatefulWidget {
   const PrivacyModeSettingsScreen({super.key});
 
@@ -212,46 +214,26 @@ class _PrivacyModeSettingsScreenState
           ),
           const SizedBox(height: 16),
           SettingsSectionCard(
-            child: Column(
-              children: [
-                SettingsListTile(
-                  icon: appLockEnabled
-                      ? Icons.lock_rounded
-                      : Icons.lock_outline_rounded,
-                  iconColor: appLockEnabled
-                      ? Colors.green
-                      : Theme.of(context).colorScheme.primary,
-                  title: 'App Lock',
-                  subtitle: appLockEnabled
-                      ? 'Aktif — lindungi Hiraukan dengan PIN/biometrik'
-                      : 'Kunci Hiraukan dengan PIN dan biometrik perangkat',
-                  trailing: const Icon(Icons.arrow_forward_ios),
-                  onTap: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => const AppLockSettingsScreen(),
-                      ),
-                    );
-                    if (mounted) setState(() {});
-                  },
-                ),
-                const SettingsDivider(),
-                SettingsListTile(
-                  icon: Icons.auto_awesome_rounded,
-                  title: 'Advanced Audio & AI',
-                  subtitle:
-                      'Crossfade, WAV conversion, Whisper, notifications dan Hi-Res',
-                  trailing: const Icon(Icons.arrow_forward_ios),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            const KikoFluFeaturesSettingsScreen(),
-                      ),
-                    );
-                  },
-                ),
-              ],
+            child: SettingsListTile(
+              icon: appLockEnabled
+                  ? Icons.lock_rounded
+                  : Icons.lock_outline_rounded,
+              iconColor: appLockEnabled
+                  ? Colors.green
+                  : Theme.of(context).colorScheme.primary,
+              title: _appLockTitle(context),
+              subtitle: appLockEnabled
+                  ? _appLockEnabledSubtitle(context)
+                  : _appLockDisabledSubtitle(context),
+              trailing: const Icon(Icons.arrow_forward_ios),
+              onTap: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const AppLockSettingsScreen(),
+                  ),
+                );
+                if (mounted) setState(() {});
+              },
             ),
           ),
           const SizedBox(height: 16),
@@ -293,5 +275,23 @@ class _PrivacyModeSettingsScreenState
         ],
       ),
     );
+  }
+
+  String _appLockTitle(BuildContext context) {
+    return Localizations.localeOf(context).languageCode == 'id'
+        ? 'Kunci Aplikasi'
+        : 'App Lock';
+  }
+
+  String _appLockEnabledSubtitle(BuildContext context) {
+    return Localizations.localeOf(context).languageCode == 'id'
+        ? 'Aktif — lindungi Hiraukan dengan PIN atau biometrik.'
+        : 'Enabled — protect Hiraukan with a PIN or biometrics.';
+  }
+
+  String _appLockDisabledSubtitle(BuildContext context) {
+    return Localizations.localeOf(context).languageCode == 'id'
+        ? 'Lindungi Hiraukan dengan PIN atau biometrik perangkat.'
+        : 'Protect Hiraukan with a PIN or device biometrics.';
   }
 }
