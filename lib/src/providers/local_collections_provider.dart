@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/local_collection.dart';
@@ -36,55 +38,80 @@ class LocalCollectionsNotifier extends StateNotifier<LocalCollectionsState> {
   }
 
   final LocalCollectionService _service;
+  Future<void> _operationTail = Future<void>.value();
 
-  Future<void> load() async {
-    state = state.copyWith(isLoading: true, clearError: true);
-    try {
-      final collections = await _service.load();
-      state = LocalCollectionsState(collections: collections);
-    } catch (error) {
-      state = LocalCollectionsState(
-        collections: state.collections,
-        error: error.toString(),
+  Future<T> _serialize<T>(Future<T> Function() operation) {
+    final completer = Completer<T>();
+    _operationTail = _operationTail.then((_) async {
+      try {
+        completer.complete(await operation());
+      } catch (error, stack) {
+        completer.completeError(error, stack);
+      }
+    });
+    return completer.future;
+  }
+
+  Future<void> load() {
+    return _serialize(() async {
+      state = state.copyWith(isLoading: true, clearError: true);
+      try {
+        final collections = await _service.load();
+        state = LocalCollectionsState(collections: collections);
+      } catch (error) {
+        state = LocalCollectionsState(
+          collections: state.collections,
+          error: error.toString(),
+        );
+      }
+    });
+  }
+
+  Future<LocalCollection> create(String name) {
+    return _serialize(() async {
+      final collection = await _service.create(state.collections, name);
+      state = state.copyWith(
+        collections: <LocalCollection>[...state.collections, collection],
+        clearError: true,
       );
-    }
+      return collection;
+    });
   }
 
-  Future<LocalCollection> create(String name) async {
-    final collection = await _service.create(state.collections, name);
-    state = state.copyWith(
-      collections: <LocalCollection>[...state.collections, collection],
-      clearError: true,
-    );
-    return collection;
+  Future<void> rename(String id, String name) {
+    return _serialize(() async {
+      final collections = await _service.rename(state.collections, id, name);
+      state = state.copyWith(collections: collections, clearError: true);
+    });
   }
 
-  Future<void> rename(String id, String name) async {
-    final collections = await _service.rename(state.collections, id, name);
-    state = state.copyWith(collections: collections, clearError: true);
+  Future<void> delete(String id) {
+    return _serialize(() async {
+      final collections = await _service.delete(state.collections, id);
+      state = state.copyWith(collections: collections, clearError: true);
+    });
   }
 
-  Future<void> delete(String id) async {
-    final collections = await _service.delete(state.collections, id);
-    state = state.copyWith(collections: collections, clearError: true);
+  Future<void> addWork(String collectionId, Work work) {
+    return _serialize(() async {
+      final collections = await _service.addWork(
+        state.collections,
+        collectionId,
+        work,
+      );
+      state = state.copyWith(collections: collections, clearError: true);
+    });
   }
 
-  Future<void> addWork(String collectionId, Work work) async {
-    final collections = await _service.addWork(
-      state.collections,
-      collectionId,
-      work,
-    );
-    state = state.copyWith(collections: collections, clearError: true);
-  }
-
-  Future<void> removeWork(String collectionId, Work work) async {
-    final collections = await _service.removeWork(
-      state.collections,
-      collectionId,
-      work,
-    );
-    state = state.copyWith(collections: collections, clearError: true);
+  Future<void> removeWork(String collectionId, Work work) {
+    return _serialize(() async {
+      final collections = await _service.removeWork(
+        state.collections,
+        collectionId,
+        work,
+      );
+      state = state.copyWith(collections: collections, clearError: true);
+    });
   }
 
   bool contains(String collectionId, Work work) {
