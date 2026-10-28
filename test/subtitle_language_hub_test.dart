@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -35,6 +36,8 @@ void main() {
       const ProviderScope(
         child: MaterialApp(
           locale: Locale('en'),
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          supportedLocales: <Locale>[Locale('en'), Locale('id')],
           home: SubtitleLanguageHubScreen(),
         ),
       ),
@@ -53,10 +56,16 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('Local Transcription (Whisper)'), findsOneWidget);
-    expect(
-      find.textContaining('ASR benchmarks and technical experiments'),
-      findsOneWidget,
+
+    final footer = find.textContaining(
+      'ASR benchmarks and technical experiments',
     );
+    await tester.scrollUntilVisible(
+      footer,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(footer, findsOneWidget);
   });
 
   testWidgets('subtitle hub exposes Indonesian product copy', (tester) async {
@@ -64,6 +73,8 @@ void main() {
       const ProviderScope(
         child: MaterialApp(
           locale: Locale('id'),
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          supportedLocales: <Locale>[Locale('en'), Locale('id')],
           home: SubtitleLanguageHubScreen(),
         ),
       ),
