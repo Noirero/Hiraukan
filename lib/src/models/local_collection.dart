@@ -1,4 +1,4 @@
-import '../models/work.dart';
+import 'work.dart';
 
 /// A Hiraukan-owned collection that is independent from any server account.
 ///
