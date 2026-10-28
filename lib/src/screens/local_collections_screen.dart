@@ -3,13 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/local_collection.dart';
 import '../models/work.dart';
-import '../providers/auth_provider.dart';
 import '../providers/local_collections_provider.dart';
-import '../screens/unified_work_detail_screen.dart';
-import '../screens/work_detail_screen.dart';
 import '../sources/unified_source_registry.dart';
-import '../utils/work_cover_prefetch.dart';
 import '../widgets/privacy_blur_cover.dart';
+import 'local_collection_add_work_screen.dart';
+import 'unified_work_detail_screen.dart';
+import 'work_detail_screen.dart';
 
 class LocalCollectionsScreen extends ConsumerWidget {
   const LocalCollectionsScreen({super.key});
@@ -17,19 +16,10 @@ class LocalCollectionsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(localCollectionsProvider);
-    final copy = _CollectionsCopy.of(context);
+    final copy = _Copy.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(copy.title),
-        actions: [
-          IconButton(
-            tooltip: copy.create,
-            onPressed: () => _create(context, ref, copy),
-            icon: const Icon(Icons.create_new_folder_outlined),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: Text(copy.title)),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _create(context, ref, copy),
         icon: const Icon(Icons.add_rounded),
@@ -38,7 +28,13 @@ class LocalCollectionsScreen extends ConsumerWidget {
       body: state.isLoading
           ? const Center(child: CircularProgressIndicator())
           : state.collections.isEmpty
-              ? _CollectionsEmpty(copy: copy, onCreate: () => _create(context, ref, copy))
+              ? _Empty(
+                  icon: Icons.folder_copy_outlined,
+                  title: copy.emptyTitle,
+                  message: copy.emptySubtitle,
+                  actionLabel: copy.create,
+                  onAction: () => _create(context, ref, copy),
+                )
               : ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 112),
                   itemCount: state.collections.length,
@@ -55,8 +51,10 @@ class LocalCollectionsScreen extends ConsumerWidget {
                           ),
                         ),
                       ),
-                      onRename: () => _rename(context, ref, collection, copy),
-                      onDelete: () => _delete(context, ref, collection, copy),
+                      onRename: () =>
+                          _rename(context, ref, collection, copy),
+                      onDelete: () =>
+                          _delete(context, ref, collection, copy),
                     );
                   },
                 ),
@@ -66,7 +64,7 @@ class LocalCollectionsScreen extends ConsumerWidget {
   Future<void> _create(
     BuildContext context,
     WidgetRef ref,
-    _CollectionsCopy copy,
+    _Copy copy,
   ) async {
     final name = await _nameDialog(context, copy.createTitle, copy);
     if (name == null || !context.mounted) return;
@@ -83,9 +81,8 @@ class LocalCollectionsScreen extends ConsumerWidget {
       );
     } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.toString())));
     }
   }
 
@@ -93,7 +90,7 @@ class LocalCollectionsScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     LocalCollection collection,
-    _CollectionsCopy copy,
+    _Copy copy,
   ) async {
     final name = await _nameDialog(
       context,
@@ -108,9 +105,8 @@ class LocalCollectionsScreen extends ConsumerWidget {
           .rename(collection.id, name);
     } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.toString())));
     }
   }
 
@@ -118,7 +114,7 @@ class LocalCollectionsScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     LocalCollection collection,
-    _CollectionsCopy copy,
+    _Copy copy,
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -137,14 +133,15 @@ class LocalCollectionsScreen extends ConsumerWidget {
         ],
       ),
     );
-    if (confirmed != true || !context.mounted) return;
-    await ref.read(localCollectionsProvider.notifier).delete(collection.id);
+    if (confirmed == true && context.mounted) {
+      await ref.read(localCollectionsProvider.notifier).delete(collection.id);
+    }
   }
 
   Future<String?> _nameDialog(
     BuildContext context,
     String title,
-    _CollectionsCopy copy, {
+    _Copy copy, {
     String initialValue = '',
   }) async {
     final controller = TextEditingController(text: initialValue);
@@ -162,7 +159,9 @@ class LocalCollectionsScreen extends ConsumerWidget {
             decoration: InputDecoration(hintText: copy.nameHint),
             onSubmitted: (value) {
               final normalized = value.trim();
-              if (normalized.isNotEmpty) Navigator.pop(dialogContext, normalized);
+              if (normalized.isNotEmpty) {
+                Navigator.pop(dialogContext, normalized);
+              }
             },
           ),
           actions: [
@@ -173,7 +172,9 @@ class LocalCollectionsScreen extends ConsumerWidget {
             FilledButton(
               onPressed: () {
                 final normalized = controller.text.trim();
-                if (normalized.isNotEmpty) Navigator.pop(dialogContext, normalized);
+                if (normalized.isNotEmpty) {
+                  Navigator.pop(dialogContext, normalized);
+                }
               },
               child: Text(copy.save),
             ),
@@ -187,7 +188,10 @@ class LocalCollectionsScreen extends ConsumerWidget {
 }
 
 class LocalCollectionDetailScreen extends ConsumerWidget {
-  const LocalCollectionDetailScreen({super.key, required this.collectionId});
+  const LocalCollectionDetailScreen({
+    super.key,
+    required this.collectionId,
+  });
 
   final String collectionId;
 
@@ -197,7 +201,7 @@ class LocalCollectionDetailScreen extends ConsumerWidget {
     final collection = state.collections
         .where((item) => item.id == collectionId)
         .firstOrNull;
-    final copy = _CollectionsCopy.of(context);
+    final copy = _Copy.of(context);
 
     if (collection == null) {
       return Scaffold(
@@ -210,54 +214,65 @@ class LocalCollectionDetailScreen extends ConsumerWidget {
       appBar: AppBar(
         title: Text(collection.name),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Center(
-              child: Text(
-                copy.items(collection.works.length),
-                style: Theme.of(context).textTheme.labelLarge,
+          IconButton(
+            tooltip: copy.addWorks,
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => LocalCollectionAddWorkScreen(
+                  collectionId: collection.id,
+                ),
               ),
             ),
+            icon: const Icon(Icons.playlist_add_rounded),
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => LocalCollectionAddWorkScreen(
+              collectionId: collection.id,
+            ),
+          ),
+        ),
+        icon: const Icon(Icons.add_rounded),
+        label: Text(copy.addWorks),
+      ),
       body: collection.works.isEmpty
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(28),
-                child: Text(
-                  copy.collectionEmpty,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+          ? _Empty(
+              icon: Icons.library_add_outlined,
+              title: copy.collectionEmptyTitle,
+              message: copy.collectionEmpty,
+              actionLabel: copy.addWorks,
+              onAction: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => LocalCollectionAddWorkScreen(
+                    collectionId: collection.id,
+                  ),
                 ),
               ),
             )
           : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 32),
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 112),
               itemCount: collection.works.length,
               separatorBuilder: (_, __) => const SizedBox(height: 6),
               itemBuilder: (context, index) {
                 final work = collection.works[index];
                 return _WorkTile(
                   work: work,
-                  onOpen: () => _openWork(context, ref, work),
-                  onRemove: () async {
-                    await ref
-                        .read(localCollectionsProvider.notifier)
-                        .removeWork(collection.id, work);
-                  },
                   removeLabel: copy.remove,
+                  onOpen: () => _openWork(context, work),
+                  onRemove: () => ref
+                      .read(localCollectionsProvider.notifier)
+                      .removeWork(collection.id, work),
                 );
               },
             ),
     );
   }
 
-  void _openWork(BuildContext context, WidgetRef ref, Work work) {
-    final external = _isUnifiedExternalWork(work);
-    if (external) {
+  void _openWork(BuildContext context, Work work) {
+    if (_isUnifiedExternal(work)) {
       UnifiedSourceRegistry.instance.ensureFromWork(work);
       Navigator.of(context).push(
         MaterialPageRoute<void>(
@@ -266,32 +281,16 @@ class LocalCollectionDetailScreen extends ConsumerWidget {
       );
       return;
     }
-
-    final auth = ref.read(authProvider);
-    final host = auth.host ?? '';
-    final token = auth.token ?? '';
-    final coverProvider = host.isEmpty
-        ? null
-        : createWorkCoverImageProvider(
-            work: work,
-            host: host,
-            token: token,
-          );
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => WorkDetailScreen(
-          work: work,
-          initialCoverImageProvider: coverProvider,
-        ),
-      ),
+      MaterialPageRoute<void>(builder: (_) => WorkDetailScreen(work: work)),
     );
   }
 
-  bool _isUnifiedExternalWork(Work work) {
+  bool _isUnifiedExternal(Work work) {
     if (work.id < 0) return true;
-    final rawUrl = work.sourceUrl?.trim();
-    if (rawUrl == null || rawUrl.isEmpty) return false;
-    final host = Uri.tryParse(rawUrl)?.host.toLowerCase() ?? '';
+    final source = work.sourceUrl?.trim();
+    if (source == null || source.isEmpty) return false;
+    final host = Uri.tryParse(source)?.host.toLowerCase() ?? '';
     return host.contains('hentaiasmr.moe') || host.contains('erovoice.us');
   }
 }
@@ -306,7 +305,7 @@ class _CollectionTile extends StatelessWidget {
   });
 
   final LocalCollection collection;
-  final _CollectionsCopy copy;
+  final _Copy copy;
   final VoidCallback onOpen;
   final VoidCallback onRename;
   final VoidCallback onDelete;
@@ -320,9 +319,10 @@ class _CollectionTile extends StatelessWidget {
       color: scheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.32)),
+        side: BorderSide(
+          color: scheme.outlineVariant.withValues(alpha: 0.32),
+        ),
       ),
-      clipBehavior: Clip.antiAlias,
       child: ListTile(
         contentPadding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
         leading: Container(
@@ -336,9 +336,7 @@ class _CollectionTile extends StatelessWidget {
         ),
         title: Text(
           collection.name,
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+          style: const TextStyle(fontWeight: FontWeight.w800),
         ),
         subtitle: Text(copy.items(collection.works.length)),
         trailing: PopupMenuButton<String>(
@@ -367,13 +365,13 @@ class _WorkTile extends StatelessWidget {
 
   final Work work;
   final VoidCallback onOpen;
-  final VoidCallback onRemove;
+  final Future<void> Function() onRemove;
   final String removeLabel;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final directCover = work.images?.isNotEmpty == true ? work.images!.first : null;
+    final cover = work.images?.isNotEmpty == true ? work.images!.first : null;
     return Card(
       margin: EdgeInsets.zero,
       elevation: 0,
@@ -385,7 +383,7 @@ class _WorkTile extends StatelessWidget {
           child: SizedBox(
             width: 52,
             height: 52,
-            child: PrivacyBlurCover(child: _Cover(url: directCover)),
+            child: PrivacyBlurCover(child: _Cover(url: cover)),
           ),
         ),
         title: Text(
@@ -439,11 +437,20 @@ class _Cover extends StatelessWidget {
   }
 }
 
-class _CollectionsEmpty extends StatelessWidget {
-  const _CollectionsEmpty({required this.copy, required this.onCreate});
+class _Empty extends StatelessWidget {
+  const _Empty({
+    required this.icon,
+    required this.title,
+    required this.message,
+    required this.actionLabel,
+    required this.onAction,
+  });
 
-  final _CollectionsCopy copy;
-  final VoidCallback onCreate;
+  final IconData icon;
+  final String title;
+  final String message;
+  final String actionLabel;
+  final VoidCallback onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -454,17 +461,18 @@ class _CollectionsEmpty extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.folder_copy_outlined, size: 60, color: scheme.primary),
+            Icon(icon, size: 58, color: scheme.primary),
             const SizedBox(height: 14),
             Text(
-              copy.emptyTitle,
+              title,
+              textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
             ),
             const SizedBox(height: 6),
             Text(
-              copy.emptySubtitle,
+              message,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: scheme.onSurfaceVariant,
@@ -472,9 +480,9 @@ class _CollectionsEmpty extends StatelessWidget {
             ),
             const SizedBox(height: 18),
             FilledButton.icon(
-              onPressed: onCreate,
+              onPressed: onAction,
               icon: const Icon(Icons.add_rounded),
-              label: Text(copy.create),
+              label: Text(actionLabel),
             ),
           ],
         ),
@@ -483,8 +491,8 @@ class _CollectionsEmpty extends StatelessWidget {
   }
 }
 
-class _CollectionsCopy {
-  const _CollectionsCopy({
+class _Copy {
+  const _Copy({
     required this.title,
     required this.create,
     required this.createTitle,
@@ -498,9 +506,11 @@ class _CollectionsCopy {
     required this.nameHint,
     required this.emptyTitle,
     required this.emptySubtitle,
+    required this.collectionEmptyTitle,
     required this.collectionEmpty,
     required this.notFound,
     required this.remove,
+    required this.addWorks,
     required this.items,
   });
 
@@ -517,14 +527,16 @@ class _CollectionsCopy {
   final String nameHint;
   final String emptyTitle;
   final String emptySubtitle;
+  final String collectionEmptyTitle;
   final String collectionEmpty;
   final String notFound;
   final String remove;
+  final String addWorks;
   final String Function(int) items;
 
-  static _CollectionsCopy of(BuildContext context) {
+  static _Copy of(BuildContext context) {
     if (Localizations.localeOf(context).languageCode == 'id') {
-      return _CollectionsCopy(
+      return _Copy(
         title: 'Koleksi Lokal',
         create: 'Buat koleksi',
         createTitle: 'Buat koleksi lokal',
@@ -532,21 +544,24 @@ class _CollectionsCopy {
         rename: 'Ubah nama',
         deleteTitle: 'Hapus koleksi?',
         delete: 'Hapus',
-        deleteMessage: (name) => 'Koleksi “$name” akan dihapus. Karya dan file asli tidak ikut dihapus.',
+        deleteMessage: (name) =>
+            'Koleksi “$name” akan dihapus. Karya dan file asli tidak ikut dihapus.',
         cancel: 'Batal',
         save: 'Simpan',
         nameHint: 'Contoh: Sleep, Favorit, Dengarkan nanti',
         emptyTitle: 'Buat ruang untuk karya pilihanmu',
         emptySubtitle:
             'Koleksi lokal tidak bergantung pada playlist server dan tetap mengikuti Hiraukan saat kamu berganti akun.',
+        collectionEmptyTitle: 'Koleksi masih kosong',
         collectionEmpty:
-            'Koleksi ini masih kosong. Buka detail karya lalu pilih “Simpan ke Koleksi”.',
+            'Cari karya dari semua sumber aktif lalu tambahkan ke koleksi ini.',
         notFound: 'Koleksi tidak ditemukan.',
         remove: 'Hapus dari koleksi',
+        addWorks: 'Tambah karya',
         items: (count) => '$count karya',
       );
     }
-    return _CollectionsCopy(
+    return _Copy(
       title: 'Local Collections',
       create: 'Create collection',
       createTitle: 'Create local collection',
@@ -554,17 +569,20 @@ class _CollectionsCopy {
       rename: 'Rename',
       deleteTitle: 'Delete collection?',
       delete: 'Delete',
-      deleteMessage: (name) => '“$name” will be deleted. Original works and files are not removed.',
+      deleteMessage: (name) =>
+          '“$name” will be deleted. Original works and files are not removed.',
       cancel: 'Cancel',
       save: 'Save',
       nameHint: 'For example: Sleep, Favorites, Listen Later',
       emptyTitle: 'Make space for the works you care about',
       emptySubtitle:
           'Local collections do not depend on server playlists and remain available when you switch accounts.',
+      collectionEmptyTitle: 'This collection is empty',
       collectionEmpty:
-          'This collection is empty. Open a work and choose “Save to Collection”.',
+          'Search every enabled source and add works to this collection.',
       notFound: 'Collection not found.',
       remove: 'Remove from collection',
+      addWorks: 'Add works',
       items: (count) => '$count works',
     );
   }
