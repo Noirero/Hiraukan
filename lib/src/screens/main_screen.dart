@@ -11,7 +11,7 @@ import '../widgets/mini_player.dart';
 import '../widgets/liquid_glass_layout.dart';
 import 'works_screen.dart';
 import 'search_screen.dart';
-import 'my_screen.dart';
+import 'library_screen.dart';
 import 'settings_screen.dart';
 import '../providers/settings_provider.dart';
 
@@ -26,10 +26,8 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   int _currentIndex = 0;
   static const int _settingsTabIndex = 3;
 
-  // 使用 PageStorageBucket 来保存页面状态
   final PageStorageBucket _bucket = PageStorageBucket();
   final ValueNotifier<double> _liquidDockExtent = ValueNotifier(0);
-
   late final List<Widget> _screens;
 
   @override
@@ -38,7 +36,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     _screens = const [
       WorksScreen(key: PageStorageKey('works_screen')),
       SearchScreen(key: PageStorageKey('search_screen')),
-      MyScreen(key: PageStorageKey('my_screen')),
+      LibraryScreen(key: PageStorageKey('library_screen')),
       SettingsScreen(key: PageStorageKey('settings_screen')),
     ];
   }
@@ -50,7 +48,9 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   }
 
   List<NavigationDestination> _buildDestinations(
-      BuildContext context, bool showUpdateBadge) {
+    BuildContext context,
+    bool showUpdateBadge,
+  ) {
     final s = S.of(context);
     return [
       NavigationDestination(
@@ -64,9 +64,9 @@ class _MainScreenState extends ConsumerState<MainScreen> {
         label: s.navSearch,
       ),
       NavigationDestination(
-        icon: const Icon(Icons.favorite_border),
-        selectedIcon: const Icon(Icons.favorite),
-        label: s.navMy,
+        icon: const Icon(Icons.library_music_outlined),
+        selectedIcon: const Icon(Icons.library_music_rounded),
+        label: _libraryLabel(context),
       ),
       NavigationDestination(
         icon: Badge(
@@ -82,14 +82,20 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     ];
   }
 
-  void _handleDestinationSelected(int index) {
-    if (_currentIndex == index) {
-      return;
-    }
+  String _libraryLabel(BuildContext context) {
+    final locale = Localizations.localeOf(context);
+    return switch (locale.languageCode) {
+      'id' => 'Koleksi',
+      'ja' => 'ライブラリ',
+      'ru' => 'Медиатека',
+      'zh' => locale.scriptCode == 'Hant' ? '資料庫' : '资料库',
+      _ => 'Library',
+    };
+  }
 
-    setState(() {
-      _currentIndex = index;
-    });
+  void _handleDestinationSelected(int index) {
+    if (_currentIndex == index) return;
+    setState(() => _currentIndex = index);
 
     if (index == _settingsTabIndex) {
       ref.read(settingsCacheRefreshTriggerProvider.notifier).state++;
@@ -107,14 +113,11 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     if (isLandscape) {
       final mediaSize = MediaQuery.sizeOf(context);
       final mediaPadding = MediaQuery.paddingOf(context);
-      // 横屏布局：使用 NavigationRail
       final landscapeScaffold = Scaffold(
         body: Stack(
           children: [
-            // 主内容区域
             Row(
               children: [
-                // 侧边导航栏
                 SafeArea(
                   child: SingleChildScrollView(
                     child: ConstrainedBox(
@@ -152,7 +155,6 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                   ),
                 ),
                 const VerticalDivider(thickness: 1, width: 1),
-                // 页面内容
                 Expanded(
                   child: Consumer(
                     builder: (context, ref, child) {
@@ -221,7 +223,6 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                 ),
               ],
             ),
-            // 离线模式提示横幅（覆盖在顶部）
             Positioned(
               top: 0,
               left: 0,
@@ -233,10 +234,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                       !authState.isLoggedIn &&
                       authState.error != null;
 
-                  if (!isOfflineMode) {
-                    return const SizedBox.shrink();
-                  }
-
+                  if (!isOfflineMode) return const SizedBox.shrink();
                   final topPadding = MediaQuery.paddingOf(context).top;
 
                   return Container(
@@ -262,12 +260,15 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                         ),
                         TextButton(
                           onPressed: () async {
-                            final notifier = ref.read(authProvider.notifier);
-                            await notifier.retryConnection();
+                            await ref
+                                .read(authProvider.notifier)
+                                .retryConnection();
                           },
                           style: TextButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             minimumSize: Size.zero,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
@@ -297,8 +298,6 @@ class _MainScreenState extends ConsumerState<MainScreen> {
           : landscapeScaffold;
     }
 
-    // 竖屏布局：液态玻璃模式把导航栏悬浮在页面内容上方，经典模式
-    // 继续使用 Scaffold 的 bottomNavigationBar 插槽。
     final miniPlayer = Consumer(
       builder: (context, ref, child) {
         final currentTrack = ref.watch(currentTrackProvider);
@@ -334,7 +333,6 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     final portraitScaffold = Scaffold(
       body: Stack(
         children: [
-          // 主内容
           Consumer(
             builder: (context, ref, child) {
               final authState = ref.watch(authProvider);
@@ -365,7 +363,6 @@ class _MainScreenState extends ConsumerState<MainScreen> {
               );
             },
           ),
-          // 离线模式提示横幅（覆盖在顶部）
           Positioned(
             top: 0,
             left: 0,
@@ -377,10 +374,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                     !authState.isLoggedIn &&
                     authState.error != null;
 
-                if (!isOfflineMode) {
-                  return const SizedBox.shrink();
-                }
-
+                if (!isOfflineMode) return const SizedBox.shrink();
                 final topPadding = MediaQuery.paddingOf(context).top;
 
                 return Container(
@@ -406,12 +400,13 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                       ),
                       TextButton(
                         onPressed: () async {
-                          final notifier = ref.read(authProvider.notifier);
-                          await notifier.retryConnection();
+                          await ref.read(authProvider.notifier).retryConnection();
                         },
                         style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
@@ -455,11 +450,13 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       onDestinationSelected: _handleDestinationSelected,
       labelType: NavigationRailLabelType.selected,
       destinations: destinations
-          .map((dest) => NavigationRailDestination(
-                icon: dest.icon,
-                selectedIcon: dest.selectedIcon,
-                label: Text(dest.label),
-              ))
+          .map(
+            (dest) => NavigationRailDestination(
+              icon: dest.icon,
+              selectedIcon: dest.selectedIcon,
+              label: Text(dest.label),
+            ),
+          )
           .toList(),
     );
   }
