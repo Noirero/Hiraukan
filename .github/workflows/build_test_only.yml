@@ -1,12 +1,10 @@
-name: Android APK Beta
+name: Hiraukan Beta Build
+run-name: Hiraukan Beta APK · ${{ github.sha }}
 
+# Manual-only standalone Beta APK build, matching Miyorare's Beta flow.
+# Regular commits and pull requests to beta do not build an APK automatically.
+# Use Actions > Hiraukan Beta Build > Run workflow and select branch beta.
 on:
-  push:
-    branches:
-      - beta
-  pull_request:
-    branches:
-      - beta
   workflow_dispatch:
     inputs:
       asr_endpoint:
@@ -18,16 +16,27 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-apk-beta-${{ github.ref }}
+  group: hiraukan-beta-build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   android:
-    name: Analyze, test, and build ARM64 Beta APK
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/beta'
+    name: Build signed Hiraukan Beta ARM64 APK
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout Beta HEAD
+        uses: actions/checkout@v6
+
+      - name: Require beta branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_NAME}" != "beta" ]; then
+            echo "::error::Official Hiraukan Beta APKs may only be built from the beta branch."
+            exit 1
+          fi
+          echo "Building Hiraukan Beta from ${GITHUB_SHA}"
 
       - name: Prepare stable beta signing key
         run: |
@@ -109,11 +118,12 @@ jobs:
 
       - name: Compute monotonic Beta versionCode
         id: beta_version
+        shell: bash
         run: |
           set -euo pipefail
           # Epoch seconds give Beta artifacts one chronological versionCode
-          # across PR, push and release workflows, so newer Beta builds can
-          # update older Beta installs regardless of which workflow produced it.
+          # across manual build and release workflows, so newer Beta APKs can
+          # update older Beta installs regardless of which trusted path produced it.
           build_number="$(date -u +%s)"
           if [ "$build_number" -le 0 ] || [ "$build_number" -gt 2099997999 ]; then
             echo "::error::Computed Beta versionCode is outside Android's safe range: $build_number"
@@ -207,10 +217,51 @@ jobs:
 
           echo "Verified BETA build: package=$package_name versionCode=$version_code ABI=$native_code"
 
-      - name: Upload Android Beta APK
+      - name: Collect APK and compute checksums
+        id: apk
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_apk="dist/Hiraukan-android-arm64-v8a-beta.apk"
+          test -f "$source_apk" || { echo "::error::No Hiraukan Beta APK found."; exit 1; }
+
+          short_sha="$(git rev-parse --short HEAD)"
+          apk_name="Hiraukan-Beta-${short_sha}.apk"
+          apk_path="dist/${apk_name}"
+          mv "$source_apk" "$apk_path"
+
+          sha256="$(sha256sum "$apk_path" | awk '{print $1}')"
+          sha1="$(sha1sum "$apk_path" | awk '{print $1}')"
+          md5="$(md5sum "$apk_path" | awk '{print $1}')"
+          size="$(du -h "$apk_path" | cut -f1)"
+
+          echo "apk_name=$apk_name" >> "$GITHUB_OUTPUT"
+          echo "apk_path=$apk_path" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "**Hiraukan Beta manual build**"
+            echo ""
+            echo "This APK uses \`com.noirero.hiraukan.beta\` and is produced only from the \`beta\` branch."
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| File | \`${apk_name}\` |"
+            echo "| Branch | \`${GITHUB_REF_NAME}\` |"
+            echo "| Commit | \`${short_sha}\` |"
+            echo "| Size | ${size} |"
+            echo "| SHA-256 | \`${sha256}\` |"
+            echo "| SHA-1 | \`${sha1}\` |"
+            echo "| MD5 | \`${md5}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove decoded signing key
+        if: always()
+        run: rm -f android/hiraukan-beta-key.jks
+
+      - name: Upload Hiraukan Beta APK
         uses: actions/upload-artifact@v6
         with:
-          name: Hiraukan-android-arm64-beta
-          path: dist/Hiraukan-android-arm64-v8a-beta.apk
+          name: ${{ steps.apk.outputs.apk_name }}
+          path: ${{ steps.apk.outputs.apk_path }}
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
