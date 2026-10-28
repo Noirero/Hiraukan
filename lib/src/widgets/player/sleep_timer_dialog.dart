@@ -21,9 +21,13 @@ class SleepTimerDialog extends ConsumerStatefulWidget {
 }
 
 class _SleepTimerDialogState extends ConsumerState<SleepTimerDialog> {
-  bool _isTimeMode = false; // false: 时长模式, true: 指定时间模式
+  bool _isTimeMode = false;
   bool _finishCurrentTrack = false;
+  bool _fadeOut = false;
   TimeOfDay _selectedTime = TimeOfDay.now();
+
+  bool get _isIndonesian =>
+      Localizations.localeOf(context).languageCode == 'id';
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +40,6 @@ class _SleepTimerDialogState extends ConsumerState<SleepTimerDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (timerState.isActive) ...[
-              // 当前定时器状态
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -70,57 +73,32 @@ class _SleepTimerDialogState extends ConsumerState<SleepTimerDialog> {
                         fontWeight: FontWeight.bold,
                         color: Theme.of(context).colorScheme.onPrimaryContainer,
                         fontSize: timerState.waitingForTrackEnd ? 32 : null,
-                        fontFeatures: const [
-                          FontFeature.tabularFigures(),
-                        ],
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
                     if (timerState.finishCurrentTrack &&
                         !timerState.waitingForTrackEnd) ...[
                       const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .surface
-                              .withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.queue_music,
-                              size: 14,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onPrimaryContainer,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              S.of(context).finishCurrentTrack,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onPrimaryContainer,
-                                  ),
-                            ),
-                          ],
-                        ),
+                      _statusBadge(
+                        context,
+                        icon: Icons.queue_music,
+                        label: S.of(context).finishCurrentTrack,
+                      ),
+                    ],
+                    if (timerState.fadeOut) ...[
+                      const SizedBox(height: 8),
+                      _statusBadge(
+                        context,
+                        icon: Icons.volume_down_rounded,
+                        label: _isIndonesian
+                            ? 'Fade-out 30 detik'
+                            : '30-second fade-out',
                       ),
                     ],
                   ],
                 ),
               ),
               const SizedBox(height: 16),
-              // 快捷调整按钮
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -161,8 +139,6 @@ class _SleepTimerDialogState extends ConsumerState<SleepTimerDialog> {
                 ],
               ),
             ] else ...[
-              // 设置新定时器
-              // 模式切换
               SegmentedButton<bool>(
                 segments: [
                   ButtonSegment(
@@ -178,13 +154,10 @@ class _SleepTimerDialogState extends ConsumerState<SleepTimerDialog> {
                 ],
                 selected: {_isTimeMode},
                 onSelectionChanged: (Set<bool> selected) {
-                  setState(() {
-                    _isTimeMode = selected.first;
-                  });
+                  setState(() => _isTimeMode = selected.first);
                 },
               ),
               const SizedBox(height: 20),
-              // 根据模式显示不同的UI
               if (_isTimeMode) ...[
                 _buildTimePickerSection(context, ref),
               ] else ...[
@@ -194,8 +167,9 @@ class _SleepTimerDialogState extends ConsumerState<SleepTimerDialog> {
                 ),
                 const SizedBox(height: 16),
                 _buildTimeGrid(context, ref),
-                _buildWaitingForTrackEndSection(context, ref),
               ],
+              const SizedBox(height: 12),
+              _buildTimerOptions(context),
             ],
           ],
         ),
@@ -209,41 +183,75 @@ class _SleepTimerDialogState extends ConsumerState<SleepTimerDialog> {
     );
   }
 
-  Widget _buildWaitingForTrackEndSection(BuildContext context, WidgetRef ref) {
-    return InkWell(
-      onTap: () {
-        setState(() {
-          _finishCurrentTrack = !_finishCurrentTrack;
-        });
-      },
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 24,
-              height: 24,
-              child: Checkbox(
-                value: _finishCurrentTrack,
-                onChanged: (value) {
-                  setState(() {
-                    _finishCurrentTrack = value ?? false;
-                  });
-                },
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(4),
+  Widget _statusBadge(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 14,
+            color: Theme.of(context).colorScheme.onPrimaryContainer,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
                 ),
-              ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimerOptions(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          CheckboxListTile(
+            value: _finishCurrentTrack,
+            secondary: const Icon(Icons.queue_music_rounded),
+            title: Text(S.of(context).finishCurrentTrack),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+            controlAffinity: ListTileControlAffinity.trailing,
+            onChanged: (value) {
+              setState(() {
+                _finishCurrentTrack = value ?? false;
+                if (_finishCurrentTrack) _fadeOut = false;
+              });
+            },
+          ),
+          const Divider(height: 1),
+          SwitchListTile(
+            value: _fadeOut,
+            secondary: const Icon(Icons.volume_down_rounded),
+            title: Text(_isIndonesian ? 'Fade-out lembut' : 'Gentle fade-out'),
+            subtitle: Text(
+              _isIndonesian
+                  ? 'Turunkan volume perlahan selama 30 detik terakhir sebelum pause.'
+                  : 'Gradually lower volume during the final 30 seconds before pausing.',
             ),
-            const SizedBox(width: 8),
-            Text(
-              S.of(context).finishCurrentTrack,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ],
-        ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+            onChanged: _finishCurrentTrack
+                ? null
+                : (value) => setState(() => _fadeOut = value),
+          ),
+        ],
       ),
     );
   }
@@ -271,9 +279,7 @@ class _SleepTimerDialogState extends ConsumerState<SleepTimerDialog> {
               },
             );
             if (picked != null) {
-              setState(() {
-                _selectedTime = picked;
-              });
+              setState(() => _selectedTime = picked);
             }
           },
           borderRadius: BorderRadius.circular(12),
@@ -317,8 +323,6 @@ class _SleepTimerDialogState extends ConsumerState<SleepTimerDialog> {
               _selectedTime.hour,
               _selectedTime.minute,
             );
-
-            // 如果选择的时间已经过了，则设置为明天的这个时间
             final finalTime = targetTime.isBefore(now)
                 ? targetTime.add(const Duration(days: 1))
                 : targetTime;
@@ -326,6 +330,7 @@ class _SleepTimerDialogState extends ConsumerState<SleepTimerDialog> {
             ref.read(sleepTimerProvider.notifier).setTimerUntil(
                   finalTime,
                   finishCurrentTrack: _finishCurrentTrack,
+                  fadeOut: _fadeOut,
                 );
             Navigator.of(context).pop();
           },
@@ -383,6 +388,7 @@ class _SleepTimerDialogState extends ConsumerState<SleepTimerDialog> {
         ref.read(sleepTimerProvider.notifier).setTimer(
               duration,
               finishCurrentTrack: _finishCurrentTrack,
+              fadeOut: _fadeOut,
             );
       },
       borderRadius: BorderRadius.circular(12),
