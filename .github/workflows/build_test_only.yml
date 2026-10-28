@@ -93,6 +93,7 @@ jobs:
           set -euo pipefail
           candidates=(
             test/local_collection_service_test.dart
+            test/local_work_mark_service_test.dart
             test/listening_moment_service_test.dart
             test/portable_backup_service_test.dart
             test/portable_backup_sanitizer_test.dart
