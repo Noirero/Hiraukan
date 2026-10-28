@@ -10,7 +10,7 @@ import '../providers/update_provider.dart';
 import '../widgets/liquid_glass_layout.dart';
 import '../widgets/main_bottom_navigation_bar.dart';
 import '../widgets/mini_player.dart';
-import 'my_screen.dart';
+import 'library_screen.dart';
 import 'settings_hub_screen.dart';
 import 'unified_search_screen.dart';
 import 'works_screen.dart';
@@ -37,7 +37,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     _screens = const [
       WorksScreen(key: PageStorageKey('works_screen')),
       UnifiedSearchScreen(key: PageStorageKey('unified_search_screen')),
-      MyScreen(key: PageStorageKey('library_screen')),
+      LibraryScreen(key: PageStorageKey('library_screen')),
       SettingsHubScreen(key: PageStorageKey('settings_hub_screen')),
     ];
   }
