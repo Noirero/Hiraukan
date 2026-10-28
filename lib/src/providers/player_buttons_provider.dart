@@ -27,34 +27,36 @@ class PlayerButtonsConfig {
     required this.buttonOrder,
   });
 
-  /// 默认配置 - 移动端
+  /// Default mobile order keeps the always-visible row focused on playback.
+  /// Less-frequent presentation/work actions remain available in More and can
+  /// still be promoted by users through Player Button Settings.
   static const defaultMobile = PlayerButtonsConfig(
     buttonOrder: [
       PlayerButtonType.seekBackward,
       PlayerButtonType.seekForward,
-      PlayerButtonType.floatingLyric,
       PlayerButtonType.sleepTimer,
-      PlayerButtonType.mark,
       PlayerButtonType.speed,
       PlayerButtonType.repeat,
-      PlayerButtonType.subtitleAdjustment,
       PlayerButtonType.detail,
+      PlayerButtonType.mark,
+      PlayerButtonType.subtitleAdjustment,
+      PlayerButtonType.floatingLyric,
     ],
   );
 
-  /// 默认配置 - 桌面端
+  /// Desktop keeps direct volume access while preserving the same hierarchy.
   static const defaultDesktop = PlayerButtonsConfig(
     buttonOrder: [
       PlayerButtonType.seekBackward,
       PlayerButtonType.seekForward,
-      PlayerButtonType.floatingLyric,
-      PlayerButtonType.sleepTimer,
       PlayerButtonType.volume,
-      PlayerButtonType.mark,
+      PlayerButtonType.sleepTimer,
       PlayerButtonType.speed,
       PlayerButtonType.repeat,
-      PlayerButtonType.subtitleAdjustment,
       PlayerButtonType.detail,
+      PlayerButtonType.mark,
+      PlayerButtonType.subtitleAdjustment,
+      PlayerButtonType.floatingLyric,
     ],
   );
 
@@ -138,7 +140,8 @@ class PlayerButtonsConfigController extends StateNotifier<PlayerButtonsConfig> {
             .where((button) => !savedOrder.contains(button))
             .toList();
 
-        // 将新按钮添加到末尾
+        // Preserve the user's explicit order; only append newly introduced
+        // controls that were not present when their preference was saved.
         final mergedOrder = [...savedOrder, ...newButtons];
 
         state = PlayerButtonsConfig(buttonOrder: mergedOrder);
