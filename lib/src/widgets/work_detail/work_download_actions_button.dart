@@ -34,8 +34,10 @@ class WorkDownloadActionsButton extends StatelessWidget {
         switch (action) {
           case WorkDownloadAction.makeAvailableOffline:
             onMakeAvailableOffline();
+            return;
           case WorkDownloadAction.chooseFiles:
             onChooseFiles();
+            return;
         }
       },
       itemBuilder: (context) => [
