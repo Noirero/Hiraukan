@@ -89,7 +89,7 @@ class PortableBackupSanitizer {
     return uri
         .replace(
           userInfo: '',
-          queryParameters: cleanQuery.isEmpty ? null : cleanQuery,
+          queryParameters: cleanQuery,
           fragment: '',
         )
         .toString();
