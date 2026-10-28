@@ -98,8 +98,9 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
     final seen = <String>{};
     final result = <Work>[];
     for (final work in works) {
-      final key = work.sourceId?.trim().toUpperCase();
-      final identity = key != null && key.isNotEmpty ? key : '${work.id}';
+      final sourceId = work.sourceId?.trim().toUpperCase();
+      final identity =
+          sourceId != null && sourceId.isNotEmpty ? sourceId : '${work.id}';
       if (seen.add(identity)) result.add(work);
     }
     return result;
@@ -114,6 +115,12 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
     if (_lastKeyword != null) {
       _search();
     }
+  }
+
+  void _clearSourceFilters() {
+    if (_selectedSources.isEmpty) return;
+    setState(_selectedSources.clear);
+    if (_lastKeyword != null) _search();
   }
 
   @override
@@ -185,36 +192,47 @@ class _UnifiedSearchScreenState extends ConsumerState<UnifiedSearchScreen> {
                       ),
                       if (_selectedSources.isNotEmpty)
                         TextButton(
-                          onPressed: () {
-                            setState(_selectedSources.clear);
-                            if (_lastKeyword != null) _search();
-                          },
+                          onPressed: _clearSourceFilters,
                           child: Text(copy.allSources),
                         ),
                     ],
                   ),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        for (final source in availableSources)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: FilterChip(
-                              selected: _selectedSources.contains(source),
-                              label: Text(source.label),
-                              avatar: _healthDot(source),
-                              onSelected: (_) => _toggleSource(source),
+                  if (availableSources.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        copy.noSources,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
                             ),
-                          ),
-                      ],
+                      ),
+                    )
+                  else
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          for (final source in availableSources)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: FilterChip(
+                                selected: _selectedSources.contains(source),
+                                label: Text(source.label),
+                                avatar: _healthDot(source),
+                                onSelected: (_) => _toggleSource(source),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
           ),
-          Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.4)),
+          Divider(
+            height: 1,
+            color: scheme.outlineVariant.withValues(alpha: 0.4),
+          ),
           Expanded(child: _buildBody(copy)),
         ],
       ),
@@ -301,11 +319,11 @@ class _UnifiedSearchResultTile extends StatelessWidget {
     final scheme = theme.colorScheme;
     final bundle = UnifiedSourceRegistry.instance.bundleFor(work.id) ??
         UnifiedSourceRegistry.instance.ensureFromWork(work);
-    final sourceLabels = bundle.sources
+    final sourceLabels = (bundle?.sources ?? const <UnifiedSourceRef>[])
         .map((source) => source.source.label)
         .toSet()
         .join(' · ');
-    final cover = bundle.coverUrl ??
+    final cover = bundle?.coverUrl ??
         (work.images?.isNotEmpty == true ? work.images!.first : null);
 
     return Card(
@@ -527,6 +545,7 @@ class _SearchCopy {
     required this.search,
     required this.sources,
     required this.allSources,
+    required this.noSources,
     required this.failed,
     required this.retry,
     required this.emptyTitle,
@@ -542,6 +561,7 @@ class _SearchCopy {
   final String search;
   final String sources;
   final String allSources;
+  final String noSources;
   final String failed;
   final String retry;
   final String emptyTitle;
@@ -559,6 +579,7 @@ class _SearchCopy {
         search: 'Cari',
         sources: 'Sumber',
         allSources: 'Semua sumber',
+        noSources: 'Belum ada sumber audio yang aktif.',
         failed: 'Pencarian gagal',
         retry: 'Coba lagi',
         emptyTitle: 'Cari di semua sumber Hiraukan',
@@ -577,6 +598,7 @@ class _SearchCopy {
       search: 'Search',
       sources: 'Sources',
       allSources: 'All sources',
+      noSources: 'No audio sources are enabled yet.',
       failed: 'Search failed',
       retry: 'Retry',
       emptyTitle: 'Search across Hiraukan',
