@@ -159,7 +159,9 @@ class _PortableBackupScreenState extends ConsumerState<PortableBackupScreen> {
       allowMultiple: false,
       withData: true,
     );
-    final file = picked?.files.singleOrNull;
+    final file = picked == null || picked.files.isEmpty
+        ? null
+        : picked.files.first;
     if (file == null || !mounted) return;
 
     setState(() {
