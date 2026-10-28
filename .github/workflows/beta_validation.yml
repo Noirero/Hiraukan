@@ -1,0 +1,94 @@
+name: Hiraukan Beta Validation
+
+# Validation stays automatic; installable Beta APKs are built only by the
+# separate manual-only Hiraukan Beta Build workflow.
+on:
+  pull_request:
+    branches:
+      - beta
+  push:
+    branches:
+      - beta
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hiraukan-beta-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Analyze and test Beta
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout tested ref
+        uses: actions/checkout@v6
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.7'
+          channel: stable
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Generate localizations
+        run: flutter gen-l10n
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Run Beta regression tests
+        run: |
+          flutter test \
+            test/source_capabilities_test.dart \
+            test/additional_audio_extensions_test.dart \
+            test/chapter_audio_engine_test.dart \
+            test/audio_stream_strategy_test.dart \
+            test/subtitle_foundation_test.dart \
+            test/unified_source_playback_capability_test.dart \
+            test/locale_default_indonesian_test.dart \
+            test/online_translation_contract_test.dart \
+            test/online_translation_hardening_test.dart \
+            test/ai_subtitle_stage2_test.dart \
+            test/auto_asr_translate_fallback_test.dart \
+            test/fast_asr_whisper_stage4_test.dart \
+            test/hq_asr_whisper_stage4_test.dart \
+            test/asr_benchmark_test.dart \
+            test/asr_benchmark_lab_test.dart \
+            test/ai_translation_stage3_test.dart \
+            test/unified_source_service_test.dart
+
+      - name: Run targeted feature tests when present
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidates=(
+            test/local_collection_service_test.dart
+            test/listening_moment_service_test.dart
+            test/portable_backup_service_test.dart
+            test/portable_backup_sanitizer_test.dart
+            test/offline_package_service_test.dart
+            test/player_buttons_default_hierarchy_test.dart
+            test/player_buttons_persisted_order_test.dart
+            test/work_download_actions_button_test.dart
+            test/subtitle_language_hub_test.dart
+          )
+          present=()
+          for test_file in "${candidates[@]}"; do
+            if [ -f "$test_file" ]; then
+              present+=("$test_file")
+            fi
+          done
+          if [ "${#present[@]}" -eq 0 ]; then
+            echo "No targeted feature tests are present on this ref."
+            exit 0
+          fi
+          printf 'Running targeted feature tests:\n'
+          printf ' - %s\n' "${present[@]}"
+          flutter test "${present[@]}"

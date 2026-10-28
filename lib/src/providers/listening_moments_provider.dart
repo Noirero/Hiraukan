@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/audio_track.dart';
@@ -36,41 +38,62 @@ class ListeningMomentsNotifier extends StateNotifier<ListeningMomentsState> {
   }
 
   final ListeningMomentService _service;
+  Future<void> _operationTail = Future<void>.value();
 
-  Future<void> load() async {
-    state = state.copyWith(isLoading: true, clearError: true);
-    try {
-      state = ListeningMomentsState(moments: await _service.load());
-    } catch (error) {
-      state = ListeningMomentsState(
-        moments: state.moments,
-        error: error.toString(),
-      );
-    }
+  Future<T> _serialize<T>(Future<T> Function() operation) {
+    final completer = Completer<T>();
+    _operationTail = _operationTail.then((_) async {
+      try {
+        completer.complete(await operation());
+      } catch (error, stack) {
+        completer.completeError(error, stack);
+      }
+    });
+    return completer.future;
+  }
+
+  Future<void> load() {
+    return _serialize(() async {
+      state = state.copyWith(isLoading: true, clearError: true);
+      try {
+        state = ListeningMomentsState(moments: await _service.load());
+      } catch (error) {
+        state = ListeningMomentsState(
+          moments: state.moments,
+          error: error.toString(),
+        );
+      }
+    });
   }
 
   Future<void> add({
     required AudioTrack track,
     required Duration position,
     String note = '',
-  }) async {
-    final moments = await _service.add(
-      state.moments,
-      track: track,
-      position: position,
-      note: note,
-    );
-    state = state.copyWith(moments: moments, clearError: true);
+  }) {
+    return _serialize(() async {
+      final moments = await _service.add(
+        state.moments,
+        track: track,
+        position: position,
+        note: note,
+      );
+      state = state.copyWith(moments: moments, clearError: true);
+    });
   }
 
-  Future<void> updateNote(String id, String note) async {
-    final moments = await _service.updateNote(state.moments, id, note);
-    state = state.copyWith(moments: moments, clearError: true);
+  Future<void> updateNote(String id, String note) {
+    return _serialize(() async {
+      final moments = await _service.updateNote(state.moments, id, note);
+      state = state.copyWith(moments: moments, clearError: true);
+    });
   }
 
-  Future<void> delete(String id) async {
-    final moments = await _service.delete(state.moments, id);
-    state = state.copyWith(moments: moments, clearError: true);
+  Future<void> delete(String id) {
+    return _serialize(() async {
+      final moments = await _service.delete(state.moments, id);
+      state = state.copyWith(moments: moments, clearError: true);
+    });
   }
 }
 
