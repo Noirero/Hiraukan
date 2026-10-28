@@ -31,6 +31,7 @@ import '../widgets/work_detail/work_extra_sections.dart';
 import '../widgets/work_detail/work_cover_frame.dart';
 import '../widgets/work_detail/work_detail_responsive_layout.dart';
 import '../widgets/work_detail/work_detail_error_banner.dart';
+import '../widgets/work_detail/work_download_actions_button.dart';
 import '../widgets/work_detail/work_progress_action_button.dart';
 
 import '../widgets/image_gallery_screen.dart';
@@ -483,7 +484,6 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
     final systemOverlayStyle = transparentSystemBarsForBrightness(brightness);
-    final isIndonesian = Localizations.localeOf(context).languageCode == 'id';
 
     return GlobalAudioPlayerWrapper(
       suppressLiquidGlassMiniPlayer:
@@ -508,24 +508,10 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
           backgroundColor: Colors.transparent,
           elevation: 0,
           actions: [
-            IconButton(
-              icon: _isMakingOffline
-                  ? const SizedBox.square(
-                      dimension: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.download_for_offline_outlined),
-              onPressed: _isMakingOffline ? null : _makeAvailableOffline,
-              tooltip: isIndonesian
-                  ? 'Jadikan tersedia offline'
-                  : 'Make available offline',
-            ),
-            IconButton(
-              icon: const Icon(Icons.download_outlined),
-              onPressed: _showFileSelectionDialog,
-              tooltip: isIndonesian
-                  ? 'Pilih file untuk diunduh'
-                  : 'Choose files to download',
+            WorkDownloadActionsButton(
+              isBusy: _isMakingOffline,
+              onMakeAvailableOffline: _makeAvailableOffline,
+              onChooseFiles: _showFileSelectionDialog,
             ),
             WorkProgressActionButton(
               progress: _currentProgress,
