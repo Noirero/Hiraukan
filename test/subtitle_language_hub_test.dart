@@ -1,9 +1,34 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:kikoeru_flutter/src/screens/subtitle_language_hub_screen.dart';
+import 'package:kikoeru_flutter/src/services/storage_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  late Directory hiveDirectory;
+
+  setUpAll(() async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    hiveDirectory = await Directory.systemTemp.createTemp(
+      'hiraukan_subtitle_language_hub_test_',
+    );
+    Hive.init(hiveDirectory.path);
+    await StorageService.init();
+  });
+
+  tearDownAll(() async {
+    await Hive.close();
+    if (await hiveDirectory.exists()) {
+      await hiveDirectory.delete(recursive: true);
+    }
+  });
+
   testWidgets('subtitle hub groups normal workflow before local AI',
       (tester) async {
     await tester.pumpWidget(
