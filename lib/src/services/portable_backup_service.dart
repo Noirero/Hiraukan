@@ -6,6 +6,7 @@ import '../models/local_collection.dart';
 import 'history_database.dart';
 import 'listening_moment_service.dart';
 import 'local_collection_service.dart';
+import 'portable_backup_sanitizer.dart';
 
 class PortableBackupSummary {
   const PortableBackupSummary({
@@ -26,6 +27,7 @@ class PortableBackupService {
 
   static const String kind = 'hiraukan_portable_backup';
   static const int schemaVersion = 1;
+  static const PortableBackupSanitizer _sanitizer = PortableBackupSanitizer();
 
   Future<String> exportJson() async {
     final history = await HistoryDatabase.instance.getAllHistory();
@@ -37,11 +39,15 @@ class PortableBackupService {
       'schemaVersion': schemaVersion,
       'createdAt': DateTime.now().toUtc().toIso8601String(),
       'containsCredentials': false,
-      'history': history.map((item) => item.toMap()).toList(growable: false),
-      'localCollections':
-          collections.map((item) => item.toJson()).toList(growable: false),
-      'listeningMoments':
-          moments.map((item) => item.toJson()).toList(growable: false),
+      'history': history
+          .map((item) => _sanitizer.sanitizeMap(item.toMap()))
+          .toList(growable: false),
+      'localCollections': collections
+          .map((item) => _sanitizer.sanitizeMap(item.toJson()))
+          .toList(growable: false),
+      'listeningMoments': moments
+          .map((item) => _sanitizer.sanitizeMap(item.toJson()))
+          .toList(growable: false),
     };
     return const JsonEncoder.withIndent('  ').convert(payload);
   }
@@ -63,7 +69,9 @@ class PortableBackupService {
   /// - history uses the existing database primary key (`work_id`) and therefore
   ///   refreshes matching records while preserving unrelated local history;
   /// - collections/moments use their stable local IDs and imported items win on
-  ///   ID collision while unrelated local items remain untouched.
+  ///   ID collision while unrelated local items remain untouched;
+  /// - imported metadata is sanitized before parsing so a manually modified
+  ///   backup cannot inject stored auth/cookie/API-key headers into playback.
   Future<PortableBackupSummary> importJson(String rawJson) async {
     final root = _decodeRoot(rawJson);
     final importedHistory = _parseHistory(root['history']);
@@ -123,7 +131,11 @@ class PortableBackupService {
     for (final item in raw) {
       if (item is! Map) continue;
       try {
-        result.add(HistoryRecord.fromMap(Map<String, dynamic>.from(item)));
+        result.add(
+          HistoryRecord.fromMap(
+            _sanitizer.sanitizeMap(Map<String, dynamic>.from(item)),
+          ),
+        );
       } catch (_) {
         // One corrupt optional record must not invalidate the whole backup.
       }
@@ -137,8 +149,9 @@ class PortableBackupService {
     for (final item in raw) {
       if (item is! Map) continue;
       try {
-        final collection =
-            LocalCollection.fromJson(Map<String, dynamic>.from(item));
+        final collection = LocalCollection.fromJson(
+          _sanitizer.sanitizeMap(Map<String, dynamic>.from(item)),
+        );
         if (collection.id.isNotEmpty && collection.name.trim().isNotEmpty) {
           result.add(collection);
         }
@@ -156,7 +169,7 @@ class PortableBackupService {
       if (item is! Map) continue;
       try {
         final moment = ListeningMoment.fromJson(
-          Map<String, dynamic>.from(item),
+          _sanitizer.sanitizeMap(Map<String, dynamic>.from(item)),
         );
         if (moment.id.isNotEmpty && moment.trackIdentity.isNotEmpty) {
           result.add(moment);
