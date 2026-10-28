@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../extensions/audio_extension_provider.dart';
+import '../providers/history_provider.dart';
 import '../providers/works_provider.dart';
 import '../sources/asmr18_source_adapter.dart';
 import '../sources/unified_source_models.dart';
@@ -235,12 +236,11 @@ class _ResumeSpacer extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Keep the spacing zero when the history shelf is absent. This avoids a
-    // visual hole on first launch while preserving separation when it exists.
-    // The provider is already initialized by ContinueListeningSection.
-    // ignore: unused_local_variable
-    final _ = ref.watch(worksProvider);
-    return const SizedBox(height: 16);
+    final hasResumeItems = ref
+        .watch(historyProvider)
+        .records
+        .any((record) => record.lastTrack != null);
+    return SizedBox(height: hasResumeItems ? 16 : 0);
   }
 }
 
