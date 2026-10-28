@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../../l10n/app_localizations.dart';
 import 'about_screen.dart';
 import 'account_management_screen.dart';
-import 'ai_features_screen.dart';
 import 'app_lock_settings_screen.dart';
 import 'audio_extensions_screen.dart';
 import 'download_path_settings_screen.dart';
@@ -15,6 +14,7 @@ import 'permissions_screen.dart';
 import 'preferences_screen.dart';
 import 'privacy_mode_settings_screen.dart';
 import 'settings_screen.dart';
+import 'subtitle_language_hub_screen.dart';
 import 'theme_settings_screen.dart';
 import 'ui_settings_screen.dart';
 
@@ -73,7 +73,7 @@ class SettingsHubScreen extends StatelessWidget {
                 Icons.subtitles_outlined,
                 c.subtitlesAi,
                 c.subtitlesAiSubtitle,
-                () => _push(context, const AiFeaturesScreen()),
+                () => _push(context, const SubtitleLanguageHubScreen()),
               ),
             ],
           ),
@@ -480,9 +480,9 @@ class _Copy {
             'Atur perilaku dengar, subtitle, terjemahan, dan AI lokal.',
         playbackPreferencesSubtitle:
             'Pemutaran, terjemahan, preload, dan perilaku aplikasi.',
-        subtitlesAi: 'Subtitle & AI Lokal',
+        subtitlesAi: 'Subtitle & Bahasa',
         subtitlesAiSubtitle:
-            'Whisper lokal, bahasa sumber/tujuan, dan subtitle otomatis.',
+            'Library subtitle, terjemahan, glossary, tampilan, dan transkripsi lokal.',
         downloadsStorage: 'Unduhan & Penyimpanan',
         downloadsStorageSubtitle: 'Lokasi file dan penggunaan penyimpanan.',
         cacheSubtitle: 'Pengelolaan cache dan batas penyimpanan lanjutan.',
@@ -521,9 +521,9 @@ class _Copy {
           'Listening behavior, subtitles, translation, and local AI.',
       playbackPreferencesSubtitle:
           'Playback, translation, preload, and app behavior.',
-      subtitlesAi: 'Subtitles & Local AI',
+      subtitlesAi: 'Subtitles & Language',
       subtitlesAiSubtitle:
-          'Local Whisper, source/target language, and subtitle fallback.',
+          'Subtitle library, translation, glossary, presentation, and local transcription.',
       downloadsStorage: 'Downloads & Storage',
       downloadsStorageSubtitle: 'File location and storage usage.',
       cacheSubtitle: 'Advanced cache and storage-limit management.',
