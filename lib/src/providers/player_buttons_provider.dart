@@ -27,31 +27,34 @@ class PlayerButtonsConfig {
     required this.buttonOrder,
   });
 
-  /// 默认配置 - 移动端
+  /// Default mobile hierarchy: the most frequently adjusted listening controls
+  /// stay visible, while contextual/advanced actions move behind More.
+  /// Existing users keep their persisted order unchanged.
   static const defaultMobile = PlayerButtonsConfig(
     buttonOrder: [
+      PlayerButtonType.speed,
+      PlayerButtonType.sleepTimer,
       PlayerButtonType.seekBackward,
       PlayerButtonType.seekForward,
       PlayerButtonType.floatingLyric,
-      PlayerButtonType.sleepTimer,
       PlayerButtonType.mark,
-      PlayerButtonType.speed,
       PlayerButtonType.repeat,
       PlayerButtonType.subtitleAdjustment,
       PlayerButtonType.detail,
     ],
   );
 
-  /// 默认配置 - 桌面端
+  /// Desktop keeps volume visible because it is a common desktop-only quick
+  /// adjustment, then follows the same calm hierarchy as mobile.
   static const defaultDesktop = PlayerButtonsConfig(
     buttonOrder: [
+      PlayerButtonType.speed,
+      PlayerButtonType.sleepTimer,
+      PlayerButtonType.volume,
       PlayerButtonType.seekBackward,
       PlayerButtonType.seekForward,
       PlayerButtonType.floatingLyric,
-      PlayerButtonType.sleepTimer,
-      PlayerButtonType.volume,
       PlayerButtonType.mark,
-      PlayerButtonType.speed,
       PlayerButtonType.repeat,
       PlayerButtonType.subtitleAdjustment,
       PlayerButtonType.detail,

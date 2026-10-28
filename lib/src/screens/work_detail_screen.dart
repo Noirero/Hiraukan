@@ -10,6 +10,7 @@ import '../models/work.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/scrollable_appbar.dart';
 import '../services/work_track_file_builder.dart';
+import '../services/offline_package_service.dart';
 import '../utils/system_ui_style.dart';
 import '../widgets/file_explorer_widget.dart';
 import '../widgets/file_selection_dialog.dart';
@@ -30,6 +31,7 @@ import '../widgets/work_detail/work_extra_sections.dart';
 import '../widgets/work_detail/work_cover_frame.dart';
 import '../widgets/work_detail/work_detail_responsive_layout.dart';
 import '../widgets/work_detail/work_detail_error_banner.dart';
+import '../widgets/work_detail/work_download_actions_button.dart';
 import '../widgets/work_detail/work_progress_action_button.dart';
 
 import '../widgets/image_gallery_screen.dart';
@@ -53,24 +55,22 @@ class WorkDetailScreen extends ConsumerStatefulWidget {
 class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
   Work? _detailedWork;
   String? _errorMessage;
-  bool _showHDImage = false; // 控制是否显示高清图片
-  ImageProvider? _hdImageProvider; // 预加载的高清图片
-  String? _currentProgress; // 当前收藏状态
-  int? _currentRating; // 当前评分
-  bool _isUpdatingProgress = false; // 是否正在更新状态
-  bool _isOpeningFileSelection = false; // iOS上防止快速重复点击造成对话框立即关闭
-  bool _isOpeningProgressDialog = false; // 防止标记状态对话框重复快速打开
+  bool _showHDImage = false;
+  ImageProvider? _hdImageProvider;
+  String? _currentProgress;
+  int? _currentRating;
+  bool _isUpdatingProgress = false;
+  bool _isOpeningFileSelection = false;
+  bool _isOpeningProgressDialog = false;
+  bool _isMakingOffline = false;
   final FileExplorerController _fileExplorerController =
       FileExplorerController();
 
-  // 翻译相关状态
-  String? _translatedTitle; // 翻译后的标题
-  bool _showTranslation = false; // 是否显示翻译
-  bool _isTranslating = false; // 是否正在翻译
+  String? _translatedTitle;
+  bool _showTranslation = false;
+  bool _isTranslating = false;
 
   Future<void> _restoreMiniPlayerAfterModalExit(VoidCallback clearFlag) async {
-    // A pushed route's Future completes when pop starts, before its reverse
-    // transition leaves the overlay. Keep native glass suppressed until then.
     await Future<void>.delayed(kThemeAnimationDuration);
     if (mounted) {
       setState(clearFlag);
@@ -82,11 +82,9 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
   @override
   void initState() {
     super.initState();
-    // 初始化收藏状态（从传入的work中获取）
     _currentProgress = widget.work.progress;
     _currentRating = widget.work.userRating;
     _loadWorkDetail();
-    // Hero 动画结束后开始预加载高清图
     Future.delayed(const Duration(milliseconds: 400), () {
       if (mounted) {
         _preloadHDImage();
@@ -94,7 +92,6 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
     });
   }
 
-  // 预加载高清图片，完全加载后再切换
   Future<void> _preloadHDImage() async {
     final authState = ref.read(authProvider);
     final host = authState.host ?? '';
@@ -106,9 +103,7 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
     final imageProvider = NetworkImage(imageUrl);
 
     try {
-      // 预加载图片到内存
       await precacheImage(imageProvider, context);
-      // 图片完全加载后才切换显示
       if (mounted) {
         setState(() {
           _hdImageProvider = imageProvider;
@@ -116,18 +111,15 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
         });
       }
     } catch (e) {
-      // 预加载失败，保持使用缓存图片
       debugPrint('HD image preload failed: $e');
     }
   }
 
-  // 翻译标题
   Future<void> _translateTitle() async {
     if (_isTranslating) return;
 
     final work = _detailedWork ?? widget.work;
 
-    // 如果已有翻译，直接切换显示
     if (_translatedTitle != null) {
       setState(() {
         _showTranslation = !_showTranslation;
@@ -166,7 +158,6 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
     }
   }
 
-  // 复制文本到剪贴板并显示提示
   Future<void> _copyToClipboard(String text, String label) async {
     await Clipboard.setData(ClipboardData(text: text));
     if (mounted) {
@@ -178,7 +169,6 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
     }
   }
 
-  // 显示标签投票信息
   void _showTagInfo(Tag tag) {
     showDialog(
       context: context,
@@ -186,10 +176,8 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
         tag: tag,
         workId: widget.work.id,
         onVoteChanged: (updatedTag) {
-          // 投票成功后更新本地状态
           if (mounted) {
             setState(() {
-              // 更新 _detailedWork 中的 tag
               if (_detailedWork != null && _detailedWork!.tags != null) {
                 final tagIndex = _detailedWork!.tags!
                     .indexWhere((t) => t.id == updatedTag.id);
@@ -207,7 +195,6 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
     );
   }
 
-  // 显示添加标签对话框
   void _showAddTagDialog() {
     showDialog(
       context: context,
@@ -215,25 +202,21 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
         workId: widget.work.id,
         existingTags: _detailedWork?.tags ?? widget.work.tags ?? [],
         onTagsAdded: () {
-          // 添加成功后刷新作品详情
           _loadWorkDetail();
         },
       ),
     );
   }
 
-  // 在外部浏览器打开原始链接
   Future<void> _openSourceUrl(String url) async {
     try {
       final uri = Uri.parse(url);
-      // 直接尝试在外部浏览器打开，不依赖 canLaunchUrl 检查
       final launched = await launchUrl(
         uri,
         mode: LaunchMode.externalApplication,
       );
 
       if (!launched && mounted) {
-        // 如果外部应用模式失败，尝试平台默认方式
         final fallbackLaunched = await launchUrl(
           uri,
           mode: LaunchMode.platformDefault,
@@ -258,9 +241,7 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
     }
   }
 
-  // 显示文件选择对话框
   Future<void> _showFileSelectionDialog() async {
-    // 防抖: 避免 iOS 上快速双击导致同一路由被重复创建又立即被关闭
     if (_isOpeningFileSelection) return;
     setState(() => _isOpeningFileSelection = true);
 
@@ -334,6 +315,56 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
     return trackFileBuilder.withTracks(work: baseWork, files: files);
   }
 
+  Future<void> _makeAvailableOffline() async {
+    if (_isMakingOffline) return;
+    setState(() => _isMakingOffline = true);
+    try {
+      final work = await _prepareWorkForFileSelection();
+      final authState = ref.read(authProvider);
+      final host = authState.host ?? '';
+      final token = authState.token ?? '';
+      final coverUrl = work.getCoverImageUrl(host, token: token);
+      final result = await OfflinePackageService.instance.makeAvailableOffline(
+        work: work,
+        host: host,
+        token: token,
+        coverUrl: coverUrl,
+      );
+      if (!mounted) return;
+
+      final isIndonesian = Localizations.localeOf(context).languageCode == 'id';
+      if (result.queued > 0) {
+        SnackBarUtil.showSuccess(
+          context,
+          isIndonesian
+              ? '${result.queued} file ditambahkan ke antrean offline.'
+              : '${result.queued} files added to the offline queue.',
+          duration: const Duration(seconds: 3),
+        );
+      } else {
+        SnackBarUtil.showInfo(
+          context,
+          isIndonesian
+              ? 'Karya ini sudah tersedia atau sedang disiapkan untuk offline.'
+              : 'This work is already available or being prepared for offline use.',
+          duration: const Duration(seconds: 3),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      final isIndonesian = Localizations.localeOf(context).languageCode == 'id';
+      SnackBarUtil.showError(
+        context,
+        isIndonesian
+            ? 'Gagal menyiapkan offline: $e'
+            : 'Could not prepare offline files: $e',
+        duration: const Duration(seconds: 3),
+      );
+    } finally {
+      if (mounted) setState(() => _isMakingOffline = false);
+    }
+  }
+
   Future<void> _loadWorkDetail() async {
     try {
       setState(() {
@@ -347,7 +378,6 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
       if (mounted) {
         setState(() {
           _detailedWork = detailedWork;
-          // 更新收藏状态（从API响应中获取最新状态）
           _currentProgress = detailedWork.progress;
           _currentRating = detailedWork.userRating;
         });
@@ -361,7 +391,6 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
     }
   }
 
-  // 下拉刷新：强制从网络获取最新数据
   Future<void> _refreshWorkDetail() async {
     try {
       setState(() {
@@ -370,7 +399,6 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
 
       final apiService = ref.read(kikoeruApiServiceProvider);
 
-      // 元数据和文件树都必须绕过缓存，并等待两者完成后再报告刷新成功。
       final refreshResults = await Future.wait<dynamic>([
         apiService.getWork(widget.work.id, forceRefresh: true),
         _fileExplorerController.refresh(forceRefresh: true),
@@ -385,7 +413,6 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
           _currentRating = detailedWork.userRating;
         });
 
-        // 显示刷新成功提示
         SnackBarUtil.showSuccess(
           context,
           S.of(context).refreshComplete,
@@ -407,9 +434,8 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
     }
   }
 
-  // 显示收藏状态选择对话框
   Future<void> _showProgressDialog() async {
-    if (_isOpeningProgressDialog) return; // 防抖避免 iOS 双击导致立即关闭
+    if (_isOpeningProgressDialog) return;
     setState(() => _isOpeningProgressDialog = true);
 
     final manager = WorkBookmarkManager(ref: ref, context: context);
@@ -421,7 +447,6 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
         currentRating: _currentRating,
         workTitle: widget.work.title,
         onChanged: (newProgress, newRating) {
-          // 更新本地状态
           if (mounted) {
             setState(() {
               _currentProgress = newProgress;
@@ -438,7 +463,6 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
     }
   }
 
-  // 显示评分详情弹窗
   Future<void> _showRatingDetailDialog(Work work) async {
     if (work.rateCountDetail == null || work.rateCountDetail!.isEmpty) return;
     if (work.rateAverage == null || work.rateCount == null) return;
@@ -458,7 +482,6 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 根据主题亮度设置状态栏图标颜色
     final brightness = Theme.of(context).brightness;
     final systemOverlayStyle = transparentSystemBarsForBrightness(brightness);
 
@@ -469,10 +492,11 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
         floatingActionButton: const DownloadFab(),
         appBar: ScrollableAppBar(
           systemOverlayStyle: systemOverlayStyle,
-          // 作品编号作为标题,支持长按复制
           title: GestureDetector(
             onLongPress: () => _copyToClipboard(
-                widget.work.displayId, S.of(context).workIdLabel),
+              widget.work.displayId,
+              S.of(context).workIdLabel,
+            ),
             child: Text(
               widget.work.displayId,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -484,11 +508,10 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
           backgroundColor: Colors.transparent,
           elevation: 0,
           actions: [
-            // 下载按钮
-            IconButton(
-              icon: const Icon(Icons.download),
-              onPressed: _showFileSelectionDialog,
-              tooltip: S.of(context).download,
+            WorkDownloadActionsButton(
+              isBusy: _isMakingOffline,
+              onMakeAvailableOffline: _makeAvailableOffline,
+              onChooseFiles: _showFileSelectionDialog,
             ),
             WorkProgressActionButton(
               progress: _currentProgress,
@@ -507,23 +530,19 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
     final host = authState.host ?? '';
     final token = authState.token ?? '';
 
-    // 使用已有的work信息（来自列表），详细信息加载后再更新
     final work = _detailedWork ?? widget.work;
 
-    // 封面图片组件
     final effectiveHeroTag = widget.heroTag ?? 'work_cover_${widget.work.id}';
     final coverUrl = work.getCoverImageUrl(host, token: token);
     final displaySettings = ref.watch(workDetailDisplayProvider);
     final showSubtitleBadge =
         displaySettings.showSubtitleTag && work.hasSubtitle == true;
 
-    // 信息内容组件
     final infoWidget = Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 标题（可长按复制）+ 内联字幕图标（紧跟标题最后一个字，不换行）
           Consumer(
             builder: (context, ref, _) {
               final displaySettings = ref.watch(workDetailDisplayProvider);
@@ -553,7 +572,6 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
             onRetry: _loadWorkDetail,
           ),
 
-          // 评分信息、价格、时长和销量
           Consumer(
             builder: (context, ref, _) {
               final displaySettings = ref.watch(workDetailDisplayProvider);
@@ -610,13 +628,11 @@ class _WorkDetailScreenState extends ConsumerState<WorkDetailScreen> {
             },
           ),
 
-          // 文件浏览器组件 - 移除固定高度，让它自由展开
           FileExplorerWidget(
             work: work,
             controller: _fileExplorerController,
           ),
 
-          // 相关推荐
           RecommendationSection(work: work),
         ],
       ),
