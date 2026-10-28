@@ -8,6 +8,9 @@ void main() {
     final sanitized = sanitizer.sanitizeMap({
       'title': 'Track',
       'apiKey': 'secret-key',
+      'AWSAccessKeyId': 'access-key-id',
+      'secretKey': 'secret-key-value',
+      'credentials': 'raw-credential-bundle',
       'playbackHeaders': {
         'Referer': 'https://catalog.example/work/1',
         'Authorization': 'Bearer secret-token',
@@ -17,6 +20,9 @@ void main() {
 
     expect(sanitized['title'], 'Track');
     expect(sanitized.containsKey('apiKey'), isFalse);
+    expect(sanitized.containsKey('AWSAccessKeyId'), isFalse);
+    expect(sanitized.containsKey('secretKey'), isFalse);
+    expect(sanitized.containsKey('credentials'), isFalse);
 
     final headers = Map<String, dynamic>.from(
       sanitized['playbackHeaders'] as Map,
@@ -26,10 +32,10 @@ void main() {
     expect(headers.containsKey('Cookie'), isFalse);
   });
 
-  test('redacts token, signatures, user info, and fragments from URLs', () {
+  test('redacts token, signatures, access keys, user info, and fragments from URLs', () {
     final sanitized = sanitizer.sanitizeMap({
       'url':
-          'https://user:password@media.example/audio.mp3?id=42&token=secret&X-Amz-Signature=signed#access_token=fragment',
+          'https://user:password@media.example/audio.mp3?id=42&token=secret&AWSAccessKeyId=access-key&sig=short-signature&X-Amz-Signature=signed#access_token=fragment',
     });
 
     final uri = Uri.parse(sanitized['url'] as String);
@@ -37,6 +43,12 @@ void main() {
     expect(uri.fragment, isEmpty);
     expect(uri.queryParameters['id'], '42');
     expect(uri.queryParameters.containsKey('token'), isFalse);
+    expect(uri.queryParameters.keys.any(
+      (key) => key.toLowerCase().contains('accesskey'),
+    ), isFalse);
+    expect(uri.queryParameters.keys.any(
+      (key) => key.toLowerCase() == 'sig',
+    ), isFalse);
     expect(uri.queryParameters.keys.any(
       (key) => key.toLowerCase().contains('signature'),
     ), isFalse);
