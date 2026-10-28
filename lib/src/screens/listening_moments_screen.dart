@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/audio_track.dart';
 import '../models/listening_moment.dart';
 import '../providers/audio_provider.dart';
 import '../providers/listening_moments_provider.dart';
@@ -51,7 +52,7 @@ class ListeningMomentsScreen extends ConsumerWidget {
   Future<void> _saveCurrent(
     BuildContext context,
     WidgetRef ref,
-    dynamic track,
+    AudioTrack track,
     Duration position,
     _MomentCopy copy,
   ) async {
@@ -246,7 +247,7 @@ class _MomentTile extends ConsumerWidget {
   Future<void> _play(BuildContext context, WidgetRef ref) async {
     try {
       final controller = ref.read(audioPlayerControllerProvider.notifier);
-      await controller.playTracks(<dynamic>[moment.track]);
+      await controller.playTracks(<AudioTrack>[moment.track]);
       await controller.seekAndPersist(moment.position);
     } catch (error) {
       if (!context.mounted) return;
@@ -296,13 +297,13 @@ class _Cover extends StatelessWidget {
   }
 }
 
-class _Empty extends ConsumerWidget {
+class _Empty extends StatelessWidget {
   const _Empty({required this.copy, required this.hasCurrentTrack});
   final _MomentCopy copy;
   final bool hasCurrentTrack;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
@@ -381,7 +382,8 @@ class _MomentCopy {
         emptyTitle: 'Belum ada momen tersimpan',
         emptyMessage:
             'Putar audio, lalu simpan timestamp yang ingin kamu temukan lagi.',
-        emptyPlaying: 'Audio sedang aktif. Gunakan tombol “Simpan momen” di bawah.',
+        emptyPlaying:
+            'Audio sedang aktif. Gunakan tombol “Simpan momen” di bawah.',
         editTitle: 'Edit catatan',
         edit: 'Edit catatan',
         delete: 'Hapus',
