@@ -11,9 +11,15 @@ class PortableBackupSanitizer {
     'refreshtoken',
     'apikey',
     'xapikey',
+    'accesskey',
+    'accesskeyid',
     'password',
     'secret',
+    'secretkey',
+    'privatekey',
     'clientsecret',
+    'credential',
+    'credentials',
     'session',
     'sessionid',
     'sessiontoken',
@@ -47,8 +53,13 @@ class PortableBackupSanitizer {
         normalized.endsWith('token') ||
         normalized.contains('authorization') ||
         normalized.contains('apikey') ||
+        normalized.contains('credential') ||
+        normalized.endsWith('accesskey') ||
+        normalized.endsWith('accesskeyid') ||
         normalized.endsWith('password') ||
-        normalized.endsWith('secret');
+        normalized.endsWith('secret') ||
+        normalized.endsWith('secretkey') ||
+        normalized.endsWith('privatekey');
   }
 
   bool _isSensitiveQueryKey(String key) {
@@ -56,11 +67,14 @@ class PortableBackupSanitizer {
     return _sensitiveMapKeys.contains(normalized) ||
         normalized == 'key' ||
         normalized == 'auth' ||
+        normalized == 'sig' ||
         normalized.contains('token') ||
         normalized.contains('signature') ||
         normalized.contains('credential') ||
         normalized.contains('apikey') ||
+        normalized.contains('accesskey') ||
         normalized.contains('secret') ||
+        normalized.contains('privatekey') ||
         normalized.contains('password');
   }
 
