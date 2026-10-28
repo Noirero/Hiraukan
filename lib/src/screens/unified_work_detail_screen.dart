@@ -17,6 +17,7 @@ import '../sources/unified_source_registry.dart';
 import '../utils/source_request_headers.dart';
 import '../services/track_playback_progress_store.dart';
 import '../widgets/global_audio_player_wrapper.dart';
+import '../widgets/unified_work_library_actions.dart';
 
 class UnifiedWorkDetailScreen extends ConsumerStatefulWidget {
   final Work work;
@@ -504,6 +505,8 @@ class _UnifiedWorkDetailScreenState
                       ),
                   ],
                 ),
+                const SizedBox(height: 16),
+                UnifiedWorkLibraryActions(work: work),
                 if (_detailError != null) ...[
                   const SizedBox(height: 14),
                   _ErrorCard(message: _detailError!),

@@ -3,9 +3,11 @@ import 'dart:convert';
 import '../models/history_record.dart';
 import '../models/listening_moment.dart';
 import '../models/local_collection.dart';
+import '../models/local_work_mark.dart';
 import 'history_database.dart';
 import 'listening_moment_service.dart';
 import 'local_collection_service.dart';
+import 'local_work_mark_service.dart';
 import 'portable_backup_sanitizer.dart';
 
 class PortableBackupSummary {
@@ -33,6 +35,7 @@ class PortableBackupService {
     final history = await HistoryDatabase.instance.getAllHistory();
     final collections = await LocalCollectionService.instance.load();
     final moments = await ListeningMomentService.instance.load();
+    final localWorkMarks = await LocalWorkMarkService.instance.load();
 
     final payload = <String, dynamic>{
       'kind': kind,
@@ -46,6 +49,11 @@ class PortableBackupService {
           .map((item) => _sanitizer.sanitizeMap(item.toJson()))
           .toList(growable: false),
       'listeningMoments': moments
+          .map((item) => _sanitizer.sanitizeMap(item.toJson()))
+          .toList(growable: false),
+      // Optional schema-v1 field: older backups remain valid while newer
+      // backups preserve Hiraukan-owned favorites and personal ratings.
+      'localWorkMarks': localWorkMarks
           .map((item) => _sanitizer.sanitizeMap(item.toJson()))
           .toList(growable: false),
     };
@@ -68,8 +76,8 @@ class PortableBackupService {
   ///
   /// - history uses the existing database primary key (`work_id`) and therefore
   ///   refreshes matching records while preserving unrelated local history;
-  /// - collections/moments use their stable local IDs and imported items win on
-  ///   ID collision while unrelated local items remain untouched;
+  /// - collections/moments/local marks use their stable local IDs/keys and
+  ///   imported items win on collision while unrelated local items remain;
   /// - imported metadata is sanitized before parsing so a manually modified
   ///   backup cannot inject stored auth/cookie/API-key headers into playback.
   Future<PortableBackupSummary> importJson(String rawJson) async {
@@ -77,6 +85,7 @@ class PortableBackupService {
     final importedHistory = _parseHistory(root['history']);
     final importedCollections = _parseCollections(root['localCollections']);
     final importedMoments = _parseMoments(root['listeningMoments']);
+    final importedMarks = _parseLocalWorkMarks(root['localWorkMarks']);
 
     for (final record in importedHistory) {
       await HistoryDatabase.instance.addOrUpdate(record);
@@ -99,6 +108,15 @@ class PortableBackupService {
     final mergedMoments = momentMap.values.toList(growable: false)
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     await ListeningMomentService.instance.save(mergedMoments);
+
+    final currentMarks = await LocalWorkMarkService.instance.load();
+    final markMap = <String, LocalWorkMark>{
+      for (final item in currentMarks) item.key: item,
+      for (final item in importedMarks) item.key: item,
+    };
+    final mergedMarks = markMap.values.toList(growable: false)
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    await LocalWorkMarkService.instance.save(mergedMarks);
 
     return PortableBackupSummary(
       historyCount: importedHistory.length,
@@ -176,6 +194,25 @@ class PortableBackupService {
         }
       } catch (_) {
         // Skip malformed records while preserving valid backup content.
+      }
+    }
+    return result;
+  }
+
+  List<LocalWorkMark> _parseLocalWorkMarks(dynamic raw) {
+    if (raw is! List) return const <LocalWorkMark>[];
+    final result = <LocalWorkMark>[];
+    for (final item in raw) {
+      if (item is! Map) continue;
+      try {
+        final mark = LocalWorkMark.fromJson(
+          _sanitizer.sanitizeMap(Map<String, dynamic>.from(item)),
+        );
+        if (mark.key.isNotEmpty && (mark.isFavorite || mark.rating != null)) {
+          result.add(mark);
+        }
+      } catch (_) {
+        // Skip malformed optional marks while preserving valid backup content.
       }
     }
     return result;

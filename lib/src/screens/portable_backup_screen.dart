@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/history_provider.dart';
 import '../providers/listening_moments_provider.dart';
 import '../providers/local_collections_provider.dart';
+import '../providers/local_work_marks_provider.dart';
 import '../services/portable_backup_service.dart';
 
 class PortableBackupScreen extends ConsumerStatefulWidget {
@@ -205,6 +206,7 @@ class _PortableBackupScreenState extends ConsumerState<PortableBackupScreen> {
       final imported = await service.importJson(raw);
       await Future.wait<void>([
         ref.read(localCollectionsProvider.notifier).load(),
+        ref.read(localWorkMarksProvider.notifier).load(),
         ref.read(listeningMomentsProvider.notifier).load(),
         ref.read(historyProvider.notifier).load(refresh: true, force: true),
       ]);
@@ -335,7 +337,7 @@ class _BackupCopy {
         title: 'Backup & Restore',
         safeTitle: 'Backup metadata yang aman',
         safeMessage:
-            'File backup berisi history, Koleksi Lokal, dan Moments. Token akun, password, API key, audio, dan cache tidak diekspor.',
+            'File backup berisi history, favorit/rating lokal, Koleksi Lokal, dan Moments. Token akun, password, API key, audio, dan cache tidak diekspor.',
         exportTitle: 'Ekspor backup',
         exportSubtitle:
             'Simpan metadata library Hiraukan sebagai satu file JSON portable.',
@@ -351,7 +353,7 @@ class _BackupCopy {
         exported: (path, summary) =>
             'Backup tersimpan: $path\n${summary.historyCount} history · ${summary.collectionCount} koleksi · ${summary.momentCount} moments',
         confirmMessage: (summary) =>
-            'Akan di-merge: ${summary.historyCount} history, ${summary.collectionCount} koleksi, dan ${summary.momentCount} moments. Data lokal lain tetap dipertahankan.',
+            'Akan di-merge: ${summary.historyCount} history, ${summary.collectionCount} koleksi, dan ${summary.momentCount} moments, termasuk metadata favorit/rating lokal bila tersedia. Data lokal lain tetap dipertahankan.',
         imported: (summary) =>
             'Import selesai: ${summary.historyCount} history · ${summary.collectionCount} koleksi · ${summary.momentCount} moments.',
         failed: (error) => 'Backup gagal: $error',
@@ -361,7 +363,7 @@ class _BackupCopy {
       title: 'Backup & Restore',
       safeTitle: 'Credential-safe metadata backup',
       safeMessage:
-          'Backups contain history, Local Collections, and Moments. Account tokens, passwords, API keys, audio, and caches are never exported.',
+          'Backups contain history, local favorites/ratings, Local Collections, and Moments. Account tokens, passwords, API keys, audio, and caches are never exported.',
       exportTitle: 'Export backup',
       exportSubtitle:
           'Save Hiraukan library metadata as one portable JSON file.',
@@ -377,7 +379,7 @@ class _BackupCopy {
       exported: (path, summary) =>
           'Backup saved: $path\n${summary.historyCount} history · ${summary.collectionCount} collections · ${summary.momentCount} moments',
       confirmMessage: (summary) =>
-          'Merge ${summary.historyCount} history records, ${summary.collectionCount} collections, and ${summary.momentCount} moments? Unrelated local data remains.',
+          'Merge ${summary.historyCount} history records, ${summary.collectionCount} collections, and ${summary.momentCount} moments, including local favorite/rating metadata when present? Unrelated local data remains.',
       imported: (summary) =>
           'Import complete: ${summary.historyCount} history · ${summary.collectionCount} collections · ${summary.momentCount} moments.',
       failed: (error) => 'Backup failed: $error',
